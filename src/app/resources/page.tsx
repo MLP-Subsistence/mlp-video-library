@@ -3,32 +3,24 @@ import Link from "next/link";
 import { ArrowRight, Languages } from "lucide-react";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
-import { selectPublicPlaylists } from "@/lib/playlist-organization";
 import { prisma } from "@/lib/prisma";
 import { resourceImage } from "@/lib/resource-taxonomy";
 
 export const dynamic = "force-dynamic";
 
 export default async function ResourcesPage() {
-  const [languages, playlists] = await Promise.all([
+  const [languages, resourceCounts] = await Promise.all([
     prisma.language.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" }
     }),
-    prisma.playlist.findMany({
-      where: { visibility: { not: "Hidden" } },
-      include: {
-        language: true,
-        _count: { select: { videos: true } }
-      },
-      orderBy: [{ sortOrder: "asc" }, { title: "asc" }]
+    prisma.video.groupBy({
+      by: ["languageId"],
+      where: { visibility: "Published", isPublished: true },
+      _count: { _all: true }
     })
   ]);
-  const playlistCountByLanguage = selectPublicPlaylists(playlists).reduce((counts, playlist) => {
-    const name = playlist.language?.name;
-    if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
+  const resourceCountByLanguage = new Map(resourceCounts.map((item) => [item.languageId, item._count._all]));
 
   return (
     <main className="mlp-page">
@@ -50,7 +42,7 @@ export default async function ResourcesPage() {
                   <h2 className="text-xl font-extrabold sm:text-2xl">{language.name}</h2>
                   <ArrowRight className="size-5 text-[#a64026]" />
                 </div>
-                <p className="mt-2 text-sm text-[#6b7c8f]">{playlistCountByLanguage.get(language.name) ?? 0} playlists</p>
+                <p className="mt-2 text-sm text-[#6b7c8f]">{resourceCountByLanguage.get(language.id) ?? 0} resources</p>
               </div>
             </Link>
           ))}

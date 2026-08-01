@@ -7,14 +7,14 @@ import { ArrowLeft, GraduationCap, Home, LogIn, Menu, Search, X } from "lucide-r
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/playlists", label: "Browse Playlists", icon: GraduationCap },
+  { href: "/resources", label: "Browse Resources", icon: GraduationCap },
   { href: "/search", label: "Search Library", icon: Search }
 ];
 
 export function PublicMobileNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const isResourceRoute = pathname.startsWith("/resources/") || pathname.startsWith("/playlists/") || pathname.startsWith("/videos/");
+  const isResourceRoute = pathname.startsWith("/resources/") || pathname.startsWith("/videos/");
 
   useEffect(() => {
     if (!open) return;
@@ -73,7 +73,7 @@ export function PublicMobileNav() {
                 </button>
               </div>
               <p className="text-sm leading-relaxed text-[#6b7c8f]">
-                Browse language shelves, open a playlist, then choose a video.
+                Browse by language and resource format, then open a resource.
               </p>
             </div>
 
@@ -88,7 +88,7 @@ export function PublicMobileNav() {
                 <p className="px-1 text-xs font-extrabold uppercase tracking-wide text-[#8b9bad]">Navigation</p>
                 {navItems.map((item) => {
                   const Icon = item.icon;
-                  const active = pathname === item.href || (item.href === "/playlists" && pathname.startsWith("/playlists"));
+                  const active = pathname === item.href || (item.href === "/resources" && pathname.startsWith("/resources"));
                   return (
                     <Link
                       key={item.href}
@@ -104,7 +104,7 @@ export function PublicMobileNav() {
 
               <div className="rounded-xl bg-[#f7f8fa] p-4 ring-1 ring-[#edf0f3]">
                 <p className="text-sm font-extrabold text-[#243447]">For MLP staff</p>
-                <p className="mt-1 text-sm leading-relaxed text-[#6b7c8f]">Use the admin portal to manage playlists, videos, imports, and settings.</p>
+                <p className="mt-1 text-sm leading-relaxed text-[#6b7c8f]">Use the admin portal to manage resources, imports, and settings.</p>
                 <Link href="/admin/login" onClick={() => setOpen(false)} className="mlp-btn-primary mt-4 w-full">
                   <LogIn className="size-4" /> Admin Login
                 </Link>

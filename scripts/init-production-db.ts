@@ -78,9 +78,10 @@ function videoId(index: number) {
 }
 
 function formatFor(category: string, index: number) {
-  if (category === "Introduction") return "Online";
-  if (category === "Consumer Literacy") return "Animations";
-  if (category === "Entrepreneurial Literacy") return index % 2 === 0 ? "Doodle" : "Video Scribe";
+  if (category === "Introduction") return "Global";
+  if (category === "Consumer Literacy") return "Animation";
+  if (category === "Entrepreneurial Literacy") return index % 2 === 0 ? "Doodle" : "VideoScribe";
+  if (category === "Personal and Professional Aspirations") return "Image Diaries";
   return resourceFormats[index % resourceFormats.length];
 }
 
@@ -102,7 +103,7 @@ async function ensureDefaults() {
     create: {
       siteTitle: "MLP Video Library",
       siteDescription:
-        "A facilitator resource library for organized Marketplace Literacy resources by language, resource format, and category.",
+        "A facilitator resource library for organized Marketplace Literacy resources by language and resource format.",
       primaryColor: "#A64026",
       secondaryColor: "#624237",
       youtubeChannelUrl: "https://www.youtube.com/@marketplaceliteracy",
@@ -156,10 +157,9 @@ async function ensureDefaults() {
 
   await prisma.video.updateMany({ where: { resourceFormat: "Doodle Video" }, data: { resourceFormat: "Doodle" } });
   await prisma.video.updateMany({ where: { resourceFormat: "Image Diary" }, data: { resourceFormat: "Image Diaries" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "Animation" }, data: { resourceFormat: "Animations" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "VideoScribe" }, data: { resourceFormat: "Video Scribe" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "Global" }, data: { resourceFormat: "Online" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "Vocations" }, data: { resourceFormat: "Online" } });
+  await prisma.video.updateMany({ where: { resourceFormat: "Facilitator Video" }, data: { resourceFormat: "Global" } });
+  await prisma.video.updateMany({ where: { resourceFormat: "Animations" }, data: { resourceFormat: "Animation" } });
+  await prisma.video.updateMany({ where: { resourceFormat: "Video Scribe" }, data: { resourceFormat: "VideoScribe" } });
 }
 
 async function seedStarterResourcesIfEmpty() {
@@ -296,7 +296,7 @@ async function ensureYoutubeStylePlaylists() {
         thumbnailUrl: language.thumbnailPath,
         languageId: language.id,
         moduleId: category?.id,
-        visibility: "Public",
+        visibility: "Published",
         featured: true,
         sortOrder: i + 1
       },
@@ -311,7 +311,7 @@ async function ensureYoutubeStylePlaylists() {
         region: "Global",
         audience: "General",
         tags: `${item.language}, ${item.shelf}, Playlist`,
-        visibility: "Public",
+        visibility: "Published",
         featured: true,
         sortOrder: i + 1
       }
@@ -354,7 +354,6 @@ async function ensureYoutubeStylePlaylists() {
 async function main() {
   await ensureDefaults();
   await seedStarterResourcesIfEmpty();
-  await ensureYoutubeStylePlaylists();
 }
 
 main()

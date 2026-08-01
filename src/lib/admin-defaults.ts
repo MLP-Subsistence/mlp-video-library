@@ -15,8 +15,7 @@ export async function ensureAdminDefaults() {
   }
   await prisma.video.updateMany({ where: { resourceFormat: "Doodle Video" }, data: { resourceFormat: "Doodle" } });
   await prisma.video.updateMany({ where: { resourceFormat: "Image Diary" }, data: { resourceFormat: "Image Diaries" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "Animation" }, data: { resourceFormat: "Animations" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "VideoScribe" }, data: { resourceFormat: "Video Scribe" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "Global" }, data: { resourceFormat: "Online" } });
-  await prisma.video.updateMany({ where: { resourceFormat: "Vocations" }, data: { resourceFormat: "Online" } });
+  await prisma.video.updateMany({ where: { resourceFormat: "Facilitator Video" }, data: { resourceFormat: "Global" } });
+  await prisma.video.updateMany({ where: { resourceFormat: "Animations" }, data: { resourceFormat: "Animation" } });
+  await prisma.video.updateMany({ where: { resourceFormat: "Video Scribe" }, data: { resourceFormat: "VideoScribe" } });
 }

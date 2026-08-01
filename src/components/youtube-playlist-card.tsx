@@ -33,12 +33,12 @@ export function YouTubePlaylistCard({ playlist }: { playlist: PlaylistCardData }
       </Link>
       <div className="p-4">
         <div className="mb-2 flex flex-wrap gap-2">
-          <span className="rounded bg-[#f2f4f7] px-2 py-1 text-[11px] font-extrabold uppercase text-[#526579]">Playlist</span>
-          <span className="rounded bg-[#fbeaea] px-2 py-1 text-[11px] font-extrabold uppercase text-[#a64026]">{playlist.visibility || "Public"}</span>
+          <span className="rounded bg-[#f2f4f7] px-2 py-1 text-[11px] font-extrabold uppercase text-[#526579]">Resource</span>
+          <span className="rounded bg-[#fbeaea] px-2 py-1 text-[11px] font-extrabold uppercase text-[#a64026]">{playlist.visibility || "Published"}</span>
         </div>
         <h3 className="line-clamp-2 min-h-[48px] text-base font-extrabold leading-snug text-[#243447]">{playlist.title}</h3>
         <Link href={`/playlists/${playlist.id}`} className="mt-4 inline-flex text-sm font-extrabold text-[#a64026]">
-          View full playlist
+          Open resource
         </Link>
       </div>
     </article>

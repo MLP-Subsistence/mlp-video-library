@@ -49,13 +49,42 @@ export const resourceTypes = ["Video", "Document", "Activity", "Script", "Audio"
 
 export const resourceFormats = [
   "Image Diaries",
-  "Animations",
   "Doodle",
-  "Video Scribe",
+  "Animation",
+  "VideoScribe",
+  "Global",
+  "Vocations",
   "Online"
 ];
 
 export const visibleResourceFormats = resourceFormats;
+
+export const resourceFormatIcons: Record<string, string> = {
+  "Image Diaries": "/icons/categories/image-diaries.webp",
+  Doodle: "/icons/categories/doodle.webp",
+  Animation: "/icons/categories/animation.webp",
+  VideoScribe: "/icons/categories/videoscribe.webp",
+  Global: "/icons/categories/global.webp",
+  Vocations: "/icons/categories/vocations.webp",
+  Online: "/icons/categories/online.webp"
+};
+
+export const categoryIcons: Record<string, string> = {
+  Introduction: "/icons/categories/introduction.webp",
+  "General Marketplace Literacy": "/icons/categories/general-marketplace-literacy.webp",
+  "Personal and Professional Aspirations": "/icons/categories/personal-and-professional-aspirations.webp",
+  "Consumer Literacy": "/icons/categories/consumer-literacy.webp",
+  "Entrepreneurial Literacy": "/icons/categories/entrepreneurial-literacy.webp",
+  "Sustainability Literacy": "/icons/categories/sustainability-literacy.webp"
+};
+
+export function resourceFormatIcon(format: string) {
+  return resourceFormatIcons[normalizeResourceFormat(format)] ?? "/icons/categories/general-marketplace-literacy.webp";
+}
+
+export function categoryIcon(category: string) {
+  return categoryIcons[category] ?? "/icons/categories/general-marketplace-literacy.webp";
+}
 
 export const youtubeStyleShelves = [
   { title: "Marketplace Literacy - English", language: "English" },
@@ -99,7 +128,7 @@ export const youtubeStylePlaylists = [
   { title: "Training Videos Bihar - India बाज़ार साक्षरता लिट्स", language: "Hindi", shelf: "Marketplace Literacy Training Hindi" },
   { title: "Training Bihar बाज़ार साक्षरता मॉड्यूल", language: "Hindi", shelf: "Marketplace Literacy Training Hindi" },
   { title: "Complete Training Videos बाजार साक्षरता प्रशिक्षण वीडियोज", language: "Hindi", shelf: "Marketplace Literacy Training Hindi" },
-  { title: "Marketplace Literacy - Modules - Youth and Women", language: "Hindi", shelf: "Marketplace Literacy - Hindi" },
+  { title: "Marketplace Literacy - Youth and Women", language: "Hindi", shelf: "Marketplace Literacy - Hindi" },
   { title: "ऑनलाइन बाज़ार साक्षरता", language: "Hindi", shelf: "Marketplace Literacy - Hindi" },
   { title: "मार्केटप्लेस साक्षरता", language: "Hindi", shelf: "Marketplace Literacy - Hindi" },
   { title: "बाजार साक्षरता व्यवसाय", language: "Hindi", shelf: "Marketplace Literacy - Hindi" },
@@ -122,8 +151,12 @@ export function normalizeResourceFormat(value?: string | null) {
   const lower = trimmed.toLowerCase();
   if (lower === "doodle video" || lower === "doodle") return "Doodle";
   if (lower === "image diary" || lower === "image diaries") return "Image Diaries";
-  if (lower === "animation" || lower === "animations") return "Animations";
-  if (lower === "videoscribe" || lower === "video scribe") return "Video Scribe";
+  if (lower === "animation" || lower === "animations") return "Animation";
+  if (lower === "videoscribe" || lower === "video scribe") return "VideoScribe";
+  if (lower === "facilitator video" || lower === "facilitator videos") return "Global";
+  if (lower === "vocation" || lower === "vocations" || lower === "vocational") return "Vocations";
+  if (lower === "global") return "Global";
+  if (lower === "online") return "Online";
   return trimmed;
 }
 
@@ -131,8 +164,10 @@ export function resourceFormatAliases(value?: string | null) {
   const normalized = normalizeResourceFormat(value);
   if (normalized === "Doodle") return ["Doodle", "Doodle Video"];
   if (normalized === "Image Diaries") return ["Image Diaries", "Image Diary"];
-  if (normalized === "Animations") return ["Animations", "Animation"];
-  if (normalized === "Video Scribe") return ["Video Scribe", "VideoScribe"];
+  if (normalized === "Animation") return ["Animation", "Animations"];
+  if (normalized === "VideoScribe") return ["VideoScribe", "Video Scribe"];
+  if (normalized === "Global") return ["Global", "Facilitator Video", "Facilitator Videos"];
+  if (normalized === "Vocations") return ["Vocations", "Vocation", "Vocational"];
   return [normalized];
 }
 
@@ -153,8 +188,9 @@ export function resourceFormatFromSlug(slug: string) {
   if (direct) return normalizeResourceFormat(direct);
   if (slug === "doodle-video") return "Doodle";
   if (slug === "image-diary") return "Image Diaries";
-  if (slug === "animation") return "Animations";
-  if (slug === "video-scribe" || slug === "videoscribe") return "Video Scribe";
+  if (slug === "animations") return "Animation";
+  if (slug === "video-scribe") return "VideoScribe";
+  if (slug === "vocational") return "Vocations";
   return null;
 }
 

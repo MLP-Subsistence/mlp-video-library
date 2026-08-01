@@ -19,7 +19,7 @@ type ResourceCardResource = {
 
 export function ResourceCard({ resource }: { resource: ResourceCardResource }) {
   const languageCode = resource.language?.code ?? "en";
-  const href = `/resources/${languageCode}/${slugify(normalizeResourceFormat(resource.resourceFormat))}/${slugify(resource.category)}?resource=${resource.id}`;
+  const href = `/resources/${languageCode}/${slugify(normalizeResourceFormat(resource.resourceFormat))}?resource=${resource.id}`;
   return (
     <article className="resource-card overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-[#edf0f3] transition hover:-translate-y-0.5 hover:shadow-md">
       <Link href={href} className="block">

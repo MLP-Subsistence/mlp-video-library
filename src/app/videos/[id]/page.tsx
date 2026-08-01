@@ -6,5 +6,5 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const resource = await prisma.video.findUnique({ where: { id }, include: { language: true } });
   if (!resource || !resource.language) notFound();
-  redirect(`/resources/${resource.language.code}/${slugify(normalizeResourceFormat(resource.resourceFormat))}/${slugify(resource.category || "General Marketplace Literacy")}?resource=${resource.id}`);
+  redirect(`/resources/${resource.language.code}/${slugify(normalizeResourceFormat(resource.resourceFormat))}?resource=${resource.id}`);
 }

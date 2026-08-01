@@ -60,16 +60,33 @@ export function VisibilityField({ value }: { value?: string }) {
   );
 }
 
-export function SaveButton({ label = "Save" }: { label?: string }) {
-  return <button className="h-11 rounded-lg bg-[#9b171b] px-5 font-bold text-white shadow-sm hover:bg-[#7f1216]">{label}</button>;
+export function SaveButton({ label = "Save", disabled = false }: { label?: string; disabled?: boolean }) {
+  return (
+    <button
+      disabled={disabled}
+      className="h-11 rounded-lg bg-[#a64026] px-5 font-bold text-white shadow-sm transition hover:bg-[#8e351f] disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {label}
+    </button>
+  );
 }
 
-export function FormActions({ submitLabel = "Save", cancelHref }: { submitLabel?: string; cancelHref: string }) {
+export function FormActions({
+  submitLabel = "Save",
+  cancelHref,
+  disabled = false,
+  hideReset = false
+}: {
+  submitLabel?: string;
+  cancelHref: string;
+  disabled?: boolean;
+  hideReset?: boolean;
+}) {
   return (
     <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
-      <SaveButton label={submitLabel} />
+      <SaveButton label={submitLabel} disabled={disabled} />
       <Link href={cancelHref} className="mlp-btn-outline">Cancel</Link>
-      <button type="reset" className="mlp-btn-outline">Clear form</button>
+      {!hideReset && <button type="reset" className="mlp-btn-outline">Clear form</button>}
     </div>
   );
 }

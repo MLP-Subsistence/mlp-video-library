@@ -1,13 +1,59 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { PROGRAM_NAME, languageThumbnails, resourceCategories, resourceLanguages, slugify, youtubeStylePlaylists, youtubeStyleShelves } from "../src/lib/resource-taxonomy";
+import { PROGRAM_NAME, languageThumbnails, resourceCategories, resourceLanguages, slugify } from "../src/lib/resource-taxonomy";
 
 const prisma = new PrismaClient();
 
 const sampleVideoIds = ["ysz5S6PUM-U", "ScMzIvxBSi4", "aqz-KE-bpKQ", "jNQXAC9IVRw", "dQw4w9WgXcQ"];
 
+const contentTree: Record<string, string[]> = {
+  Introduction: ["Introduction to Marketplace Literacy"],
+  "General Marketplace Literacy": [
+    "Evolution of Needs",
+    "Prioritizing Elements of a Business - Clip 1",
+    "Prioritizing Elements of a Business - Clip 2",
+    "Prioritizing Elements of a Business - Clip 3",
+    "Prioritizing Elements of a Business - Clip 4",
+    "Prioritizing Elements of a Business - Clip 5",
+    "Physical and Psychological Needs - Clip 1",
+    "Physical and Psychological Needs - Clip 2",
+    "Types of Customers",
+    "Value Chain"
+  ],
+  "Personal and Professional Aspirations": [
+    "Personal Aspirations and Livelihood Goals",
+    "Professional Aspirations in the Marketplace",
+    "Building Confidence for Marketplace Participation"
+  ],
+  "Consumer Literacy": ["What Is Value - Clip 1", "What Is Value - Clip 2"],
+  "Entrepreneurial Literacy": [
+    "Unwrapping a Business",
+    "Business Dos and Donts",
+    "Choosing a Business - Clip 1",
+    "Choosing a Business - Clip 2",
+    "Choosing a Business - Clip 3",
+    "Choosing a Business - Clip 4",
+    "Understanding Customers",
+    "How to Learn About Customers and Markets - Clip 1",
+    "How to Learn About Customers and Markets - Clip 2",
+    "What Is Value for Customers",
+    "Designing Products",
+    "Communicating About Products"
+  ],
+  "Sustainability Literacy": []
+};
+
 function videoId(index: number) {
   return sampleVideoIds[index % sampleVideoIds.length];
+}
+
+function formatFor(category: string, index: number) {
+  if (category === "Introduction") return "Global";
+  if (category === "Consumer Literacy") return "Animation";
+  if (category === "Entrepreneurial Literacy") return index % 2 === 0 ? "Doodle" : "VideoScribe";
+  if (category === "Personal and Professional Aspirations") return "Image Diaries";
+  if (category === "General Marketplace Literacy") return index % 3 === 0 ? "Image Diaries" : "Doodle";
+  return "Global";
 }
 
 async function main() {
@@ -21,7 +67,11 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "admin@marketplaceliteracy.org" },
-    update: {},
+    update: {
+      name: "MLP Admin",
+      passwordHash: await bcrypt.hash("ChangeMe123!", 12),
+      role: "admin"
+    },
     create: {
       name: "MLP Admin",
       email: "admin@marketplaceliteracy.org",
@@ -34,7 +84,7 @@ async function main() {
     where: { id: 1 },
     update: {
       siteTitle: "MLP Video Library",
-      siteDescription: "A facilitator resource library for organized Marketplace Literacy videos, scripts, prompts, and training materials by language and category.",
+      siteDescription: "A facilitator resource library for organized Marketplace Literacy resources by language and resource format.",
       primaryColor: "#A64026",
       secondaryColor: "#624237",
       youtubeChannelUrl: "https://www.youtube.com/@marketplaceliteracy",
@@ -42,7 +92,7 @@ async function main() {
     },
     create: {
       siteTitle: "MLP Video Library",
-      siteDescription: "A facilitator resource library for organized Marketplace Literacy videos, scripts, prompts, and training materials by language and category.",
+      siteDescription: "A facilitator resource library for organized Marketplace Literacy resources by language and resource format.",
       primaryColor: "#A64026",
       secondaryColor: "#624237",
       youtubeChannelUrl: "https://www.youtube.com/@marketplaceliteracy",
@@ -50,7 +100,7 @@ async function main() {
     }
   });
 
-  const languages = new Map<string, { id: string; thumbnailPath: string }>();
+  const languages = new Map<string, { id: string; thumbnailPath: string; sortOrder: number }>();
   for (let i = 0; i < resourceLanguages.length; i++) {
     const seed = resourceLanguages[i];
     const language = await prisma.language.create({
@@ -64,10 +114,10 @@ async function main() {
         isActive: true
       }
     });
-    languages.set(seed.name, { id: language.id, thumbnailPath: language.thumbnailPath ?? "" });
+    languages.set(seed.name, { id: language.id, thumbnailPath: language.thumbnailPath ?? "", sortOrder: language.sortOrder });
   }
 
-  const modules = new Map<string, string>();
+  const categories = new Map<string, string>();
   for (let i = 0; i < resourceCategories.length; i++) {
     const category = resourceCategories[i];
     const categoryRow = await prisma.module.create({
@@ -79,73 +129,85 @@ async function main() {
         isActive: true
       }
     });
-    modules.set(category.name, categoryRow.id);
+    categories.set(category.name, categoryRow.id);
   }
 
-  for (let shelfIndex = 0; shelfIndex < youtubeStyleShelves.length; shelfIndex++) {
-    const shelf = youtubeStyleShelves[shelfIndex];
-    const languageInfo = languages.get(shelf.language);
-    if (!languageInfo) continue;
-    await prisma.homepageSection.create({
+  let globalIndex = 0;
+  for (const languageSeed of resourceLanguages) {
+    const language = languages.get(languageSeed.name);
+    if (!language) continue;
+
+    const section = await prisma.homepageSection.create({
       data: {
-        title: shelf.title,
-        description: `Marketplace Literacy playlists in ${shelf.language}.`,
-        filterLanguageId: languageInfo.id,
+        title: `${PROGRAM_NAME} - ${languageSeed.name}`,
+        description: `Educator and facilitator resources in ${languageSeed.name}.`,
+        filterLanguageId: language.id,
         layout: "row",
-        sortOrder: shelfIndex + 1,
+        sortOrder: language.sortOrder,
         visibility: "Published"
       }
     });
-  }
 
-  for (let playlistIndex = 0; playlistIndex < youtubeStylePlaylists.length; playlistIndex++) {
-    const item = youtubeStylePlaylists[playlistIndex];
-    const languageInfo = languages.get(item.language);
-    if (!languageInfo) continue;
-    const playlist = await prisma.playlist.create({
-      data: {
-        title: item.title,
-        shortTitle: item.title,
-        description: `YouTube-style playlist shelf item for ${item.language}. Replace sample videos with the exact YouTube playlist videos when ready.`,
-        thumbnailUrl: languageInfo.thumbnailPath,
-        languageId: languageInfo.id,
-        moduleId: modules.get("General Marketplace Literacy"),
-        region: "Global",
-        audience: "General",
-        tags: `${item.language}, ${item.shelf}, Playlist`,
-        visibility: "Public",
-        featured: true,
-        sortOrder: playlistIndex + 1
-      }
-    });
-    for (let i = 0; i < 3; i++) {
-      const id = videoId(playlistIndex + i);
-      const title = `${item.title} - Video ${i + 1}`;
-      const video = await prisma.video.create({
+    let featuredOrder = 0;
+    for (const category of resourceCategories) {
+      const titles = contentTree[category.name] ?? [];
+      if (titles.length === 0) continue;
+
+      const collection = await prisma.playlist.create({
         data: {
-          title,
-          resourceTitle: title,
-          description: `Video placeholder for ${item.title}.`,
-          youtubeUrl: `https://www.youtube.com/watch?v=${id}`,
-          youtubeVideoId: id,
-          embedUrl: `https://www.youtube.com/embed/${id}`,
-          thumbnailUrl: languageInfo.thumbnailPath,
-          program: PROGRAM_NAME,
-          category: "Playlist",
-          resourceType: "Video",
-          resourceFormat: "Online",
-          orderIndex: i + 1,
-          isPublished: true,
-          languageId: languageInfo.id,
-          moduleId: modules.get("General Marketplace Literacy"),
+          title: `${PROGRAM_NAME} - ${languageSeed.name} - ${category.name}`,
+          shortTitle: category.name,
+          description: `${category.description} These resources are intended for educators and facilitators using Marketplace Literacy in ${languageSeed.name}.`,
+          thumbnailUrl: language.thumbnailPath,
+          languageId: language.id,
+          moduleId: categories.get(category.name),
           region: "Global",
-          audience: "General",
-          tags: `${slugify(item.title)}, ${item.language}`,
-          duration: "08:45",
-          visibility: "Published"
+          audience: "Trainers",
+          tags: `${languageSeed.name}, ${category.name}, facilitator, resources`,
+          visibility: "Published",
+          featured: true,
+          sortOrder: globalIndex + 1
         }
       });
-      await prisma.playlistVideo.create({ data: { playlistId: playlist.id, videoId: video.id, sortOrder: i + 1 } });
+
+      if (featuredOrder < 4) {
+        await prisma.homepageSectionPlaylist.create({
+          data: { homepageSectionId: section.id, playlistId: collection.id, sortOrder: featuredOrder + 1 }
+        });
+        featuredOrder++;
+      }
+
+      for (let i = 0; i < titles.length; i++) {
+        const youtubeVideoId = videoId(globalIndex + i);
+        const format = formatFor(category.name, i);
+        const resource = await prisma.video.create({
+          data: {
+            title: titles[i],
+            resourceTitle: titles[i],
+            description: `Facilitator resource for ${category.name}. Replace this starter item with the approved ${languageSeed.name} resource when ready.`,
+            youtubeUrl: `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+            youtubeVideoId,
+            embedUrl: `https://www.youtube.com/embed/${youtubeVideoId}`,
+            thumbnailUrl: language.thumbnailPath,
+            program: PROGRAM_NAME,
+            category: category.name,
+            resourceType: "Video",
+            resourceFormat: format,
+            transcript: "",
+            orderIndex: i + 1,
+            isPublished: true,
+            languageId: language.id,
+            moduleId: categories.get(category.name),
+            region: "Global",
+            audience: "Trainers",
+            tags: `${slugify(category.name)}, ${languageSeed.name}, facilitator, ${PROGRAM_NAME}, ${slugify(format)}`,
+            duration: "08:45",
+            visibility: "Published"
+          }
+        });
+        await prisma.playlistVideo.create({ data: { playlistId: collection.id, videoId: resource.id, sortOrder: i + 1 } });
+      }
+      globalIndex += titles.length;
     }
   }
 }

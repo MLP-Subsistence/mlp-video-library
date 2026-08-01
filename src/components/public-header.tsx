@@ -16,7 +16,8 @@ export async function PublicHeader() {
         </Link>
         <nav className="hidden items-center gap-12 text-sm font-bold text-[#a64026] md:flex">
           <Link href="/">Home</Link>
-          <Link href="/playlists">Playlists</Link>
+          <Link href="/resources">Resources</Link>
+          <Link href="/search">Search</Link>
         </nav>
         <div className="hidden items-center gap-4 md:flex">
           <div className="h-8 w-px bg-[#e5e7eb]" />

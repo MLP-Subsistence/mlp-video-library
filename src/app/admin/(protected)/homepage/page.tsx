@@ -1,49 +1,72 @@
-import { deleteHomepageSectionAction, upsertHomepageSectionAction } from "@/app/admin/actions";
-import { Notice } from "@/components/admin-shell";
-import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
-import { FormActions, PageTitle, SelectField, TextArea, TextField, VisibilityField } from "@/components/admin-form";
-import { prisma } from "@/lib/prisma";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { ExternalLink, LayoutGrid, PlaySquare, Settings } from "lucide-react";
 
-export default async function HomepageAdminPage({ searchParams }: { searchParams: Promise<{ edit?: string; success?: string; error?: string }> }) {
-  const params = await searchParams;
-  const [sections, collections, languages, categories, edit] = await Promise.all([
-    prisma.homepageSection.findMany({ orderBy: { sortOrder: "asc" }, include: { playlists: { include: { playlist: true } } } }),
-    prisma.playlist.findMany({ orderBy: { title: "asc" } }),
-    prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.module.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    params.edit ? prisma.homepageSection.findUnique({ where: { id: params.edit }, include: { playlists: true } }) : null
-  ]);
-  const selected = new Set(edit?.playlists.map((item) => item.playlistId) ?? []);
+export default function HomepageAdminPage() {
   return (
     <div>
-      <PageTitle title="Homepage Sections" description="Control the resource rows and grids visitors see on the public homepage." />
-      <Notice success={params.success} error={params.error} />
-      <form action={upsertHomepageSectionAction} className="mb-8 grid gap-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-[#edf0f3] md:grid-cols-2">
-        <input type="hidden" name="id" value={edit?.id ?? ""} />
-        <TextField label="Section title" name="title" defaultValue={edit?.title} required />
-        <TextField label="Sort order" name="sortOrder" defaultValue={edit?.sortOrder ?? 0} type="number" />
-        <TextArea label="Description optional" name="description" defaultValue={edit?.description} />
-        <SelectField label="Language filter optional" name="filterLanguageId" defaultValue={edit?.filterLanguageId}><option value="">No language filter</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-        <SelectField label="Category filter optional" name="filterModuleId" defaultValue={edit?.filterModuleId}><option value="">No category filter</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-        <SelectField label="Layout" name="layout" defaultValue={edit?.layout ?? "row"}><option value="row">Horizontal row</option><option value="grid">Responsive grid</option></SelectField>
-        <VisibilityField value={edit?.visibility} />
-        <fieldset className="md:col-span-2 rounded-xl border border-[#edf0f3] p-4">
-          <legend className="px-2 font-semibold">Resource collections to show</legend>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {collections.map((collection) => <label key={collection.id} className="flex items-center gap-2 text-sm"><input type="checkbox" name="playlistIds" value={collection.id} defaultChecked={selected.has(collection.id)} className="accent-[#a64026]" /> {collection.title}</label>)}
-          </div>
-        </fieldset>
-        <div className="md:col-span-2"><FormActions submitLabel={edit ? "Save section" : "Create section"} cancelHref="/admin/homepage" /></div>
-      </form>
-      <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#edf0f3]">
-        {sections.map((section) => (
-          <div key={section.id} className="grid gap-3 border-b border-[#edf0f3] p-4 last:border-0 md:grid-cols-[1fr_auto_auto] md:items-center">
-            <div><strong>{section.title}</strong><div className="text-sm text-[#6b7c8f]">{section.playlists.length} collections - {section.layout} - {section.visibility}</div></div>
-            <a href={`/admin/homepage?edit=${section.id}`} className="mlp-btn-outline">Edit</a>
-            <form action={deleteHomepageSectionAction}><input type="hidden" name="id" value={section.id} /><ConfirmDeleteButton message={`Delete "${section.title}"? This cannot be undone.`} /></form>
-          </div>
-        ))}
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#6b7c8f]">MLP Admin</p>
+          <h1 className="mt-2 text-3xl font-extrabold">Homepage</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#6b7c8f]">
+            The public homepage is now generated from published languages, resource formats, and resources. Use the resource manager to control what visitors see.
+          </p>
+        </div>
+        <Link href="/resources" className="mlp-btn-outline">
+          <ExternalLink className="size-4" /> Public Library
+        </Link>
       </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <ActionCard
+          href="/admin/videos"
+          icon={<PlaySquare className="size-6" />}
+          title="Manage Resources"
+          description="Add, edit, publish, hide, and reorder the resources shown in the public library."
+        />
+        <ActionCard
+          href="/admin/languages"
+          icon={<LayoutGrid className="size-6" />}
+          title="Manage Languages"
+          description="Update language labels, thumbnails, display order, and active status."
+        />
+        <ActionCard
+          href="/admin/settings"
+          icon={<Settings className="size-6" />}
+          title="Library Settings"
+          description="Edit the site title, footer text, contact links, and public branding details."
+        />
+      </div>
+
+      <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-[#edf0f3] sm:p-8">
+        <h2 className="text-xl font-extrabold">Public Display Rules</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <Rule number="1" title="Language" text="Visitors start by choosing a language." />
+          <Rule number="2" title="Resource Format" text="They then choose the style or format of resource they need." />
+          <Rule number="3" title="Resource" text="Published resources appear directly for watching or opening." />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ActionCard({ href, icon, title, description }: { href: string; icon: ReactNode; title: string; description: string }) {
+  return (
+    <Link href={href} className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-[#edf0f3] transition hover:-translate-y-0.5 hover:shadow-md">
+      <span className="grid size-12 place-items-center rounded-xl bg-[#fbeaea] text-[#a64026]">{icon}</span>
+      <h2 className="mt-5 text-xl font-extrabold">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-[#6b7c8f]">{description}</p>
+    </Link>
+  );
+}
+
+function Rule({ number, title, text }: { number: string; title: string; text: string }) {
+  return (
+    <div className="rounded-xl border border-[#edf0f3] bg-[#fbfcfd] p-5">
+      <div className="grid size-9 place-items-center rounded-full bg-[#a64026] text-sm font-extrabold text-white">{number}</div>
+      <h3 className="mt-4 font-extrabold">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-[#6b7c8f]">{text}</p>
     </div>
   );
 }

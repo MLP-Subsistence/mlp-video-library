@@ -10,11 +10,9 @@ import { PROGRAM_NAME, resourceFormats, resourceImage, resourceTypes } from "@/l
 
 export default async function VideoFormPage({ searchParams }: { searchParams: Promise<{ edit?: string; error?: string; success?: string }> }) {
   const params = await searchParams;
-  const [languages, categories, playlists, edit] = await Promise.all([
+  const [languages, edit] = await Promise.all([
     prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.module.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.playlist.findMany({ orderBy: { title: "asc" } }),
-    params.edit ? prisma.video.findUnique({ where: { id: params.edit }, include: { playlists: true, language: true } }) : null
+    params.edit ? prisma.video.findUnique({ where: { id: params.edit }, include: { language: true } }) : null
   ]);
   return (
     <div>
@@ -46,9 +44,6 @@ export default async function VideoFormPage({ searchParams }: { searchParams: Pr
               <SelectField label="Language" name="languageId" defaultValue={edit?.languageId} required>
                 <option value="">Select Language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </SelectField>
-              <SelectField label="Resource Category" name="moduleId" defaultValue={edit?.moduleId} required>
-                <option value="">Select Category</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </SelectField>
               <SelectField label="Resource Type" name="resourceType" defaultValue={edit?.resourceType ?? "Video"}>
                 {resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}
               </SelectField>
@@ -61,10 +56,7 @@ export default async function VideoFormPage({ searchParams }: { searchParams: Pr
 
           <FormSection icon={<ListChecks className="size-4" />} title="Organization">
             <div className="grid gap-4 md:grid-cols-2">
-              <SelectField label="Optional Resource Collection" name="playlistIds" defaultValue={edit?.playlists[0]?.playlistId}>
-                <option value="">No collection</option>{playlists.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-              </SelectField>
-              <TextField label="Order in Category" name="orderIndex" defaultValue={edit?.orderIndex ?? 0} type="number" />
+              <TextField label="Display Order" name="orderIndex" defaultValue={edit?.orderIndex ?? 0} type="number" />
               <RegionAudienceFields region={edit?.region} audience={edit?.audience} />
               <TextField label="Tags" name="tags" defaultValue={edit?.tags} />
             </div>

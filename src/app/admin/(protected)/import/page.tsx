@@ -1,84 +1,171 @@
+import Link from "next/link";
+import { AlertTriangle, CloudDownload, ExternalLink, Info, Plus } from "lucide-react";
 import { bulkImportVideosAction, importYouTubePlaylistAction, upsertVideoAction } from "@/app/admin/actions";
 import { Notice } from "@/components/admin-shell";
-import { FormActions, PageTitle, RegionAudienceFields, SelectField, TextArea, TextField, VisibilityField } from "@/components/admin-form";
-import { publicPlaylistOptionLabel, selectPublicPlaylists } from "@/lib/playlist-organization";
+import { FormActions, RegionAudienceFields, SelectField, TextArea, TextField, VisibilityField } from "@/components/admin-form";
 import { prisma } from "@/lib/prisma";
-import { resourceFormats } from "@/lib/resource-taxonomy";
+import { resourceFormats, resourceTypes } from "@/lib/resource-taxonomy";
 
-export default async function ImportPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
+type ImportTab = "single" | "bulk" | "playlist";
+
+export default async function ImportPage({
+  searchParams
+}: {
+  searchParams: Promise<{ success?: string; error?: string; tab?: string }>;
+}) {
   const params = await searchParams;
-  const [languages, categories, playlists] = await Promise.all([
-    prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.module.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.playlist.findMany({
-      where: { visibility: { not: "Hidden" } },
-      orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
-      include: { language: true, _count: { select: { videos: true } } }
-    })
-  ]);
-  const publicPlaylists = selectPublicPlaylists(playlists);
+  const activeTab: ImportTab = params.tab === "bulk" || params.tab === "playlist" ? params.tab : "single";
+  const languages = await prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
   const apiKey = Boolean(process.env.YOUTUBE_API_KEY);
+
   return (
     <div>
-      <PageTitle title="Import YouTube Playlist" description="Import YouTube links as Marketplace Literacy resources. No video files are downloaded, uploaded, or hosted." />
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold">Import from YouTube</h1>
+          <p className="mt-2 text-sm leading-relaxed text-[#6b7c8f]">
+            Add YouTube videos to your library by linking to them. Videos are not uploaded or hosted.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link href="/" className="mlp-btn-outline"><ExternalLink className="size-4" /> Public Library</Link>
+          <Link href="/admin/videos/new" className="mlp-btn-primary"><Plus className="size-4" /> New Resource</Link>
+        </div>
+      </div>
       <Notice success={params.success} error={params.error} />
 
-      <form action={importYouTubePlaylistAction} className="mb-8 grid gap-5 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] sm:p-6 md:grid-cols-2 lg:p-7">
-        <div className="md:col-span-2">
-          <h2 className="text-xl font-extrabold">Full playlist import</h2>
-          <p className="mt-2 text-sm leading-relaxed text-[#6b7c8f]">
-            Add every video from a YouTube playlist into an app playlist. Choose an existing playlist or create a new playlist during import.
-          </p>
-          {!apiKey && (
-            <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-[#a64026]">
-              Full playlist import requires a YouTube API key in <code>YOUTUBE_API_KEY</code>. You can still add videos manually or paste multiple video links below.
-            </div>
-          )}
-        </div>
-        <TextField label="YouTube playlist URL" name="playlistUrl" required />
-        <TextField label="Default thumbnail/fallback thumbnail" name="thumbnailUrl" />
-        <SelectField label="Add to playlist" name="targetPlaylistId">
-          <option value="">Create a new playlist from this YouTube playlist</option>
-          {publicPlaylists.map((item) => <option key={item.id} value={item.id}>{publicPlaylistOptionLabel(item)}</option>)}
-        </SelectField>
-        <TextField label="Create playlist title optional" name="newPlaylistTitle" />
-        <SelectField label="Resource Type" name="resourceType" defaultValue="Video">
-          <option value="Video">Video</option>
-        </SelectField>
-        <VisibilityField value="Draft" />
-        <RegionAudienceFields audience="Trainers" />
-        <div className="md:col-span-2">
-          <FormActions submitLabel={apiKey ? "Import YouTube Playlist" : "Import requires API key"} cancelHref="/admin" />
-        </div>
-      </form>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <form action={upsertVideoAction} className="grid gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
-          <h2 className="text-xl font-bold">Single video import</h2>
-          <TextField label="Resource title" name="resourceTitle" required />
-          <TextField label="YouTube video URL" name="youtubeUrl" required />
-          <TextArea label="Description" name="description" />
-          <SelectField label="Language" name="languageId" required><option value="">Choose language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-          <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle">{resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
-          <SelectField label="Category" name="moduleId" required><option value="">Choose category</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-          <SelectField label="Assign to playlist" name="playlistIds"><option value="">No playlist yet</option>{publicPlaylists.map((item) => <option key={item.id} value={item.id}>{publicPlaylistOptionLabel(item)}</option>)}</SelectField>
-          <RegionAudienceFields audience="Trainers" />
-          <TextField label="Tags" name="tags" />
-          <input type="hidden" name="visibility" value="Draft" />
-          <FormActions submitLabel="Create draft resource" cancelHref="/admin/import" />
-        </form>
-        <form action={bulkImportVideosAction} className="grid gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
-          <h2 className="text-xl font-bold">Bulk import video links</h2>
-          <TextArea label="YouTube video URLs, one per line" name="urls" />
-          <SelectField label="Assign to playlist optional" name="playlistId"><option value="">No playlist yet</option>{publicPlaylists.map((item) => <option key={item.id} value={item.id}>{publicPlaylistOptionLabel(item)}</option>)}</SelectField>
-          <SelectField label="Language" name="languageId"><option value="">Choose language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-          <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle">{resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
-          <SelectField label="Category" name="moduleId"><option value="">Choose category</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-          <RegionAudienceFields audience="Trainers" />
-          <TextField label="Tags" name="tags" />
-          <FormActions submitLabel="Create draft resources" cancelHref="/admin/import" />
-        </form>
+      <div className="mb-5 inline-flex overflow-hidden rounded-xl border border-[#d8dde5] bg-white shadow-sm">
+        <TabLink href="/admin/import?tab=single" active={activeTab === "single"}>Single Video</TabLink>
+        <TabLink href="/admin/import?tab=bulk" active={activeTab === "bulk"}>Bulk Links</TabLink>
+        <TabLink href="/admin/import?tab=playlist" active={activeTab === "playlist"}>Playlist</TabLink>
       </div>
+
+      <div className="mb-6 flex gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-900">
+        <Info className="mt-0.5 size-5 shrink-0" />
+        <div>
+          <strong>YouTube links are stored only.</strong> Videos are not uploaded or hosted on our servers.
+          {activeTab !== "bulk" && <span> Need to import multiple videos? Switch to the <Link className="font-bold underline" href="/admin/import?tab=bulk">Bulk Links</Link> tab.</span>}
+        </div>
+      </div>
+
+      {activeTab === "single" && (
+        <form action={upsertVideoAction} className="grid gap-6 lg:grid-cols-[1fr_420px]">
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+            <h2 className="mb-6 text-xl font-extrabold">Video Details</h2>
+            <div className="grid gap-5">
+              <TextField label="YouTube URL" name="youtubeUrl" required />
+              <TextField label="Resource Title" name="resourceTitle" required />
+              <TextArea label="Description" name="description" />
+              <details className="rounded-xl border border-[#edf0f3] bg-[#fbfcfd] p-4">
+                <summary className="cursor-pointer font-bold">Advanced options</summary>
+                <div className="mt-4 grid gap-4">
+                  <TextField label="Tags" name="tags" />
+                  <TextField label="Transcript or script URL/path" name="transcript" />
+                  <TextField label="Custom thumbnail URL/path" name="thumbnailUrl" />
+                  <TextField label="Duration optional" name="duration" />
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+            <h2 className="mb-6 text-xl font-extrabold">Import Settings</h2>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+              <SelectField label="Language" name="languageId" required>
+                <option value="">Choose language</option>
+                {languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </SelectField>
+              <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle" required>
+                {resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}
+              </SelectField>
+              <SelectField label="Resource Type" name="resourceType" defaultValue="Video">
+                {resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+              </SelectField>
+              <RegionAudienceFields audience="Trainers" />
+              <input type="hidden" name="visibility" value="Draft" />
+              <div className="sm:col-span-2 lg:col-span-1">
+                <FormActions submitLabel="Create Draft" cancelHref="/admin" hideReset />
+              </div>
+            </div>
+          </section>
+        </form>
+      )}
+
+      {activeTab === "bulk" && (
+        <form action={bulkImportVideosAction} className="grid gap-6 lg:grid-cols-[1fr_420px]">
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+            <h2 className="mb-6 text-xl font-extrabold">Bulk Links</h2>
+            <TextArea label="YouTube URLs, one per line" name="urls" />
+            <p className="mt-2 text-sm text-[#6b7c8f]">Each valid YouTube link will become a draft resource using the shared settings on the right.</p>
+          </section>
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+            <h2 className="mb-6 text-xl font-extrabold">Shared Settings</h2>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+              <SelectField label="Language" name="languageId" required><option value="">Choose language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
+              <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle">{resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <SelectField label="Resource Type" name="resourceType" defaultValue="Video">{resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <VisibilityField value="Draft" />
+              <RegionAudienceFields audience="Trainers" />
+              <TextField label="Tags" name="tags" />
+              <div className="sm:col-span-2 lg:col-span-1">
+                <FormActions submitLabel="Create Draft Resources" cancelHref="/admin/import" hideReset />
+              </div>
+            </div>
+          </section>
+        </form>
+      )}
+
+      {activeTab === "playlist" && (
+        <div className="grid gap-6 xl:grid-cols-[1fr_440px]">
+          <form action={importYouTubePlaylistAction} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+            <h2 className="mb-2 text-xl font-extrabold">Import Playlist</h2>
+            <p className="mb-6 text-sm leading-relaxed text-[#6b7c8f]">Import every video from a YouTube playlist into the selected language and resource format.</p>
+            {!apiKey && (
+              <div className="mb-6 flex gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm text-[#a64026]">
+                <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                <strong>Full playlist import requires a YouTube API key. Manual imports are still available.</strong>
+              </div>
+            )}
+            <div className="grid gap-5 md:grid-cols-2">
+              <TextField label="Playlist URL" name="playlistUrl" required />
+              <TextField label="Fallback Thumbnail URL optional" name="thumbnailUrl" />
+              <SelectField label="Language" name="languageId" required><option value="">Choose language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
+              <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle" required>{resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <SelectField label="Resource Type" name="resourceType" defaultValue="Video">{resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <VisibilityField value="Draft" />
+              <RegionAudienceFields audience="Trainers" />
+              <div className="md:col-span-2">
+                <FormActions submitLabel="Import as Draft" cancelHref="/admin/import" disabled={!apiKey} hideReset />
+              </div>
+            </div>
+          </form>
+
+          <aside className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+            <h2 className="mb-6 text-xl font-extrabold">Playlist Import Summary</h2>
+            <ul className="space-y-3 text-sm text-[#526579]">
+              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Videos will be saved as YouTube links only</li>
+              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Resources can be created as Draft</li>
+              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> You can review and edit after import</li>
+            </ul>
+            <div className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              Actual video count and titles will be shown in the import result after YouTube confirms the playlist.
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
+  );
+}
+
+function TabLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className={`min-w-36 px-6 py-3 text-center text-sm font-extrabold transition ${
+        active ? "bg-white text-[#a64026] shadow-[inset_0_-2px_0_#a64026]" : "bg-[#fbfcfd] text-[#526579] hover:text-[#243447]"
+      }`}
+    >
+      {children}
+    </Link>
   );
 }
