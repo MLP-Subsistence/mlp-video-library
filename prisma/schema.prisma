@@ -46,6 +46,32 @@ model Module {
   sections    HomepageSection[]
 }
 
+model ResourceFormat {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  description String?
+  iconPath    String?
+  sortOrder   Int               @default(0)
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  submenus    ResourceSubmenu[]
+}
+
+model ResourceSubmenu {
+  id               String         @id @default(cuid())
+  name             String
+  description      String?
+  resourceFormatId String
+  resourceFormat   ResourceFormat @relation(fields: [resourceFormatId], references: [id], onDelete: Cascade)
+  sortOrder        Int            @default(0)
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([resourceFormatId, name])
+}
+
 model Playlist {
   id                    String                    @id @default(cuid())
   title                 String
@@ -86,6 +112,7 @@ model Video {
   category              String          @default("General Marketplace Literacy")
   resourceType          String          @default("Video")
   resourceFormat        String          @default("Doodle")
+  resourceSubmenu       String?
   transcript            String?
   orderIndex            Int             @default(0)
   isPublished           Boolean         @default(true)
@@ -103,6 +130,7 @@ model Video {
   playlists             PlaylistVideo[]
 
   @@index([youtubeVideoId, languageId, resourceFormat, category])
+  @@index([languageId, resourceFormat, resourceSubmenu])
 }
 
 model PlaylistVideo {

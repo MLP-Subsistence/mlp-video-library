@@ -8,7 +8,7 @@ import { clearAdminSession, requireAdmin, setAdminSession, verifyLogin } from "@
 import { prisma } from "@/lib/prisma";
 import { cleanOptional, cleanText } from "@/lib/sanitize";
 import { saveUploadedImage } from "@/lib/uploads";
-import { languageThumbnail, normalizeResourceFormat, PROGRAM_NAME, resourceFormatAliases, slugify } from "@/lib/resource-taxonomy";
+import { languageThumbnail, normalizeResourceFormat, normalizeResourceSubmenu, PROGRAM_NAME, resourceFormatAliases, slugify } from "@/lib/resource-taxonomy";
 import { extractYouTubePlaylistId, extractYouTubeVideoId, youtubeEmbedUrl, youtubePlaylistUrl, youtubeWatchUrl } from "@/lib/youtube";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -148,6 +148,99 @@ export async function deleteLanguageAction(formData: FormData) {
   redirect("/admin/languages?success=Language deleted");
 }
 
+export async function upsertResourceFormatAction(formData: FormData) {
+  await guard();
+  const id = cleanOptional(formData.get("id"));
+  const name = normalizeResourceFormat(cleanText(formData.get("name")));
+  if (!name) redirect("/admin/languages?error=Resource format name is required#resource-formats");
+
+  const data = {
+    name,
+    description: cleanOptional(formData.get("description")),
+    iconPath: cleanOptional(formData.get("iconPath")),
+    sortOrder: Number(cleanText(formData.get("sortOrder")) || 0),
+    isActive: formData.get("isActive") === "on"
+  };
+
+  if (id) await prisma.resourceFormat.update({ where: { id }, data });
+  else await prisma.resourceFormat.create({ data });
+
+  revalidatePath("/");
+  revalidatePath("/resources");
+  revalidatePath("/admin/languages");
+  redirect("/admin/languages?success=Resource format saved#resource-formats");
+}
+
+export async function deleteResourceFormatAction(formData: FormData) {
+  await guard();
+  const id = cleanText(formData.get("id"));
+  const format = await prisma.resourceFormat.findUnique({ where: { id } });
+  if (!format) redirect("/admin/languages?error=Resource format was not found#resource-formats");
+
+  const usedCount = await prisma.video.count({
+    where: { resourceFormat: { in: resourceFormatAliases(format.name) } }
+  });
+  if (usedCount > 0) {
+    redirect(`/admin/languages?error=${encodeURIComponent("Move or delete resources using this format before deleting it.")}#resource-formats`);
+  }
+
+  await prisma.resourceFormat.delete({ where: { id } });
+  revalidatePath("/");
+  revalidatePath("/resources");
+  revalidatePath("/admin/languages");
+  redirect("/admin/languages?success=Resource format deleted#resource-formats");
+}
+
+export async function upsertResourceSubmenuAction(formData: FormData) {
+  await guard();
+  const id = cleanOptional(formData.get("id"));
+  const resourceFormatId = cleanText(formData.get("resourceFormatId"));
+  const name = normalizeResourceSubmenu(cleanText(formData.get("name")));
+  if (!resourceFormatId) redirect("/admin/languages?error=Choose a resource format first#resource-formats");
+  if (!name) redirect("/admin/languages?error=Submenu name is required#resource-formats");
+
+  const data = {
+    name,
+    description: cleanOptional(formData.get("description")),
+    sortOrder: Number(cleanText(formData.get("sortOrder")) || 0),
+    isActive: formData.get("isActive") === "on"
+  };
+
+  if (id) await prisma.resourceSubmenu.update({ where: { id }, data });
+  else await prisma.resourceSubmenu.create({ data: { ...data, resourceFormatId } });
+
+  revalidatePath("/");
+  revalidatePath("/resources");
+  revalidatePath("/admin/languages");
+  redirect("/admin/languages?success=Submenu saved#resource-formats");
+}
+
+export async function deleteResourceSubmenuAction(formData: FormData) {
+  await guard();
+  const id = cleanText(formData.get("id"));
+  const submenu = await prisma.resourceSubmenu.findUnique({
+    where: { id },
+    include: { resourceFormat: true }
+  });
+  if (!submenu) redirect("/admin/languages?error=Submenu was not found#resource-formats");
+
+  const usedCount = await prisma.video.count({
+    where: {
+      resourceFormat: { in: resourceFormatAliases(submenu.resourceFormat.name) },
+      resourceSubmenu: submenu.name
+    }
+  });
+  if (usedCount > 0) {
+    redirect(`/admin/languages?error=${encodeURIComponent("Move or delete resources using this submenu before deleting it.")}#resource-formats`);
+  }
+
+  await prisma.resourceSubmenu.delete({ where: { id } });
+  revalidatePath("/");
+  revalidatePath("/resources");
+  revalidatePath("/admin/languages");
+  redirect("/admin/languages?success=Submenu deleted#resource-formats");
+}
+
 export async function upsertModuleAction(formData: FormData) {
   await guard();
   const id = cleanOptional(formData.get("id"));
@@ -273,6 +366,7 @@ export async function upsertVideoAction(formData: FormData) {
     category: cleanText(formData.get("category")) || categoryRow?.name || existingVideo?.category || "General Marketplace Literacy",
     resourceType: cleanText(formData.get("resourceType")) || "Video",
     resourceFormat: normalizeResourceFormat(cleanText(formData.get("resourceFormat")) || "Doodle"),
+    resourceSubmenu: normalizeResourceSubmenu(cleanText(formData.get("resourceSubmenu"))),
     transcript: cleanOptional(formData.get("transcript")),
     orderIndex: Number(cleanText(formData.get("orderIndex")) || 0),
     isPublished: visibilityValue === "Published",
@@ -349,6 +443,7 @@ export async function bulkManageVideosAction(formData: FormData) {
   const visibilityValue = cleanOptional(formData.get("bulkVisibility"));
   const resourceType = cleanOptional(formData.get("bulkResourceType"));
   const resourceFormat = cleanOptional(formData.get("bulkResourceFormat"));
+  const resourceSubmenu = cleanOptional(formData.get("bulkResourceSubmenu"));
   const region = cleanOptional(formData.get("bulkRegion"));
   const audience = cleanOptional(formData.get("bulkAudience"));
   const tags = cleanOptional(formData.get("bulkTags"));
@@ -365,6 +460,8 @@ export async function bulkManageVideosAction(formData: FormData) {
   }
   if (resourceType) data.resourceType = resourceType;
   if (resourceFormat) data.resourceFormat = normalizeResourceFormat(resourceFormat);
+  if (resourceSubmenu === "__clear") data.resourceSubmenu = null;
+  else if (resourceSubmenu) data.resourceSubmenu = normalizeResourceSubmenu(resourceSubmenu);
   if (region) data.region = region;
   if (audience) data.audience = audience;
   if (tags) data.tags = tags;
@@ -403,6 +500,7 @@ export async function bulkImportVideosAction(formData: FormData) {
   const moduleId = fallbackModule?.id ?? null;
   const category = fallbackModule?.name ?? "General Marketplace Literacy";
   const resourceFormat = normalizeResourceFormat(cleanText(formData.get("resourceFormat")) || "Doodle");
+  const resourceSubmenu = normalizeResourceSubmenu(cleanText(formData.get("resourceSubmenu")));
   const formatAliases = resourceFormatAliases(resourceFormat);
   const resourceType = cleanText(formData.get("resourceType")) || "Video";
   const visibilityValue = visibility(formData.get("visibility"));
@@ -416,7 +514,8 @@ export async function bulkImportVideosAction(formData: FormData) {
       where: {
         youtubeVideoId: id,
         languageId,
-        resourceFormat: { in: formatAliases }
+        resourceFormat: { in: formatAliases },
+        ...(resourceSubmenu ? { resourceSubmenu } : { resourceSubmenu: null })
       }
     });
     if (duplicate) {
@@ -434,12 +533,13 @@ export async function bulkImportVideosAction(formData: FormData) {
         category,
         resourceType,
         resourceFormat,
+        resourceSubmenu,
         isPublished,
         languageId,
         moduleId,
         region: cleanText(formData.get("region")) || "Global",
         audience: cleanText(formData.get("audience")) || "General",
-        tags: cleanText(formData.get("tags")),
+        tags: [cleanText(formData.get("tags")), resourceSubmenu].filter(Boolean).join(", "),
         visibility: visibilityValue
       }
     });
@@ -476,6 +576,7 @@ export async function importYouTubePlaylistAction(formData: FormData) {
   const category = categoryRow?.name || "General Marketplace Literacy";
   const resourceType = cleanText(formData.get("resourceType")) || "Video";
   const resourceFormat = normalizeResourceFormat(cleanText(formData.get("resourceFormat")) || "Doodle");
+  const resourceSubmenu = normalizeResourceSubmenu(cleanText(formData.get("resourceSubmenu")));
   const formatAliases = resourceFormatAliases(resourceFormat);
   const fallbackThumbnail = cleanOptional(formData.get("thumbnailUrl")) || language.thumbnailPath || languageThumbnail(language.code);
   const sourcePlaylistUrl = youtubePlaylistUrl(sourcePlaylistId);
@@ -531,7 +632,8 @@ export async function importYouTubePlaylistAction(formData: FormData) {
           where: {
             youtubeVideoId: { in: pageVideoIds },
             languageId,
-            resourceFormat: { in: formatAliases }
+            resourceFormat: { in: formatAliases },
+            ...(resourceSubmenu ? { resourceSubmenu } : { resourceSubmenu: null })
           }
         })
       : [];
@@ -561,13 +663,14 @@ export async function importYouTubePlaylistAction(formData: FormData) {
         category,
         resourceType,
         resourceFormat: normalizeResourceFormat(resourceFormat),
+        resourceSubmenu,
         orderIndex,
         isPublished,
         languageId,
         moduleId,
         region: cleanText(formData.get("region")) || "Global",
         audience: cleanText(formData.get("audience")) || "General",
-        tags: `${sourcePlaylistTitle}, ${language.name}, ${resourceFormat}, YouTube import`,
+        tags: [sourcePlaylistTitle, language.name, resourceFormat, resourceSubmenu, "YouTube import"].filter(Boolean).join(", "),
         visibility: visibilityValue
       };
       const savedVideo = existing
@@ -587,6 +690,7 @@ export async function importYouTubePlaylistAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/resources");
   revalidatePath(`/resources/${language.code}/${slugify(resourceFormat)}`);
+  if (resourceSubmenu) revalidatePath(`/resources/${language.code}/${slugify(resourceFormat)}?submenu=${slugify(resourceSubmenu)}`);
   revalidatePath("/admin/videos");
   revalidatePath("/admin/import");
   const summary = new URLSearchParams({
@@ -601,6 +705,7 @@ export async function updateImportedPlaylistFormatAction(formData: FormData) {
   const sourcePlaylistId = cleanText(formData.get("sourcePlaylistId"));
   const languageId = cleanOptional(formData.get("languageId"));
   const resourceFormat = normalizeResourceFormat(cleanText(formData.get("resourceFormat")));
+  const resourceSubmenu = normalizeResourceSubmenu(cleanText(formData.get("resourceSubmenu")));
   if (!sourcePlaylistId) redirect("/admin/import?tab=playlist&error=Imported playlist was not found.");
   if (!languageId) redirect("/admin/import?tab=playlist&error=Please choose a language for the imported playlist.");
   const language = await prisma.language.findUnique({ where: { id: languageId } });
@@ -611,13 +716,14 @@ export async function updateImportedPlaylistFormatAction(formData: FormData) {
     data: {
       languageId,
       resourceFormat,
+      resourceSubmenu,
       thumbnailUrl
     }
   });
   revalidatePath("/");
   revalidatePath("/admin/import");
   revalidatePath("/admin/videos");
-  redirect(`/admin/import?tab=playlist&success=${encodeURIComponent(`Updated imported resources to ${language.name} - ${resourceFormat}`)}`);
+  redirect(`/admin/import?tab=imported&success=${encodeURIComponent(`Updated imported resources to ${language.name} - ${[resourceFormat, resourceSubmenu].filter(Boolean).join(" / ")}`)}`);
 }
 
 export async function upsertHomepageSectionAction(formData: FormData) {

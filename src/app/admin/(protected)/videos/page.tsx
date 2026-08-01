@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { Eye, MoreVertical, Pencil, Plus, Search } from "lucide-react";
 import { bulkManageVideosAction, deleteVideoAction } from "@/app/admin/actions";
 import { Notice } from "@/components/admin-shell";
@@ -9,14 +10,24 @@ import { SmartImage } from "@/components/smart-image";
 import { SelectField, TextField } from "@/components/admin-form";
 import { audiences, regions, visibilities } from "@/lib/options";
 import { prisma } from "@/lib/prisma";
-import { resourceFormatAliases, resourceFormats, resourceImage, resourceTypes, visibleResourceFormats } from "@/lib/resource-taxonomy";
+import { getResourceFormatOptions, type ResourceFormatOption } from "@/lib/resource-format-options";
+import { normalizeResourceFormat, normalizeResourceSubmenu, resourceFormatAliases, resourceImage, resourceTypes } from "@/lib/resource-taxonomy";
 
-export default async function VideosPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string; q?: string; page?: string; pageSize?: string; languageId?: string; format?: string; status?: string }> }) {
+export default async function VideosPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string; q?: string; page?: string; pageSize?: string; languageId?: string; format?: string; submenu?: string; status?: string }> }) {
   const params = await searchParams;
   const pageSize = [10, 30, 50].includes(Number(params.pageSize)) ? Number(params.pageSize) : 10;
   const currentPage = Math.max(1, Number(params.page || 1) || 1);
-  const formatAliases = params.format ? resourceFormatAliases(params.format) : [];
-  const where = params.q
+  const formatOptions = await getResourceFormatOptions();
+  const formatAliases = params.format
+    ? Array.from(new Set([...resourceFormatAliases(params.format), normalizeResourceFormat(params.format), params.format]))
+    : [];
+  const submenuFilter = normalizeResourceSubmenu(params.submenu);
+  const submenuWhere: Prisma.VideoWhereInput | null = submenuFilter
+    ? submenuFilter === "__none"
+      ? { OR: [{ resourceSubmenu: null }, { resourceSubmenu: "" }] }
+      : { resourceSubmenu: submenuFilter }
+    : null;
+  const where: Prisma.VideoWhereInput = params.q
     ? {
         AND: [
           {
@@ -24,17 +35,20 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
               { title: { contains: params.q } },
               { resourceTitle: { contains: params.q } },
               { resourceFormat: { contains: params.q } },
+              { resourceSubmenu: { contains: params.q } },
               { tags: { contains: params.q } }
             ]
           },
           ...(params.languageId ? [{ languageId: params.languageId }] : []),
           ...(params.format ? [{ resourceFormat: { in: formatAliases } }] : []),
+          ...(submenuWhere ? [submenuWhere] : []),
           ...(params.status ? [{ visibility: params.status }] : [])
         ]
       }
     : {
         ...(params.languageId ? { languageId: params.languageId } : {}),
         ...(params.format ? { resourceFormat: { in: formatAliases } } : {}),
+        ...(submenuWhere ?? {}),
         ...(params.status ? { visibility: params.status } : {})
       };
   const [resources, languages, total] = await Promise.all([
@@ -55,6 +69,7 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
     if (params.q) query.set("q", params.q);
     if (params.languageId) query.set("languageId", params.languageId);
     if (params.format) query.set("format", params.format);
+    if (params.submenu) query.set("submenu", params.submenu);
     if (params.status) query.set("status", params.status);
     query.set("page", String(page));
     query.set("pageSize", String(size));
@@ -70,14 +85,15 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
         <Link href="/admin/videos/new" className="mlp-btn-primary w-full sm:w-auto"><Plus className="size-4" /> Add New Resource</Link>
       </div>
       <Notice success={params.success} error={params.error} />
-      <form className="mb-5 grid gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] md:grid-cols-2 md:gap-4 xl:grid-cols-[1fr_170px_170px_140px_130px_92px_92px]">
+      <form className="mb-5 grid gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] md:grid-cols-2 md:gap-4 xl:grid-cols-[1fr_160px_160px_180px_140px_130px_92px_92px]">
         <label className="flex h-[42px] items-center overflow-hidden rounded-md border border-[#d8dde5] bg-white focus-within:border-[#a64026] focus-within:ring-4 focus-within:ring-[#a64026]/10">
           <span className="grid h-full w-11 shrink-0 place-items-center border-r border-[#edf0f3] text-[#8b9bad]"><Search className="size-4" /></span>
           <input name="q" defaultValue={params.q ?? ""} placeholder="Search resources..." className="h-full min-w-0 flex-1 px-3 text-[#243447] outline-none" />
           <input type="hidden" name="page" value="1" />
         </label>
         <select name="languageId" defaultValue={params.languageId ?? ""} className="mlp-input w-full"><option value="">All Languages</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-        <select name="format" defaultValue={params.format ?? ""} className="mlp-input w-full"><option value="">All Formats</option>{visibleResourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+        <select name="format" defaultValue={params.format ?? ""} className="mlp-input w-full"><option value="">All Formats</option>{formatOptions.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select>
+        <ResourceSubmenuFilter formats={formatOptions} defaultValue={params.submenu} />
         <select name="status" defaultValue={params.status ?? ""} className="mlp-input w-full"><option value="">All Statuses</option>{visibilities.map((item) => <option key={item} value={item}>{item}</option>)}</select>
         <select name="pageSize" defaultValue={pageSize} className="mlp-input w-full" aria-label="Resources per page">
           <option value="10">10 per page</option>
@@ -108,7 +124,16 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
             </SelectField>
             <SelectField label="Resource format" name="bulkResourceFormat">
               <option value="">Leave unchanged</option>
-              {resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}
+              {formatOptions.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+            </SelectField>
+            <SelectField label="Resource submenu" name="bulkResourceSubmenu">
+              <option value="">Leave unchanged</option>
+              <option value="__clear">Clear submenu</option>
+              {formatOptions.filter((format) => format.submenus.length > 0).map((format) => (
+                <optgroup key={format.name} label={format.name}>
+                  {format.submenus.map((submenu) => <option key={`${format.name}-${submenu.name}`} value={submenu.name}>{submenu.name}</option>)}
+                </optgroup>
+              ))}
             </SelectField>
             <SelectField label="Language" name="bulkLanguageId">
               <option value="">Leave unchanged</option>
@@ -143,9 +168,13 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="line-clamp-2 font-extrabold">{resource.resourceTitle || resource.title}</h2>
-                <p className="mt-1 text-xs font-semibold text-[#6b7c8f]">{resource.language?.name ?? "No language"} - {resource.resourceFormat}</p>
+                <p className="mt-1 text-xs font-semibold text-[#6b7c8f]">
+                  {resource.language?.name ?? "No language"} - {resource.resourceFormat}
+                  {resource.resourceSubmenu ? ` / ${resource.resourceSubmenu}` : ""}
+                </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <span className="mlp-soft-badge">{resource.resourceFormat}</span>
+                  {resource.resourceSubmenu && <span className="mlp-soft-badge">{resource.resourceSubmenu}</span>}
                   <StatusBadge status={resource.visibility} />
                 </div>
               </div>
@@ -191,7 +220,10 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm font-bold text-[#526579]">{resource.language?.name ?? "No language"}</td>
-                <td className="px-6 py-4 text-sm font-bold text-[#526579]">{resource.resourceFormat}</td>
+                <td className="px-6 py-4 text-sm font-bold text-[#526579]">
+                  <div>{resource.resourceFormat}</div>
+                  {resource.resourceSubmenu && <div className="mt-1 text-xs font-semibold text-[#8b9bad]">{resource.resourceSubmenu}</div>}
+                </td>
                 <td className="px-6 py-4"><StatusBadge status={resource.visibility} /></td>
                 <td className="px-6 py-4 text-sm text-[#526579]">{resource.updatedAt.toLocaleDateString()}</td>
                 <td className="px-6 py-4">
@@ -230,4 +262,29 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
 function StatusBadge({ status }: { status: string }) {
   const colors = status === "Published" ? "bg-green-50 text-green-700 border-green-200" : status === "Hidden" ? "bg-stone-100 text-stone-700 border-stone-300" : "bg-amber-50 text-amber-700 border-amber-200";
   return <span className={`inline-flex min-w-24 justify-center rounded border px-3 py-1 text-xs font-bold ${colors}`}>{status}</span>;
+}
+
+function ResourceSubmenuFilter({
+  formats,
+  defaultValue
+}: {
+  formats: ResourceFormatOption[];
+  defaultValue?: string;
+}) {
+  const formatsWithSubmenus = formats.filter((format) => format.submenus.length > 0);
+  return (
+    <select name="submenu" defaultValue={defaultValue ?? ""} className="mlp-input w-full" aria-label="Resource submenu">
+      <option value="">All Submenus</option>
+      <option value="__none">No submenu</option>
+      {formatsWithSubmenus.map((format) => (
+        <optgroup key={format.name} label={format.name}>
+          {format.submenus.map((submenu) => (
+            <option key={`${format.name}-${submenu.name}`} value={submenu.name}>
+              {submenu.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
 }

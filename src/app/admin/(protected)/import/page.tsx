@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CloudDownload, ExternalLink, Info, ListVideo, Plus } from "lucide-react";
-import { bulkImportVideosAction, importYouTubePlaylistAction, upsertVideoAction } from "@/app/admin/actions";
+import {
+  bulkImportVideosAction,
+  importYouTubePlaylistAction,
+  updateImportedPlaylistFormatAction,
+  upsertVideoAction
+} from "@/app/admin/actions";
 import { Notice } from "@/components/admin-shell";
 import { FormActions, RegionAudienceFields, SelectField, TextArea, TextField, VisibilityField } from "@/components/admin-form";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
+import { getResourceFormatOptions, type ResourceFormatOption } from "@/lib/resource-format-options";
 import { prisma } from "@/lib/prisma";
-import { normalizeResourceFormat, resourceFormats, resourceTypes, slugify } from "@/lib/resource-taxonomy";
+import { normalizeResourceFormat, normalizeResourceSubmenu, resourceTypes, slugify } from "@/lib/resource-taxonomy";
 
 type ImportTab = "single" | "bulk" | "playlist" | "imported";
 
@@ -16,8 +23,9 @@ export default async function ImportPage({
   const params = await searchParams;
   const activeTab: ImportTab =
     params.tab === "bulk" || params.tab === "playlist" || params.tab === "imported" ? params.tab : "single";
-  const [languages, importedResources] = await Promise.all([
+  const [languages, formatOptions, importedResources] = await Promise.all([
     prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+    getResourceFormatOptions(),
     activeTab === "imported"
       ? prisma.video.findMany({
           where: { sourcePlaylistId: { not: null } },
@@ -26,6 +34,7 @@ export default async function ImportPage({
         })
       : Promise.resolve([])
   ]);
+  const formatNames = formatOptions.map((format) => format.name);
   const apiKey = Boolean(process.env.YOUTUBE_API_KEY);
   const importedPlaylistMap = new Map<string, {
     key: string;
@@ -36,6 +45,7 @@ export default async function ImportPage({
     languageName: string;
     languageCode: string | null;
     resourceFormat: string;
+    resourceSubmenu: string | null;
     resourceType: string;
     count: number;
     published: number;
@@ -49,7 +59,8 @@ export default async function ImportPage({
     const sourcePlaylistId = resource.sourcePlaylistId ?? "";
     if (!sourcePlaylistId) continue;
     const resourceFormat = normalizeResourceFormat(resource.resourceFormat);
-    const key = `${sourcePlaylistId}:${resource.languageId ?? "none"}:${resourceFormat}`;
+    const resourceSubmenu = normalizeResourceSubmenu(resource.resourceSubmenu);
+    const key = `${sourcePlaylistId}:${resource.languageId ?? "none"}:${resourceFormat}:${resourceSubmenu ?? "none"}`;
     const title = resource.tags?.split(",")[0]?.trim() || `YouTube playlist ${sourcePlaylistId}`;
     const existing = importedPlaylistMap.get(key);
     if (existing) {
@@ -70,6 +81,7 @@ export default async function ImportPage({
       languageName: resource.language?.name ?? "No language",
       languageCode: resource.language?.code ?? null,
       resourceFormat,
+      resourceSubmenu,
       resourceType: resource.resourceType,
       count: 1,
       published: resource.visibility === "Published" ? 1 : 0,
@@ -144,8 +156,9 @@ export default async function ImportPage({
                 {languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </SelectField>
               <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle" required>
-                {resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}
+                {formatNames.map((item) => <option key={item} value={item}>{item}</option>)}
               </SelectField>
+              <ResourceSubmenuSelect formats={formatOptions} />
               <SelectField label="Resource Type" name="resourceType" defaultValue="Video">
                 {resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}
               </SelectField>
@@ -170,7 +183,8 @@ export default async function ImportPage({
             <h2 className="mb-6 text-xl font-extrabold">Shared Settings</h2>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
               <SelectField label="Language" name="languageId" required><option value="">Choose language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-              <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle">{resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle">{formatNames.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <ResourceSubmenuSelect formats={formatOptions} />
               <SelectField label="Resource Type" name="resourceType" defaultValue="Video">{resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
               <VisibilityField value="Draft" />
               <RegionAudienceFields audience="Trainers" />
@@ -188,7 +202,7 @@ export default async function ImportPage({
           <form action={importYouTubePlaylistAction} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
             <h2 className="mb-2 text-xl font-extrabold">Import Playlist</h2>
             <p className="mb-6 text-sm leading-relaxed text-[#6b7c8f]">
-              Import every video from a YouTube playlist directly into the selected language and resource format. No category or collection page is created.
+              Import every video from a YouTube playlist into the selected resource format or submenu. No resource files are downloaded or hosted.
             </p>
             {!apiKey && (
               <div className="mb-6 flex gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm text-[#a64026]">
@@ -200,7 +214,8 @@ export default async function ImportPage({
               <TextField label="Playlist URL" name="playlistUrl" required />
               <TextField label="Fallback Thumbnail URL optional" name="thumbnailUrl" />
               <SelectField label="Language" name="languageId" required><option value="">Choose language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
-              <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle" required>{resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle" required>{formatNames.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
+              <ResourceSubmenuSelect formats={formatOptions} />
               <SelectField label="Resource Type" name="resourceType" defaultValue="Video">{resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
               <VisibilityField value="Published" />
               <RegionAudienceFields audience="Trainers" />
@@ -214,7 +229,7 @@ export default async function ImportPage({
             <h2 className="mb-6 text-xl font-extrabold">Playlist Import Summary</h2>
             <ul className="space-y-3 text-sm text-[#526579]">
               <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Videos will be saved as YouTube links only</li>
-              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Imported videos appear under the selected language and resource format</li>
+              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Imported clips appear under the selected format or submenu</li>
               <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> You can review, edit, or switch visibility after import</li>
             </ul>
             <div className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
@@ -230,7 +245,7 @@ export default async function ImportPage({
             <div>
               <h2 className="text-2xl font-extrabold">Imported Playlists</h2>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#6b7c8f]">
-                Review YouTube playlists that have already been imported. Each playlist group shows the resources created under its language and resource format.
+                Review imported YouTube playlists and move them to another language, format, or submenu when needed.
               </p>
             </div>
             <Link href="/admin/import?tab=playlist" className="mlp-btn-primary w-full sm:w-auto">
@@ -242,10 +257,15 @@ export default async function ImportPage({
           {importedPlaylists.length > 0 ? (
             <div className="grid gap-4">
               {importedPlaylists.map((playlist) => {
-                const publicHref = playlist.languageCode ? `/resources/${playlist.languageCode}/${slugify(playlist.resourceFormat)}` : "/resources";
+                const publicQuery = new URLSearchParams();
+                if (playlist.resourceSubmenu) publicQuery.set("submenu", slugify(playlist.resourceSubmenu));
+                const publicHref = playlist.languageCode
+                  ? `/resources/${playlist.languageCode}/${slugify(playlist.resourceFormat)}${publicQuery.toString() ? `?${publicQuery.toString()}` : ""}`
+                  : "/resources";
                 const manageQuery = new URLSearchParams();
                 if (playlist.languageId) manageQuery.set("languageId", playlist.languageId);
                 manageQuery.set("format", playlist.resourceFormat);
+                if (playlist.resourceSubmenu) manageQuery.set("submenu", playlist.resourceSubmenu);
                 const manageHref = `/admin/videos?${manageQuery.toString()}`;
                 return (
                   <article key={playlist.key} className="rounded-2xl border border-[#e5e7eb] bg-[#fbfcfd] p-4 transition hover:border-[#e2c8c2] hover:bg-white hover:shadow-sm sm:p-5">
@@ -259,6 +279,7 @@ export default async function ImportPage({
                           <div className="mt-2 flex flex-wrap gap-2">
                             <span className="mlp-badge">{playlist.languageName}</span>
                             <span className="mlp-soft-badge">{playlist.resourceFormat}</span>
+                            {playlist.resourceSubmenu && <span className="mlp-soft-badge">{playlist.resourceSubmenu}</span>}
                             <span className="mlp-soft-badge">{playlist.resourceType}</span>
                           </div>
                         </div>
@@ -282,6 +303,31 @@ export default async function ImportPage({
                         {playlist.hidden > 0 && <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-bold text-stone-700">{playlist.hidden} Hidden</span>}
                       </div>
                     </div>
+
+                    <details className="mt-5 rounded-xl border border-[#e5e7eb] bg-white p-4">
+                      <summary className="cursor-pointer list-none font-extrabold text-[#243447] [&::-webkit-details-marker]:hidden">
+                        Edit playlist placement
+                      </summary>
+                      <form action={updateImportedPlaylistFormatAction} className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                        <input type="hidden" name="sourcePlaylistId" value={playlist.sourcePlaylistId} />
+                        <SelectField label="Language" name="languageId" defaultValue={playlist.languageId} required>
+                          <option value="">Choose language</option>
+                          {languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                        </SelectField>
+                        <SelectField label="Resource Format" name="resourceFormat" defaultValue={playlist.resourceFormat} required>
+                          {formatNames.map((item) => <option key={item} value={item}>{item}</option>)}
+                        </SelectField>
+                        <ResourceSubmenuSelect formats={formatOptions} defaultValue={playlist.resourceSubmenu} />
+                        <SelectField label="Resource Type" name="resourceType" defaultValue={playlist.resourceType}>
+                          {resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+                        </SelectField>
+                        <div className="flex items-end">
+                          <PendingSubmitButton className="h-11 w-full rounded-lg bg-[#a64026] px-4 font-bold text-white transition hover:bg-[#8e351f] disabled:cursor-not-allowed disabled:bg-[#d8dde5]" pendingLabel="Updating...">
+                            Update Placement
+                          </PendingSubmitButton>
+                        </div>
+                      </form>
+                    </details>
 
                     <div className="mt-5 grid gap-3 sm:flex sm:flex-wrap">
                       <Link href={manageHref} className="mlp-btn-outline w-full sm:w-auto">
@@ -308,7 +354,7 @@ export default async function ImportPage({
               </div>
               <h3 className="mt-4 text-xl font-extrabold">No imported playlists yet</h3>
               <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[#6b7c8f]">
-                After you import a YouTube playlist, it will appear here with its language, resource format, resource count, and review links.
+                After you import a YouTube playlist, it will appear here with its language, format, submenu, resource count, and review links.
               </p>
               <Link href="/admin/import?tab=playlist" className="mlp-btn-primary mt-5">
                 Import Playlist
@@ -331,5 +377,27 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
     >
       {children}
     </Link>
+  );
+}
+
+function ResourceSubmenuSelect({
+  formats,
+  defaultValue
+}: {
+  formats: ResourceFormatOption[];
+  defaultValue?: string | null;
+}) {
+  const formatsWithSubmenus = formats.filter((format) => format.submenus.length > 0);
+  return (
+    <SelectField label="Submenu optional" name="resourceSubmenu" defaultValue={defaultValue ?? ""}>
+      <option value="">No submenu</option>
+      {formatsWithSubmenus.map((format) => (
+        <optgroup key={format.name} label={format.name}>
+          {format.submenus.map((submenu) => (
+            <option key={`${format.name}-${submenu.name}`} value={submenu.name}>{submenu.name}</option>
+          ))}
+        </optgroup>
+      ))}
+    </SelectField>
   );
 }

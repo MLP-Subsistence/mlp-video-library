@@ -7,12 +7,14 @@ import { YouTubeVideoFields } from "@/components/youtube-url-helper";
 import { SmartImage } from "@/components/smart-image";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { prisma } from "@/lib/prisma";
-import { PROGRAM_NAME, resourceFormats, resourceImage, resourceTypes } from "@/lib/resource-taxonomy";
+import { getResourceFormatOptions, type ResourceFormatOption } from "@/lib/resource-format-options";
+import { PROGRAM_NAME, resourceImage, resourceTypes } from "@/lib/resource-taxonomy";
 
 export default async function VideoFormPage({ searchParams }: { searchParams: Promise<{ edit?: string; error?: string; success?: string }> }) {
   const params = await searchParams;
-  const [languages, edit] = await Promise.all([
+  const [languages, formatOptions, edit] = await Promise.all([
     prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+    getResourceFormatOptions(),
     params.edit ? prisma.video.findUnique({ where: { id: params.edit }, include: { language: true } }) : null
   ]);
   return (
@@ -49,8 +51,9 @@ export default async function VideoFormPage({ searchParams }: { searchParams: Pr
                 {resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}
               </SelectField>
               <SelectField label="Resource Format" name="resourceFormat" defaultValue={edit?.resourceFormat ?? "Doodle"}>
-                {resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}
+                {formatOptions.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
               </SelectField>
+              <ResourceSubmenuSelect formats={formatOptions} defaultValue={edit?.resourceSubmenu} />
               <TextField label="Duration" name="duration" defaultValue={edit?.duration} />
             </div>
           </FormSection>
@@ -93,4 +96,28 @@ export default async function VideoFormPage({ searchParams }: { searchParams: Pr
 
 function FormSection({ icon, title, helper, children }: { icon: React.ReactNode; title: string; helper?: string; children: React.ReactNode }) {
   return <section className="mb-9"><h2 className="mb-2 flex items-center gap-2 text-lg font-extrabold text-[#243447]"><span className="text-[#a64026]">{icon}</span>{title}</h2>{helper && <p className="mb-5 text-sm text-[#6b7c8f]">{helper}</p>}<div className="grid gap-4">{children}</div></section>;
+}
+
+function ResourceSubmenuSelect({
+  formats,
+  defaultValue
+}: {
+  formats: ResourceFormatOption[];
+  defaultValue?: string | null;
+}) {
+  const formatsWithSubmenus = formats.filter((format) => format.submenus.length > 0);
+  return (
+    <SelectField label="Resource Submenu optional" name="resourceSubmenu" defaultValue={defaultValue ?? ""}>
+      <option value="">No submenu</option>
+      {formatsWithSubmenus.map((format) => (
+        <optgroup key={format.name} label={format.name}>
+          {format.submenus.map((submenu) => (
+            <option key={`${format.name}-${submenu.name}`} value={submenu.name}>
+              {submenu.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </SelectField>
+  );
 }

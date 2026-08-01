@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FileText, PlayCircle } from "lucide-react";
 import { SmartImage } from "@/components/smart-image";
-import { normalizeResourceFormat, resourceImage, slugify } from "@/lib/resource-taxonomy";
+import { normalizeResourceFormat, normalizeResourceSubmenu, resourceImage, slugify } from "@/lib/resource-taxonomy";
 
 type ResourceCardResource = {
   id: string;
@@ -9,6 +9,7 @@ type ResourceCardResource = {
   resourceTitle?: string | null;
   resourceType: string;
   resourceFormat: string;
+  resourceSubmenu?: string | null;
   description?: string | null;
   duration?: string | null;
   category: string;
@@ -19,7 +20,11 @@ type ResourceCardResource = {
 
 export function ResourceCard({ resource }: { resource: ResourceCardResource }) {
   const languageCode = resource.language?.code ?? "en";
-  const href = `/resources/${languageCode}/${slugify(normalizeResourceFormat(resource.resourceFormat))}?resource=${resource.id}`;
+  const resourceSubmenu = normalizeResourceSubmenu(resource.resourceSubmenu);
+  const query = new URLSearchParams();
+  if (resourceSubmenu) query.set("submenu", slugify(resourceSubmenu));
+  query.set("resource", resource.id);
+  const href = `/resources/${languageCode}/${slugify(normalizeResourceFormat(resource.resourceFormat))}?${query.toString()}`;
   return (
     <article className="resource-card overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-[#edf0f3] transition hover:-translate-y-0.5 hover:shadow-md">
       <Link href={href} className="block">
@@ -35,6 +40,7 @@ export function ResourceCard({ resource }: { resource: ResourceCardResource }) {
         <div className="flex flex-wrap gap-2">
           <span className="mlp-badge">{resource.language?.name ?? "Language"}</span>
           <span className="mlp-soft-badge">{resource.resourceFormat}</span>
+          {resourceSubmenu && <span className="mlp-soft-badge">{resourceSubmenu}</span>}
         </div>
         <h3 className="mt-3 line-clamp-2 text-lg font-extrabold text-[#243447] sm:text-[19px]">{resource.resourceTitle || resource.title}</h3>
         <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#6b7c8f]">{resource.description}</p>

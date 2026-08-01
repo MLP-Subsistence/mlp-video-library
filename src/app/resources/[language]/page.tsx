@@ -5,14 +5,25 @@ import { ArrowLeft, ArrowRight, Layers3 } from "lucide-react";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicHeader } from "@/components/public-header";
 import { prisma } from "@/lib/prisma";
-import { normalizeResourceFormat, resourceFormatIcon, resourceImage, slugify, visibleResourceFormats } from "@/lib/resource-taxonomy";
+import { getResourceFormatOptions } from "@/lib/resource-format-options";
+import { normalizeResourceFormat, resourceFormatIcon, resourceImage, slugify } from "@/lib/resource-taxonomy";
 
 export const dynamic = "force-dynamic";
 
 export default async function LanguageFormatsPage({ params }: { params: Promise<{ language: string }> }) {
-  const { language: code } = await params;
-  const language = await prisma.language.findUnique({ where: { code } });
-  if (!language || !language.isActive) notFound();
+  const { language: languageSlug } = await params;
+  const [languages, formatOptions] = await Promise.all([
+    prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+    getResourceFormatOptions()
+  ]);
+  const requestedLanguage = languageSlug.toLowerCase();
+  const language = languages.find(
+    (item) =>
+      item.code.toLowerCase() === requestedLanguage ||
+      slugify(item.name) === requestedLanguage ||
+      slugify(item.displayName) === requestedLanguage
+  );
+  if (!language) notFound();
 
   const resources = await prisma.video.findMany({
     where: { languageId: language.id, visibility: "Published", isPublished: true },
@@ -50,22 +61,22 @@ export default async function LanguageFormatsPage({ params }: { params: Promise<
       </section>
       <section className="mlp-container py-10 sm:py-12">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleResourceFormats.map((format) => {
-            const count = countMap.get(format) ?? 0;
+          {formatOptions.map((format) => {
+            const count = countMap.get(format.name) ?? 0;
             return (
               <Link
-                key={format}
-                href={`/resources/${language.code}/${slugify(format)}`}
+                key={format.name}
+                href={`/resources/${language.code}/${slugify(format.name)}`}
                 className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] transition hover:-translate-y-0.5 hover:shadow-md sm:p-6"
               >
                 <span className={count > 0 ? "mlp-badge" : "mlp-soft-badge"}>{count > 0 ? `${count} Resources` : "Coming Soon"}</span>
-                <Image src={resourceFormatIcon(format)} alt="" width={84} height={84} className="mt-5 size-20 object-contain" />
+                <Image src={format.iconPath || resourceFormatIcon(format.name)} alt="" width={84} height={84} className="mt-5 size-20 object-contain" />
                 <div className="mt-5 flex items-center justify-between gap-4">
-                  <h2 className="text-xl font-extrabold sm:text-2xl">{format}</h2>
+                  <h2 className="text-xl font-extrabold sm:text-2xl">{format.name}</h2>
                   <ArrowRight className="size-5 text-[#a64026]" />
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-[#6b7c8f]">
-                  View {format} videos and resources in {language.name}.
+                  {format.description || `View ${format.name} videos and resources in ${language.name}.`}
                 </p>
               </Link>
             );

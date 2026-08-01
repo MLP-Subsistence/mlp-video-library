@@ -4,8 +4,10 @@ import {
   PROGRAM_NAME,
   languageThumbnails,
   resourceCategories,
+  resourceFormatDefaults,
   resourceFormats,
   resourceLanguages,
+  resourceSubmenuDefaults,
   youtubeStylePlaylists,
   youtubeStyleShelves,
   slugify
@@ -153,6 +155,43 @@ async function ensureDefaults() {
         isActive: true
       }
     });
+  }
+
+  for (const format of resourceFormatDefaults) {
+    const savedFormat = await prisma.resourceFormat.upsert({
+      where: { name: format.name },
+      update: {
+        description: format.description,
+        iconPath: format.iconPath,
+        sortOrder: format.sortOrder,
+        isActive: true
+      },
+      create: {
+        name: format.name,
+        description: format.description,
+        iconPath: format.iconPath,
+        sortOrder: format.sortOrder,
+        isActive: true
+      }
+    });
+
+    for (const submenu of resourceSubmenuDefaults.filter((item) => item.resourceFormat === format.name)) {
+      await prisma.resourceSubmenu.upsert({
+        where: { resourceFormatId_name: { resourceFormatId: savedFormat.id, name: submenu.name } },
+        update: {
+          description: submenu.description,
+          sortOrder: submenu.sortOrder,
+          isActive: true
+        },
+        create: {
+          resourceFormatId: savedFormat.id,
+          name: submenu.name,
+          description: submenu.description,
+          sortOrder: submenu.sortOrder,
+          isActive: true
+        }
+      });
+    }
   }
 
   await prisma.video.updateMany({ where: { resourceFormat: "Doodle Video" }, data: { resourceFormat: "Doodle" } });

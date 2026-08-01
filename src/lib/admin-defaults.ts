@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resourceFormatDefaults, resourceSubmenuDefaults } from "@/lib/resource-taxonomy";
 
 export async function ensureAdminDefaults() {
   const existing = await prisma.module.findUnique({ where: { name: "Personal and Professional Aspirations" } });
@@ -13,6 +14,44 @@ export async function ensureAdminDefaults() {
       }
     });
   }
+
+  for (const format of resourceFormatDefaults) {
+    const savedFormat = await prisma.resourceFormat.upsert({
+      where: { name: format.name },
+      update: {
+        description: format.description,
+        iconPath: format.iconPath,
+        sortOrder: format.sortOrder,
+        isActive: true
+      },
+      create: {
+        name: format.name,
+        description: format.description,
+        iconPath: format.iconPath,
+        sortOrder: format.sortOrder,
+        isActive: true
+      }
+    });
+
+    for (const submenu of resourceSubmenuDefaults.filter((item) => item.resourceFormat === format.name)) {
+      await prisma.resourceSubmenu.upsert({
+        where: { resourceFormatId_name: { resourceFormatId: savedFormat.id, name: submenu.name } },
+        update: {
+          description: submenu.description,
+          sortOrder: submenu.sortOrder,
+          isActive: true
+        },
+        create: {
+          resourceFormatId: savedFormat.id,
+          name: submenu.name,
+          description: submenu.description,
+          sortOrder: submenu.sortOrder,
+          isActive: true
+        }
+      });
+    }
+  }
+
   await prisma.video.updateMany({ where: { resourceFormat: "Doodle Video" }, data: { resourceFormat: "Doodle" } });
   await prisma.video.updateMany({ where: { resourceFormat: "Image Diary" }, data: { resourceFormat: "Image Diaries" } });
   await prisma.video.updateMany({ where: { resourceFormat: "Facilitator Video" }, data: { resourceFormat: "Global" } });

@@ -5,7 +5,8 @@ import { PublicHeader } from "@/components/public-header";
 import { PublicFooter } from "@/components/public-footer";
 import { ResourceCard } from "@/components/resource-card";
 import { prisma } from "@/lib/prisma";
-import { resourceFormatAliases, visibleResourceFormats } from "@/lib/resource-taxonomy";
+import { getResourceFormatOptions } from "@/lib/resource-format-options";
+import { resourceFormatAliases } from "@/lib/resource-taxonomy";
 
 export default async function SearchPage({
   searchParams
@@ -27,6 +28,7 @@ export default async function SearchPage({
             { resourceTitle: { contains: q } },
             { description: { contains: q } },
             { resourceFormat: { contains: q } },
+            { resourceSubmenu: { contains: q } },
             { resourceType: { contains: q } },
             { tags: { contains: q } },
             { language: { name: { contains: q } } }
@@ -34,9 +36,10 @@ export default async function SearchPage({
         }
       : {})
   };
-  const [resources, languages] = await Promise.all([
+  const [resources, languages, formatOptions] = await Promise.all([
     prisma.video.findMany({ where, include: { language: true }, orderBy: [{ language: { sortOrder: "asc" } }, { resourceFormat: "asc" }, { orderIndex: "asc" }], take: 48 }),
-    prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } })
+    prisma.language.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+    getResourceFormatOptions()
   ]);
 
   return (
@@ -53,11 +56,11 @@ export default async function SearchPage({
               <summary className="cursor-pointer list-none font-extrabold text-[#243447] md:hidden [&::-webkit-details-marker]:hidden">Filters</summary>
               <div className="mt-3 grid gap-3">
                 <select name="language" defaultValue={params.language ?? ""} className="mlp-input bg-white"><option value="">All Languages</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-                <select name="format" defaultValue={params.format ?? ""} className="mlp-input bg-white"><option value="">All Formats</option>{visibleResourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                <select name="format" defaultValue={params.format ?? ""} className="mlp-input bg-white"><option value="">All Formats</option>{formatOptions.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select>
               </div>
             </details>
             <select name="language" defaultValue={params.language ?? ""} className="mlp-input hidden bg-white md:block"><option value="">All Languages</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-            <select name="format" defaultValue={params.format ?? ""} className="mlp-input hidden bg-white md:block"><option value="">All Formats</option>{visibleResourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+            <select name="format" defaultValue={params.format ?? ""} className="mlp-input hidden bg-white md:block"><option value="">All Formats</option>{formatOptions.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select>
             <button className="mlp-btn-primary">Search</button>
           </form>
           <div className="mt-6 flex flex-wrap items-center gap-4 text-sm">

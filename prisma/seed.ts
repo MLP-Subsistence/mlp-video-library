@@ -1,6 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { PROGRAM_NAME, languageThumbnails, resourceCategories, resourceLanguages, slugify } from "../src/lib/resource-taxonomy";
+import {
+  PROGRAM_NAME,
+  languageThumbnails,
+  resourceCategories,
+  resourceFormatDefaults,
+  resourceLanguages,
+  resourceSubmenuDefaults,
+  slugify
+} from "../src/lib/resource-taxonomy";
 
 const prisma = new PrismaClient();
 
@@ -62,6 +70,8 @@ async function main() {
   await prisma.homepageSection.deleteMany();
   await prisma.video.deleteMany();
   await prisma.playlist.deleteMany();
+  await prisma.resourceSubmenu.deleteMany();
+  await prisma.resourceFormat.deleteMany();
   await prisma.module.deleteMany();
   await prisma.language.deleteMany();
 
@@ -130,6 +140,30 @@ async function main() {
       }
     });
     categories.set(category.name, categoryRow.id);
+  }
+
+  for (const format of resourceFormatDefaults) {
+    const savedFormat = await prisma.resourceFormat.create({
+      data: {
+        name: format.name,
+        description: format.description,
+        iconPath: format.iconPath,
+        sortOrder: format.sortOrder,
+        isActive: true
+      }
+    });
+
+    for (const submenu of resourceSubmenuDefaults.filter((item) => item.resourceFormat === format.name)) {
+      await prisma.resourceSubmenu.create({
+        data: {
+          resourceFormatId: savedFormat.id,
+          name: submenu.name,
+          description: submenu.description,
+          sortOrder: submenu.sortOrder,
+          isActive: true
+        }
+      });
+    }
   }
 
   let globalIndex = 0;

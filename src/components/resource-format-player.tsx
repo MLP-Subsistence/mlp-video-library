@@ -14,6 +14,7 @@ export type ClipResource = {
   description: string | null;
   duration: string | null;
   category: string;
+  resourceSubmenu: string | null;
   thumbnailSrc: string;
   youtubeVideoId: string | null;
 };
@@ -87,7 +88,7 @@ export function ResourceFormatPlayer({
           <div className="mb-4 flex flex-wrap gap-2">
             <span className="mlp-badge">{languageName}</span>
             <span className="mlp-soft-badge">{format}</span>
-            <span className="mlp-soft-badge">{selected.category}</span>
+            {selected.resourceSubmenu && <span className="mlp-soft-badge">{selected.resourceSubmenu}</span>}
             <span className="mlp-soft-badge">{selected.resourceType}</span>
           </div>
           <h1 className="text-2xl font-extrabold sm:text-3xl">{title}</h1>

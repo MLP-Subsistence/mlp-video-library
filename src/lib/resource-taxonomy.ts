@@ -47,27 +47,79 @@ export const resourceCategories = [
 
 export const resourceTypes = ["Video", "Document", "Activity", "Script", "Audio"];
 
-export const resourceFormats = [
-  "Image Diaries",
-  "Doodle",
-  "Animation",
-  "VideoScribe",
-  "Global",
-  "Vocations",
-  "Online"
-];
+export const resourceFormatDefaults = [
+  {
+    name: "Image Diaries",
+    description: "Image-based field stories and visual learning clips.",
+    iconPath: "/icons/categories/image-diaries.webp",
+    sortOrder: 1
+  },
+  {
+    name: "Doodle",
+    description: "Doodle-style explainer videos and visual stories.",
+    iconPath: "/icons/categories/doodle.webp",
+    sortOrder: 2
+  },
+  {
+    name: "Animation",
+    description: "Animated Marketplace Literacy clips.",
+    iconPath: "/icons/categories/animation.webp",
+    sortOrder: 3
+  },
+  {
+    name: "VideoScribe",
+    description: "Whiteboard-style VideoScribe resources.",
+    iconPath: "/icons/categories/videoscribe.webp",
+    sortOrder: 4
+  },
+  {
+    name: "Global",
+    description: "Global Marketplace Literacy resources and facilitator clips.",
+    iconPath: "/icons/categories/global.webp",
+    sortOrder: 5
+  },
+  {
+    name: "Vocations",
+    description: "Vocation-focused Marketplace Literacy resources.",
+    iconPath: "/icons/categories/vocations.webp",
+    sortOrder: 6
+  },
+  {
+    name: "Online",
+    description: "Online Marketplace Literacy resources grouped by staff-created submenus.",
+    iconPath: "/icons/categories/online.webp",
+    sortOrder: 7
+  }
+] as const;
+
+export const resourceFormats = resourceFormatDefaults.map((format) => format.name);
 
 export const visibleResourceFormats = resourceFormats;
 
-export const resourceFormatIcons: Record<string, string> = {
-  "Image Diaries": "/icons/categories/image-diaries.webp",
-  Doodle: "/icons/categories/doodle.webp",
-  Animation: "/icons/categories/animation.webp",
-  VideoScribe: "/icons/categories/videoscribe.webp",
-  Global: "/icons/categories/global.webp",
-  Vocations: "/icons/categories/vocations.webp",
-  Online: "/icons/categories/online.webp"
-};
+export const resourceSubmenuDefaults = [
+  {
+    resourceFormat: "Online",
+    name: "Online - VideoScribe",
+    description: "Online Marketplace Literacy VideoScribe clips.",
+    sortOrder: 1
+  },
+  {
+    resourceFormat: "Online",
+    name: "Online Image Diaries",
+    description: "Online Marketplace Literacy image diary clips.",
+    sortOrder: 2
+  },
+  {
+    resourceFormat: "Online",
+    name: "Online Doodle",
+    description: "Online Marketplace Literacy doodle clips.",
+    sortOrder: 3
+  }
+] as const;
+
+export const resourceFormatIcons = Object.fromEntries(
+  resourceFormatDefaults.map((format) => [format.name, format.iconPath])
+) as Record<string, string>;
 
 export const categoryIcons: Record<string, string> = {
   Introduction: "/icons/categories/introduction.webp",
@@ -160,6 +212,11 @@ export function normalizeResourceFormat(value?: string | null) {
   return trimmed;
 }
 
+export function normalizeResourceSubmenu(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
 export function resourceFormatAliases(value?: string | null) {
   const normalized = normalizeResourceFormat(value);
   if (normalized === "Doodle") return ["Doodle", "Doodle Video"];
@@ -169,6 +226,10 @@ export function resourceFormatAliases(value?: string | null) {
   if (normalized === "Global") return ["Global", "Facilitator Video", "Facilitator Videos"];
   if (normalized === "Vocations") return ["Vocations", "Vocation", "Vocational"];
   return [normalized];
+}
+
+export function resourceSubmenuFromSlug(slug: string, names: string[]) {
+  return names.find((name) => slugify(name) === slug) ?? null;
 }
 
 export function slugify(value: string) {
