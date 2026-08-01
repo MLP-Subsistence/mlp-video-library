@@ -5,6 +5,7 @@ import { Notice } from "@/components/admin-shell";
 import { RegionAudienceFields, SelectField, TextArea, TextField } from "@/components/admin-form";
 import { YouTubeVideoFields } from "@/components/youtube-url-helper";
 import { SmartImage } from "@/components/smart-image";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { prisma } from "@/lib/prisma";
 import { PROGRAM_NAME, resourceFormats, resourceImage, resourceTypes } from "@/lib/resource-taxonomy";
 
@@ -26,8 +27,8 @@ export default async function VideoFormPage({ searchParams }: { searchParams: Pr
           </div>
           <div className="grid w-full gap-3 sm:w-auto sm:flex">
             <Link href="/admin/videos" className="mlp-btn-outline">Cancel</Link>
-            <button name="visibility" value="Draft" className="mlp-btn-outline">Save as Draft</button>
-            <button name="visibility" value="Published" className="mlp-btn-primary"><Save className="size-4" /> Publish Resource</button>
+            <PendingSubmitButton name="visibility" value="Draft" className="mlp-btn-outline" pendingLabel="Saving draft...">Save as Draft</PendingSubmitButton>
+            <PendingSubmitButton name="visibility" value="Published" className="mlp-btn-primary" pendingLabel="Publishing..."><Save className="size-4" /> Publish Resource</PendingSubmitButton>
           </div>
         </div>
         <Notice success={params.success} error={params.error} />
@@ -83,7 +84,7 @@ export default async function VideoFormPage({ searchParams }: { searchParams: Pr
               </div>
             </div>
           </FormSection>
-          <div className="mt-8 grid gap-3 border-t border-[#edf0f3] pt-6 sm:flex sm:justify-end sm:gap-4 sm:pt-8"><Link href="/admin/videos" className="mlp-btn-outline">Cancel</Link><button className="mlp-btn-primary">Save Changes</button></div>
+          <div className="mt-8 grid gap-3 border-t border-[#edf0f3] pt-6 sm:flex sm:justify-end sm:gap-4 sm:pt-8"><Link href="/admin/videos" className="mlp-btn-outline">Cancel</Link><PendingSubmitButton className="mlp-btn-primary" pendingLabel="Saving changes...">Save Changes</PendingSubmitButton></div>
         </div>
       </form>
     </div>

@@ -79,6 +79,12 @@ textarea {
   min-height: 44px;
   padding: 0 20px;
   text-align: center;
+  border: 1px solid transparent;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 120ms ease;
+}
+
+.mlp-btn-primary:hover {
+  background: #8e351f;
 }
 
 .mlp-btn-dark {
@@ -92,6 +98,8 @@ textarea {
   font-weight: 800;
   min-height: 38px;
   padding: 0 14px;
+  border: 1px solid transparent;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 120ms ease;
 }
 
 .mlp-btn-outline {
@@ -106,6 +114,32 @@ textarea {
   font-weight: 700;
   min-height: 44px;
   padding: 0 16px;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 120ms ease;
+}
+
+.mlp-btn-outline:hover {
+  border-color: #c9d0da;
+  background: #fbfcfd;
+}
+
+.mlp-btn-primary:active,
+.mlp-btn-dark:active,
+.mlp-btn-outline:active,
+.admin-sidebar-link:active,
+.mlp-drawer-link:active {
+  opacity: 0.82;
+  transform: translateY(1px) scale(0.99);
+}
+
+.mlp-btn-primary:disabled,
+.mlp-btn-primary[aria-disabled="true"],
+.mlp-btn-outline:disabled,
+.mlp-btn-outline[aria-disabled="true"],
+.mlp-btn-dark:disabled,
+.mlp-btn-dark[aria-disabled="true"],
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .mlp-drawer-link {
@@ -120,6 +154,7 @@ textarea {
   padding: 0 16px;
   font-size: 16px;
   font-weight: 800;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 120ms ease;
 }
 
 .mlp-drawer-link.is-active {
@@ -183,6 +218,7 @@ textarea {
   color: #526579;
   font-size: 14px;
   font-weight: 700;
+  transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 120ms ease;
 }
 
 .admin-sidebar-link:hover,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, Home, Lock, LogIn, Mail, ShieldAlert, GraduationCap } from "lucide-react";
 import { loginAction } from "@/app/admin/actions";
 import { getCurrentUser } from "@/lib/auth";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await getCurrentUser();
@@ -34,7 +35,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             </span>
           </label>
           <div className="mt-3 text-right"><a className="text-sm font-bold text-[#a64026]" href="#">Forgot password?</a></div>
-          <button className="mlp-btn-primary mt-5 w-full"><LogIn className="size-4" /> Sign In to Dashboard</button>
+          <PendingSubmitButton className="mlp-btn-primary mt-5 w-full" pendingLabel="Signing in..."><LogIn className="size-4" /> Sign In to Dashboard</PendingSubmitButton>
           <Link href="/" className="mlp-btn-outline mt-4 w-full"><ArrowLeft className="size-4" /> Back to Public Library</Link>
           <div className="mt-6 flex gap-3 rounded-lg bg-[#f7f8fa] p-4 text-sm leading-relaxed text-[#6b7c8f]">
             <ShieldAlert className="mt-0.5 size-4 shrink-0 text-[#6b7c8f]" />

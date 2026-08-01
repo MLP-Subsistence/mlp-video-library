@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { audiences, regions, visibilities } from "@/lib/options";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 
 export function PageTitle({ title, description }: { title: string; description: string }) {
   return (
@@ -60,31 +61,34 @@ export function VisibilityField({ value }: { value?: string }) {
   );
 }
 
-export function SaveButton({ label = "Save", disabled = false }: { label?: string; disabled?: boolean }) {
+export function SaveButton({ label = "Save", disabled = false, pendingLabel }: { label?: string; disabled?: boolean; pendingLabel?: string }) {
   return (
-    <button
+    <PendingSubmitButton
       disabled={disabled}
+      pendingLabel={pendingLabel ?? "Saving..."}
       className="h-11 rounded-lg bg-[#a64026] px-5 font-bold text-white shadow-sm transition hover:bg-[#8e351f] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {label}
-    </button>
+    </PendingSubmitButton>
   );
 }
 
 export function FormActions({
   submitLabel = "Save",
+  pendingLabel,
   cancelHref,
   disabled = false,
   hideReset = false
 }: {
   submitLabel?: string;
+  pendingLabel?: string;
   cancelHref: string;
   disabled?: boolean;
   hideReset?: boolean;
 }) {
   return (
     <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
-      <SaveButton label={submitLabel} disabled={disabled} />
+      <SaveButton label={submitLabel} pendingLabel={pendingLabel} disabled={disabled} />
       <Link href={cancelHref} className="mlp-btn-outline">Cancel</Link>
       {!hideReset && <button type="reset" className="mlp-btn-outline">Clear form</button>}
     </div>

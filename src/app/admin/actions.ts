@@ -590,7 +590,7 @@ export async function importYouTubePlaylistAction(formData: FormData) {
   revalidatePath("/admin/videos");
   revalidatePath("/admin/import");
   const summary = new URLSearchParams({
-    tab: "playlist",
+    tab: "imported",
     success: `Imported "${sourcePlaylistTitle}". Found: ${totalFound}. Imported: ${imported}. Updated duplicates: ${updated}. Skipped duplicates: ${skipped}. Errors: ${errors}.`
   });
   redirect(`/admin/import?${summary.toString()}`);

@@ -4,6 +4,7 @@ import { bulkManageVideosAction, deleteVideoAction } from "@/app/admin/actions";
 import { Notice } from "@/components/admin-shell";
 import { BulkResourceSelector } from "@/components/bulk-resource-selector";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { SmartImage } from "@/components/smart-image";
 import { SelectField, TextField } from "@/components/admin-form";
 import { audiences, regions, visibilities } from "@/lib/options";
@@ -83,7 +84,7 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
           <option value="30">30 per page</option>
           <option value="50">50 per page</option>
         </select>
-        <button className="h-[42px] rounded-lg bg-[#a64026] px-4 font-bold text-white">Apply</button>
+        <PendingSubmitButton className="h-[42px] rounded-lg bg-[#a64026] px-4 font-bold text-white transition hover:bg-[#8e351f]" pendingLabel="Applying...">Apply</PendingSubmitButton>
         <Link href="/admin/videos" className="mlp-btn-outline h-[42px]">Reset</Link>
       </form>
       <details className="mb-6 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] sm:p-5">
@@ -127,7 +128,7 @@ export default async function VideosPage({ searchParams }: { searchParams: Promi
             </SelectField>
             <TextField label="Replace tags optional" name="bulkTags" />
             <div className="flex items-end">
-              <button className="h-11 w-full rounded-lg bg-[#a64026] px-5 font-bold text-white">Apply to selected</button>
+              <PendingSubmitButton className="h-11 w-full rounded-lg bg-[#a64026] px-5 font-bold text-white transition hover:bg-[#8e351f]" pendingLabel="Updating selected...">Apply to selected</PendingSubmitButton>
             </div>
           </div>
         </form>
