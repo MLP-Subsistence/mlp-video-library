@@ -119,7 +119,9 @@ export default async function ImportPage({
         <div className="grid gap-6 xl:grid-cols-[1fr_440px]">
           <form action={importYouTubePlaylistAction} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
             <h2 className="mb-2 text-xl font-extrabold">Import Playlist</h2>
-            <p className="mb-6 text-sm leading-relaxed text-[#6b7c8f]">Import every video from a YouTube playlist into the selected language and resource format.</p>
+            <p className="mb-6 text-sm leading-relaxed text-[#6b7c8f]">
+              Import every video from a YouTube playlist directly into the selected language and resource format. No category or collection page is created.
+            </p>
             {!apiKey && (
               <div className="mb-6 flex gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm text-[#a64026]">
                 <AlertTriangle className="mt-0.5 size-5 shrink-0" />
@@ -132,10 +134,10 @@ export default async function ImportPage({
               <SelectField label="Language" name="languageId" required><option value="">Choose language</option>{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
               <SelectField label="Resource Format" name="resourceFormat" defaultValue="Doodle" required>{resourceFormats.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
               <SelectField label="Resource Type" name="resourceType" defaultValue="Video">{resourceTypes.map((item) => <option key={item} value={item}>{item}</option>)}</SelectField>
-              <VisibilityField value="Draft" />
+              <VisibilityField value="Published" />
               <RegionAudienceFields audience="Trainers" />
               <div className="md:col-span-2">
-                <FormActions submitLabel="Import as Draft" cancelHref="/admin/import" disabled={!apiKey} hideReset />
+                <FormActions submitLabel="Import Playlist" cancelHref="/admin/import" disabled={!apiKey} hideReset />
               </div>
             </div>
           </form>
@@ -144,8 +146,8 @@ export default async function ImportPage({
             <h2 className="mb-6 text-xl font-extrabold">Playlist Import Summary</h2>
             <ul className="space-y-3 text-sm text-[#526579]">
               <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Videos will be saved as YouTube links only</li>
-              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Resources can be created as Draft</li>
-              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> You can review and edit after import</li>
+              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> Imported videos appear under the selected language and resource format</li>
+              <li className="flex gap-3"><CloudDownload className="size-5 text-green-600" /> You can review, edit, or switch visibility after import</li>
             </ul>
             <div className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
               Actual video count and titles will be shown in the import result after YouTube confirms the playlist.

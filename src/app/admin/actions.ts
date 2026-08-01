@@ -8,7 +8,7 @@ import { clearAdminSession, requireAdmin, setAdminSession, verifyLogin } from "@
 import { prisma } from "@/lib/prisma";
 import { cleanOptional, cleanText } from "@/lib/sanitize";
 import { saveUploadedImage } from "@/lib/uploads";
-import { languageThumbnail, normalizeResourceFormat, PROGRAM_NAME, resourceFormatAliases } from "@/lib/resource-taxonomy";
+import { languageThumbnail, normalizeResourceFormat, PROGRAM_NAME, resourceFormatAliases, slugify } from "@/lib/resource-taxonomy";
 import { extractYouTubePlaylistId, extractYouTubeVideoId, youtubeEmbedUrl, youtubePlaylistUrl, youtubeWatchUrl } from "@/lib/youtube";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -397,12 +397,13 @@ export async function bulkManageVideosAction(formData: FormData) {
 export async function bulkImportVideosAction(formData: FormData) {
   await guard();
   const lines = cleanText(formData.get("urls")).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const playlistId = cleanOptional(formData.get("playlistId"));
-  const moduleId = cleanOptional(formData.get("moduleId"));
-  const categoryRow = moduleId ? await prisma.module.findUnique({ where: { id: moduleId } }) : null;
   const languageId = cleanOptional(formData.get("languageId"));
   const language = languageId ? await prisma.language.findUnique({ where: { id: languageId } }) : null;
+  const fallbackModule = await defaultResourceModule();
+  const moduleId = fallbackModule?.id ?? null;
+  const category = fallbackModule?.name ?? "General Marketplace Literacy";
   const resourceFormat = normalizeResourceFormat(cleanText(formData.get("resourceFormat")) || "Doodle");
+  const formatAliases = resourceFormatAliases(resourceFormat);
   const resourceType = cleanText(formData.get("resourceType")) || "Video";
   const visibilityValue = visibility(formData.get("visibility"));
   const isPublished = visibilityValue === "Published";
@@ -415,8 +416,7 @@ export async function bulkImportVideosAction(formData: FormData) {
       where: {
         youtubeVideoId: id,
         languageId,
-        category: categoryRow?.name ?? "General Marketplace Literacy",
-        resourceFormat: { in: resourceFormatAliases(resourceFormat) }
+        resourceFormat: { in: formatAliases }
       }
     });
     if (duplicate) {
@@ -431,7 +431,7 @@ export async function bulkImportVideosAction(formData: FormData) {
         embedUrl: youtubeEmbedUrl(id),
         thumbnailUrl: language?.thumbnailPath || languageThumbnail(language?.code),
         program: PROGRAM_NAME,
-        category: categoryRow?.name ?? "General Marketplace Literacy",
+        category,
         resourceType,
         resourceFormat,
         isPublished,
@@ -443,11 +443,11 @@ export async function bulkImportVideosAction(formData: FormData) {
         visibility: visibilityValue
       }
     });
-    if (playlistId) {
-      await prisma.playlistVideo.create({ data: { videoId: video.id, playlistId, sortOrder: created + 1 } });
-    }
     created++;
   }
+  revalidatePath("/");
+  revalidatePath("/resources");
+  if (language?.code) revalidatePath(`/resources/${language.code}/${slugify(resourceFormat)}`);
   redirect(`/admin/import?tab=bulk&success=${created} resources imported. ${skipped} duplicate links skipped.`);
 }
 
@@ -465,12 +465,11 @@ export async function importYouTubePlaylistAction(formData: FormData) {
   const languageId = cleanOptional(formData.get("languageId"));
   if (!languageId) redirect("/admin/import?tab=playlist&error=Please choose a language before importing.");
 
-  const requestedModuleId = cleanOptional(formData.get("moduleId"));
-  const fallbackModule = requestedModuleId ? null : await defaultResourceModule();
-  const moduleId = requestedModuleId ?? fallbackModule?.id ?? null;
+  const fallbackModule = await defaultResourceModule();
+  const moduleId = fallbackModule?.id ?? null;
   const [language, categoryRow] = await Promise.all([
     prisma.language.findUnique({ where: { id: languageId } }),
-    moduleId ? prisma.module.findUnique({ where: { id: moduleId } }) : Promise.resolve(fallbackModule)
+    Promise.resolve(fallbackModule)
   ]);
   if (!language) redirect("/admin/import?tab=playlist&error=Selected language was not found.");
 
@@ -531,9 +530,8 @@ export async function importYouTubePlaylistAction(formData: FormData) {
       ? await prisma.video.findMany({
           where: {
             youtubeVideoId: { in: pageVideoIds },
-        languageId,
-        category,
-        resourceFormat: { in: formatAliases }
+            languageId,
+            resourceFormat: { in: formatAliases }
           }
         })
       : [];
@@ -587,6 +585,8 @@ export async function importYouTubePlaylistAction(formData: FormData) {
   } while (nextPageToken);
 
   revalidatePath("/");
+  revalidatePath("/resources");
+  revalidatePath(`/resources/${language.code}/${slugify(resourceFormat)}`);
   revalidatePath("/admin/videos");
   revalidatePath("/admin/import");
   const summary = new URLSearchParams({
