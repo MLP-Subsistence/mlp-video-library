@@ -18,7 +18,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-15
+    runs-on: macos-26
 
     env:
       APP_SCHEME: MarketplaceLiteracyApp
@@ -32,11 +32,13 @@ jobs:
 
       - name: Select Xcode
         run: |
-          if [ -d /Applications/Xcode_16.4.app ]; then
-            sudo xcode-select -s /Applications/Xcode_16.4.app
+          XCODE_26_APP="$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' -print | sort -V | tail -n 1)"
+          if [ -n "$XCODE_26_APP" ]; then
+            sudo xcode-select -s "$XCODE_26_APP"
           else
             sudo xcode-select -s /Applications/Xcode.app
           fi
+          xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
