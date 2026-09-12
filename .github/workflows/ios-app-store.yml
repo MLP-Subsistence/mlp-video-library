@@ -98,6 +98,7 @@ jobs:
             -archivePath "$ARCHIVE_PATH" \
             CURRENT_PROJECT_VERSION="${{ inputs.build_number }}" \
             DEVELOPMENT_TEAM="$APPLE_DEVELOPMENT_TEAM_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             CODE_SIGN_STYLE=Manual \
             PROVISIONING_PROFILE_SPECIFIER="$APPLE_PROVISIONING_PROFILE_SPECIFIER" \
             archive
@@ -117,6 +118,8 @@ jobs:
             <string>app-store-connect</string>
             <key>signingStyle</key>
             <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
             <key>teamID</key>
             <string>${APPLE_DEVELOPMENT_TEAM_ID}</string>
             <key>provisioningProfiles</key>
