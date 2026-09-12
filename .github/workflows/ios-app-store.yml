@@ -23,8 +23,8 @@ jobs:
     env:
       APP_SCHEME: MarketplaceLiteracyApp
       APP_PROJECT: ios/MarketplaceLiteracyApp.xcodeproj
-      ARCHIVE_PATH: ${{ runner.temp }}/MarketplaceLiteracyApp.xcarchive
-      EXPORT_PATH: ${{ runner.temp }}/ios-export
+      ARCHIVE_PATH: /tmp/MarketplaceLiteracyApp.xcarchive
+      EXPORT_PATH: /tmp/ios-export
 
     steps:
       - name: Check out repository
