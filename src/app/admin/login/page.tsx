@@ -44,7 +44,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </form>
         <footer className="mt-8 text-center text-xs text-[#526579]">
           <div>(c) 2024 Marketplace Literacy Project</div>
-          <div className="mt-2 flex justify-center gap-4"><a>Privacy Policy</a><a>Terms of Service</a></div>
+          <div className="mt-2 flex justify-center gap-4"><Link href="/privacy">Privacy Policy</Link><Link href="/terms">Terms of Service</Link></div>
         </footer>
       </div>
     </main>

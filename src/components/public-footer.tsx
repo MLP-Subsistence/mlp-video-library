@@ -19,6 +19,8 @@ export async function PublicFooter() {
             <Link href={settings?.websiteUrl ?? "https://www.marketplaceliteracy.org"}>About MLP</Link>
             <Link href="/">Subsistence Marketplaces</Link>
             <Link href={`mailto:${settings?.contactEmail ?? "admin@marketplaceliteracy.org"}`}>Contact Us</Link>
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms of Service</Link>
           </div>
         </div>
         <div>
