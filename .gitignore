@@ -18,3 +18,22 @@ dev-server.*.log
 public/uploads/*
 !public/uploads/.gitkeep
 !.env.example
+
+# Android local/build state and signing material
+android/.gradle/
+android/local.properties
+android/**/build/
+android/captures/
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
+
+# iOS generated/build state and signing material
+ios/MarketplaceLiteracyApp.xcodeproj/
+ios/DerivedData/
+ios/build/
+ios/*.xcarchive
+ios/*.ipa
+ios/*.mobileprovision
