@@ -61,15 +61,19 @@ jobs:
       - name: Import signing certificate
         if: ${{ inputs.upload_to_app_store == 'true' }}
         env:
-          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE_CER_BASE64: ${{ secrets.APPLE_CERTIFICATE_CER_BASE64 }}
+          APPLE_PRIVATE_KEY_PEM_BASE64: ${{ secrets.APPLE_PRIVATE_KEY_PEM_BASE64 }}
           APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
         run: |
           security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+          security list-keychains -d user -s build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
-          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 -D > certificate.p12
-          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          printf '%s' "$APPLE_CERTIFICATE_CER_BASE64" | base64 -D > distribution.cer
+          printf '%s' "$APPLE_PRIVATE_KEY_PEM_BASE64" | base64 -D > signing-key.pem
+          security import distribution.cer -k build.keychain -T /usr/bin/codesign
+          security import signing-key.pem -k build.keychain -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$APPLE_KEYCHAIN_PASSWORD" build.keychain
 
       - name: Install provisioning profile
