@@ -97,6 +97,25 @@ struct MLPWebView: UIViewRepresentable {
                 return
             }
 
+            if NativeShellConfig.isYouTube(targetURL) {
+                // YouTube iframe navigation must remain in WKWebView. Sending it
+                // through UIApplication.shared.open launches the YouTube app.
+                if navigationAction.targetFrame?.isMainFrame == false {
+                    decisionHandler(.allow)
+                    return
+                }
+
+                if let playbackURL = NativeShellConfig.inAppYouTubePlaybackURL(for: targetURL),
+                   playbackURL != targetURL {
+                    webView.load(URLRequest(url: playbackURL))
+                    decisionHandler(.cancel)
+                    return
+                }
+
+                decisionHandler(.allow)
+                return
+            }
+
             if NativeShellConfig.isSupportedExternal(targetURL) {
                 UIApplication.shared.open(targetURL)
                 decisionHandler(.cancel)
@@ -115,4 +134,3 @@ struct MLPWebView: UIViewRepresentable {
         }
     }
 }
-
