@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Clapperboard, DownloadCloud, ExternalLink, Globe2, Grid2X2, Home, LayoutDashboard, LogOut, Menu, PlaySquare, Settings, X } from "lucide-react";
+import { ArrowLeft, Clapperboard, DownloadCloud, Languages, ExternalLink, Globe2, Grid2X2, Home, LayoutDashboard, LogOut, Menu, PlaySquare, Settings, X } from "lucide-react";
 
 const links = [
   ["/admin", "Dashboard", LayoutDashboard],
@@ -11,6 +11,7 @@ const links = [
   ["/admin/languages", "Languages", Globe2],
   ["/admin/homepage", "Homepage Sections", Grid2X2],
   ["/admin/import", "Import from YouTube", DownloadCloud],
+  ["/admin/studio", "Educator Studio", Languages],
   ["/admin/settings", "Settings", Settings]
 ] as const;
 

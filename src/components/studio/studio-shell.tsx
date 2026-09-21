@@ -159,9 +159,9 @@ function initials(name: string) {
     .join("") || "ED";
 }
 
-export function StudioPageHeader({ title, subtitle, badge, actions }: { title: string; subtitle?: React.ReactNode; badge?: React.ReactNode; actions?: React.ReactNode }) {
+export function StudioPageHeader({ title, subtitle, badge, actions, sticky = true }: { title: string; subtitle?: React.ReactNode; badge?: React.ReactNode; actions?: React.ReactNode; sticky?: boolean }) {
   return (
-    <div className="sticky top-14 z-30 border-b border-[#e5e7eb] bg-white/95 px-3 py-3 backdrop-blur sm:px-5 lg:px-8">
+    <div className={`${sticky ? "sticky top-14" : "relative shrink-0"} z-30 border-b border-[#e5e7eb] bg-white/95 px-3 py-3 backdrop-blur sm:px-5 lg:px-8`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

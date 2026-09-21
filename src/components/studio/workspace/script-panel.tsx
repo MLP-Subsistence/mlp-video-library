@@ -107,8 +107,8 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
   const canGenerateVoice = Boolean(project.defaultVoiceId || segment.voiceIdOverride);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-5">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-5">
         {notice && <InlineNotice tone={notice.tone} onDismiss={() => setNotice(null)}>{notice.text}</InlineNotice>}
 
         <section>

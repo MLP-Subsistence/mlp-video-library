@@ -97,8 +97,9 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-56px)] flex-col">
+    <div className="flex min-h-[calc(100vh-56px)] flex-col lg:h-[calc(100vh-56px)] lg:overflow-hidden">
       <StudioPageHeader
+        sticky={false}
         title={project.title}
         badge={
           <>
@@ -132,14 +133,14 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
         </div>
       )}
 
-      <div className="flex flex-1 flex-col lg:grid lg:min-h-0 lg:grid-cols-[260px_minmax(0,1fr)_400px] xl:grid-cols-[280px_minmax(0,1fr)_440px]">
+      <div className="flex flex-1 flex-col lg:grid lg:min-h-0 lg:grid-cols-[260px_minmax(0,1fr)_400px] lg:overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)_440px]">
         {/* Segments */}
         <aside className="hidden border-r border-[#e5e7eb] bg-white lg:block lg:min-h-0">
           <SegmentList project={project} activeSegmentId={activeSegment?.segmentId ?? ""} onSelect={selectSegment} />
         </aside>
 
         {/* Preview */}
-        <section className="flex min-w-0 flex-col bg-[#f2f4f7]">
+        <section className="flex min-w-0 flex-col bg-[#f2f4f7] lg:min-h-0">
           <div className="flex items-center justify-between gap-2 border-b border-[#e5e7eb] bg-white px-3 py-2 lg:hidden">
             <button type="button" onClick={() => goTo(activeIndex - 1)} disabled={activeIndex <= 0} className="mlp-btn-outline h-9 px-2"><ChevronLeft className="size-4" /></button>
             <select value={activeSegment?.segmentId ?? ""} onChange={(event) => selectSegment(event.target.value)} className="mlp-input h-9 min-w-0 flex-1 text-sm">
@@ -149,7 +150,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </select>
             <button type="button" onClick={() => goTo(activeIndex + 1)} disabled={activeIndex >= project.segments.length - 1} className="mlp-btn-outline h-9 px-2"><ChevronRight className="size-4" /></button>
           </div>
-          <div className="p-3 sm:p-5">
+          <div className="p-3 sm:p-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             {previewSegment && (
               <CompositionPreview
                 composition={previewSegment.composition}
@@ -177,13 +178,13 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
               </div>
             )}
           </div>
-          <div className="mt-auto hidden lg:block">
+          <div className="hidden shrink-0 lg:block">
             <Timeline {...timelineProps} collapsed={timelineCollapsed} onToggleCollapsed={() => setTimelineCollapsed((value) => !value)} />
           </div>
         </section>
 
         {/* Script / Narration */}
-        <aside className="border-t border-[#e5e7eb] bg-white lg:min-h-0 lg:border-l lg:border-t-0">
+        <aside className="flex flex-col border-t border-[#e5e7eb] bg-white lg:min-h-0 lg:border-l lg:border-t-0">
           <div className="flex items-center justify-between border-b border-[#edf0f3] px-4 py-2 lg:hidden">
             <span className="text-xs font-extrabold uppercase tracking-wide text-[#243447]">Script &amp; Narration</span>
             <button type="button" onClick={() => setMobileTimeline((value) => !value)} className="text-xs font-bold text-[#a64026]">{mobileTimeline ? "Hide Timeline" : "View Timeline"}</button>

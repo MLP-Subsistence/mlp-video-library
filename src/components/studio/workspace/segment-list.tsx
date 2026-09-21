@@ -11,9 +11,14 @@ export function SegmentList({ project, activeSegmentId, onSelect }: { project: P
   const pct = project.segments.length ? Math.round((ready / project.segments.length) * 100) : 0;
   const listRef = useRef<HTMLDivElement | null>(null);
 
+  // Scroll only the list itself; scrollIntoView would also drag the overflow-hidden workspace.
   useEffect(() => {
-    const element = listRef.current?.querySelector<HTMLElement>(`[data-segment="${activeSegmentId}"]`);
-    element?.scrollIntoView({ block: "nearest" });
+    const list = listRef.current;
+    const element = list?.querySelector<HTMLElement>(`[data-segment="${activeSegmentId}"]`);
+    if (!list || !element) return;
+    const top = element.offsetTop - list.offsetTop;
+    if (top < list.scrollTop) list.scrollTop = top - 8;
+    else if (top + element.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + element.offsetHeight - list.clientHeight + 8;
   }, [activeSegmentId]);
 
   return (
@@ -27,7 +32,7 @@ export function SegmentList({ project, activeSegmentId, onSelect }: { project: P
           <div className="h-full rounded-full bg-[#a64026]" style={{ width: `${pct}%` }} />
         </div>
       </div>
-      <div ref={listRef} className="flex-1 overflow-y-auto p-2">
+      <div ref={listRef} className="relative flex-1 overflow-y-auto p-2">
         {project.segments.map((segment, index) => {
           const block = project.timeline.blocks.find((entry) => entry.segmentId === segment.segmentId);
           const active = segment.segmentId === activeSegmentId;
