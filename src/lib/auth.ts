@@ -3,6 +3,9 @@ import { cookies } from "next/headers";
 import { createHmac, timingSafeEqual } from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { canAccessAdmin, canAccessStudio } from "@/lib/roles";
+
+export { canAccessAdmin, canAccessStudio, canManageTemplates, isAdminRole, normalizeRole, roleLabel, safeNextPath, type StudioRole } from "@/lib/roles";
 
 const COOKIE_NAME = "mlp_admin_session";
 
@@ -69,11 +72,22 @@ export function readSessionPayload(session?: string) {
   }
 }
 
+/** Returns the signed-in user when they may use /admin, otherwise null. */
 export async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user) return null;
+  if (!canAccessAdmin(user.role)) return null;
   return user;
 }
+
+/** Returns the signed-in user when they may use Educator Studio, otherwise null. */
+export async function requireStudioUser() {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  if (!canAccessStudio(user.role)) return null;
+  return user;
+}
+
 
 export async function verifyLogin(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, GraduationCap, Home, LogIn, Menu, Search, X } from "lucide-react";
+import { ArrowLeft, Clapperboard, GraduationCap, Home, Menu, Search, X } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
@@ -103,10 +103,10 @@ export function PublicMobileNav() {
               </div>
 
               <div className="rounded-xl bg-[#f7f8fa] p-4 ring-1 ring-[#edf0f3]">
-                <p className="text-sm font-extrabold text-[#243447]">For MLP staff</p>
-                <p className="mt-1 text-sm leading-relaxed text-[#6b7c8f]">Use the admin portal to manage resources, imports, and settings.</p>
-                <Link href="/admin/login" onClick={() => setOpen(false)} className="mlp-btn-primary mt-4 w-full">
-                  <LogIn className="size-4" /> Admin Login
+                <p className="text-sm font-extrabold text-[#243447]">For educators</p>
+                <p className="mt-1 text-sm leading-relaxed text-[#6b7c8f]">Create and manage localized Marketplace Literacy lessons in your language.</p>
+                <Link href="/studio" onClick={() => setOpen(false)} className="mlp-btn-primary mt-4 w-full">
+                  <Clapperboard className="size-4" /> Educator Studio
                 </Link>
               </div>
             </div>

@@ -167,7 +167,8 @@ export default async function ResourceFormatPage({
     category: resource.category,
     resourceSubmenu: resource.resourceSubmenu,
     thumbnailSrc: resourceImage(resource),
-    youtubeVideoId: resource.youtubeVideoId
+    youtubeVideoId: resource.youtubeVideoId,
+    videoUrl: !resource.youtubeVideoId && /^https?:\/\//.test(resource.embedUrl) && !resource.embedUrl.includes("youtube") ? resource.embedUrl : null
   }));
 
   return (

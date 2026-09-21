@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "prisma generate && next build --webpack",
     "build:netlify": "node scripts/netlify-build.mjs",
+    "native:assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-native-assets.ps1",
+    "android:check": "cd android && gradlew.bat testDebugUnitTest lintDebug assembleDebug",
+    "android:bundle": "cd android && gradlew.bat bundleRelease",
     "package:server": "node scripts/package-server.mjs",
-    "dist:win": "npm.cmd run build && npm.cmd run package:server && electron-builder --win dir",
-    "dist:portable": "npm.cmd run build && npm.cmd run package:server && electron-builder --win portable",
+    "dist:win": "npm.cmd run native:assets && npm.cmd run build && npm.cmd run package:server && electron-builder --win dir",
+    "dist:portable": "npm.cmd run native:assets && npm.cmd run build && npm.cmd run package:server && electron-builder --win portable",
     "start": "next start",
     "lint": "eslint .",
     "db:generate": "prisma generate",
@@ -17,12 +20,17 @@
     "db:generate:postgres": "prisma generate --schema=prisma/schema.postgres.prisma",
     "db:push:postgres": "prisma db push --schema=prisma/schema.postgres.prisma",
     "db:seed:postgres": "prisma db seed --schema=prisma/schema.postgres.prisma",
-    "setup": "npm.cmd install && npm.cmd run db:push && npm.cmd run db:seed"
+    "setup": "npm.cmd install && npm.cmd run db:push && npm.cmd run db:seed",
+    "worker": "tsx src/worker/index.ts",
+    "test:studio": "tsx --test src/lib/studio/__tests__/*.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1137.0",
+    "@aws-sdk/s3-request-presigner": "^3.1137.0",
     "@prisma/client": "5.22.0",
     "bcryptjs": "latest",
     "clsx": "latest",
+    "docx": "^9.7.1",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
@@ -35,10 +43,10 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "eslint": "latest",
-    "eslint-config-next": "latest",
     "electron": "latest",
     "electron-builder": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
     "playwright": "^1.59.1",
     "prisma": "5.22.0",
     "tailwindcss": "latest",
@@ -68,13 +76,10 @@
       {
         "from": "dev.db",
         "to": "dev.db"
-      },
-      {
-        "from": ".env",
-        "to": "mlp.env"
       }
     ],
     "win": {
+      "icon": "electron/assets/icon.ico",
       "target": [
         {
           "target": "portable",

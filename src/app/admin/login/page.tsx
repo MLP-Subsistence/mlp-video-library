@@ -2,12 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Home, Lock, LogIn, Mail, ShieldAlert, GraduationCap } from "lucide-react";
 import { loginAction } from "@/app/admin/actions";
-import { getCurrentUser } from "@/lib/auth";
+import { canAccessAdmin, getCurrentUser } from "@/lib/auth";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await getCurrentUser();
-  if (user) redirect("/admin");
+  if (user) redirect(canAccessAdmin(user.role) ? "/admin" : "/studio");
   const params = await searchParams;
   return (
     <main className="min-h-screen bg-[#f7f8fa] px-3 py-5 text-[#243447] sm:px-6 sm:py-7">

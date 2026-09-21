@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
-import { clearAdminSession, requireAdmin, setAdminSession, verifyLogin } from "@/lib/auth";
+import { canAccessAdmin, clearAdminSession, requireAdmin, safeNextPath, setAdminSession, verifyLogin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { cleanOptional, cleanText } from "@/lib/sanitize";
 import { saveUploadedImage } from "@/lib/uploads";
@@ -95,18 +95,28 @@ type YouTubePlaylistMetadataResponse = {
 export async function loginAction(formData: FormData) {
   const email = cleanText(formData.get("email"));
   const password = cleanText(formData.get("password"));
+  const portal = cleanText(formData.get("portal")) === "studio" ? "studio" : "admin";
+  const loginPath = portal === "studio" ? "/studio/login" : "/admin/login";
+  const next = safeNextPath(cleanOptional(formData.get("next")), portal === "studio" ? "/studio" : "/admin");
+  const withError = (message: string) => {
+    const query = new URLSearchParams({ error: message });
+    if (next !== "/admin" && next !== "/studio") query.set("next", next);
+    return `${loginPath}?${query.toString()}`;
+  };
   const attemptKey = await loginAttemptKey(email);
   if (tooManyLoginAttempts(attemptKey)) {
-    redirect("/admin/login?error=Too many failed sign-in attempts. Please wait a few minutes and try again.");
+    redirect(withError("Too many failed sign-in attempts. Please wait a few minutes and try again."));
   }
   const user = await verifyLogin(email, password);
   if (!user) {
     recordFailedLogin(attemptKey);
-    redirect("/admin/login?error=Invalid email or password");
+    redirect(withError("Invalid email or password"));
   }
   loginAttempts.delete(attemptKey);
   await setAdminSession(user.id);
-  redirect("/admin");
+  // Educators never land in the administration portal.
+  if (next.startsWith("/admin") && !canAccessAdmin(user.role)) redirect("/studio");
+  redirect(next);
 }
 
 export async function logoutAction() {

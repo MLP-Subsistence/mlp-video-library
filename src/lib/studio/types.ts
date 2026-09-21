@@ -1,0 +1,222 @@
+/**
+ * Shared Educator Studio types. These are plain data shapes that cross the
+ * server/client boundary, so they must stay free of Prisma or Node imports.
+ */
+
+export type AssetKind = "image" | "video" | "audio";
+
+export type SlotFit = "cover" | "contain";
+
+export type CompositionItem = {
+  assetId: string;
+  /** Proportion of the segment duration this item occupies inside its slot (sequential items). */
+  share: number;
+};
+
+export type CompositionSlot = {
+  id: string;
+  fit: SlotFit;
+  items: CompositionItem[];
+};
+
+export type Composition = {
+  layout: string;
+  slots: CompositionSlot[];
+};
+
+export type LayoutSlotRect = { x: number; y: number; w: number; h: number };
+
+export type LayoutDefinition = {
+  id: string;
+  label: string;
+  description: string;
+  slots: LayoutSlotRect[];
+};
+
+export type TranslationStatus = "missing" | "draft" | "approved";
+export type TranslationSource = "none" | "ai" | "human";
+export type NarrationSource = "none" | "record" | "ai" | "upload" | "full";
+export type NarrationStatus = "missing" | "ready" | "needs_update" | "needs_review";
+
+export type StudioAssetDto = {
+  id: string;
+  kind: AssetKind;
+  name: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
+  thumbnailUrl: string | null;
+  tags: string;
+  createdAt: string;
+  usedIn?: number;
+};
+
+export type SegmentWarning = {
+  code:
+    | "translation_missing"
+    | "translation_draft"
+    | "narration_missing"
+    | "narration_needs_update"
+    | "narration_needs_review"
+    | "visual_missing"
+    | "video_timing";
+  message: string;
+};
+
+export type ProjectSegmentDto = {
+  /** StudioProjectSegment id */
+  id: string;
+  /** Master StudioSegment id (stable across localizations) */
+  segmentId: string;
+  key: string;
+  orderIndex: number;
+  title: string;
+  sourceScript: string;
+  translation: string;
+  translationStatus: TranslationStatus;
+  translationSource: TranslationSource;
+  narration: {
+    assetId: string | null;
+    url: string | null;
+    source: NarrationSource;
+    startSec: number | null;
+    endSec: number | null;
+    durationSec: number;
+    status: NarrationStatus;
+    confidence: number | null;
+  };
+  pauseAfterSec: number;
+  pauseIsOverride: boolean;
+  composition: Composition;
+  compositionIsOverride: boolean;
+  voiceIdOverride: string | null;
+  reviewNote: string | null;
+  approvedAt: string | null;
+  warnings: SegmentWarning[];
+};
+
+export type TimelineBlock = {
+  segmentId: string;
+  key: string;
+  index: number;
+  title: string;
+  startSec: number;
+  narrationSec: number;
+  pauseSec: number;
+  durationSec: number;
+  endSec: number;
+  items: Array<{ slotId: string; assetId: string; startSec: number; durationSec: number }>;
+};
+
+export type Timeline = {
+  totalSec: number;
+  blocks: TimelineBlock[];
+};
+
+export type ProjectDto = {
+  id: string;
+  title: string;
+  status: string;
+  targetLanguageCode: string;
+  targetLanguageName: string;
+  region: string | null;
+  variety: string | null;
+  audience: string | null;
+  register: string | null;
+  glossary: string;
+  defaultVoiceId: string | null;
+  defaultVoiceName: string | null;
+  voiceSettings: VoiceSettings;
+  renderQuality: "1080p" | "720p";
+  latestRenderJobId: string | null;
+  renderedAssetUrl: string | null;
+  publishedVideoId: string | null;
+  approvedAt: string | null;
+  template: {
+    id: string;
+    title: string;
+    sourceLanguageCode: string;
+    moduleName: string | null;
+    frameWidth: number;
+    frameHeight: number;
+    fps: number;
+    musicAssetId: string | null;
+    musicAssetUrl: string | null;
+    musicVolume: number;
+  };
+  segments: ProjectSegmentDto[];
+  assets: Record<string, StudioAssetDto>;
+  timeline: Timeline;
+  fullNarration: {
+    id: string;
+    status: string;
+    assetUrl: string;
+    error: string | null;
+    createdAt: string;
+  } | null;
+  permissions: {
+    canManageTemplates: boolean;
+    canGenerateVideo: boolean;
+    canPublish: boolean;
+  };
+  credits: {
+    limit: number;
+    used: number;
+    remaining: number;
+  };
+  updatedAt: string;
+};
+
+export type VoiceSettings = {
+  stability?: number;
+  similarity?: number;
+  style?: number;
+  speed?: number;
+};
+
+export type VoiceOption = {
+  id: string;
+  name: string;
+  description?: string;
+  languages?: string[];
+  previewUrl?: string | null;
+  labels?: Record<string, string>;
+};
+
+export type JobDto = {
+  id: string;
+  type: string;
+  status: string;
+  progress: number;
+  stage: string | null;
+  error: string | null;
+  outputAssetUrl: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+};
+
+export type ProjectSummaryDto = {
+  id: string;
+  title: string;
+  targetLanguageName: string;
+  region: string | null;
+  status: string;
+  narrationReady: number;
+  segmentCount: number;
+  updatedAt: string;
+  createdByName: string;
+};
+
+export type TemplateSummaryDto = {
+  id: string;
+  title: string;
+  moduleName: string | null;
+  status: string;
+  segmentCount: number;
+  thumbnailUrl: string | null;
+  languages: string[];
+  sourceVideoId: string | null;
+};

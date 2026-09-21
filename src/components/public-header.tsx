@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, LogIn } from "lucide-react";
+import { Clapperboard, GraduationCap } from "lucide-react";
 import { PublicMobileNav } from "@/components/public-mobile-nav";
 import { prisma } from "@/lib/prisma";
 
@@ -21,8 +21,8 @@ export async function PublicHeader() {
         </nav>
         <div className="hidden items-center gap-4 md:flex">
           <div className="h-8 w-px bg-[#e5e7eb]" />
-          <Link href="/admin/login" className="inline-flex h-[76px] items-center gap-2 rounded-b-lg border-x border-[#d8dde5] px-7 text-sm font-bold text-[#243447]">
-            <LogIn className="size-4" /> Admin Login
+          <Link href="/studio" className="inline-flex h-[76px] items-center gap-2 rounded-b-lg border-x border-[#d8dde5] px-7 text-sm font-bold text-[#243447]">
+            <Clapperboard className="size-4" /> Educator Studio
           </Link>
         </div>
         <PublicMobileNav />

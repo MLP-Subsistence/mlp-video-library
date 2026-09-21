@@ -3,19 +3,24 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  role         String   @default("editor")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String             @id @default(cuid())
+  name               String
+  email              String             @unique
+  passwordHash       String
+  role               String             @default("editor")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  aiVoiceCreditLimit Int                @default(0)
+  studioProjects     StudioProject[]
+  studioAssets       StudioAsset[]
+  studioJobs         StudioJob[]
+  studioVoiceUsage   StudioVoiceUsage[]
 }
 
 model Language {
@@ -33,18 +38,19 @@ model Language {
 }
 
 model Module {
-  id          String            @id @default(cuid())
-  name        String            @unique
-  description String?
-  parentId    String?
-  parent      Module?           @relation("ModuleTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Module[]          @relation("ModuleTree")
-  color       String            @default("#f3e8e6")
-  sortOrder   Int               @default(0)
-  isActive    Boolean           @default(true)
-  playlists   Playlist[]
-  videos      Video[]
-  sections    HomepageSection[]
+  id              String            @id @default(cuid())
+  name            String            @unique
+  description     String?
+  parentId        String?
+  parent          Module?           @relation("ModuleTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Module[]          @relation("ModuleTree")
+  color           String            @default("#f3e8e6")
+  sortOrder       Int               @default(0)
+  isActive        Boolean           @default(true)
+  playlists       Playlist[]
+  videos          Video[]
+  sections        HomepageSection[]
+  studioTemplates StudioTemplate[]
 }
 
 model ResourceFormat {
@@ -98,37 +104,38 @@ model Playlist {
 }
 
 model Video {
-  id                    String          @id @default(cuid())
+  id                    String           @id @default(cuid())
   title                 String
   resourceTitle         String?
   description           String?
-  youtubeUrl            String          @default("")
-  youtubeVideoId        String          @default("")
-  embedUrl              String          @default("")
+  youtubeUrl            String           @default("")
+  youtubeVideoId        String           @default("")
+  embedUrl              String           @default("")
   sourcePlaylistId      String?
   sourcePlaylistUrl     String?
   thumbnailUrl          String?
   uploadedThumbnailPath String?
-  program               String          @default("Marketplace Literacy")
-  category              String          @default("General Marketplace Literacy")
-  resourceType          String          @default("Video")
-  resourceFormat        String          @default("Doodle")
+  program               String           @default("Marketplace Literacy")
+  category              String           @default("General Marketplace Literacy")
+  resourceType          String           @default("Video")
+  resourceFormat        String           @default("Doodle")
   resourceSubmenu       String?
   transcript            String?
-  orderIndex            Int             @default(0)
-  isPublished           Boolean         @default(true)
+  orderIndex            Int              @default(0)
+  isPublished           Boolean          @default(true)
   languageId            String?
-  language              Language?       @relation(fields: [languageId], references: [id], onDelete: SetNull)
+  language              Language?        @relation(fields: [languageId], references: [id], onDelete: SetNull)
   moduleId              String?
-  module                Module?         @relation(fields: [moduleId], references: [id], onDelete: SetNull)
-  region                String          @default("Global")
-  audience              String          @default("General")
-  tags                  String          @default("")
+  module                Module?          @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  region                String           @default("Global")
+  audience              String           @default("General")
+  tags                  String           @default("")
   duration              String?
-  visibility            String          @default("Draft")
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  visibility            String           @default("Draft")
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
   playlists             PlaylistVideo[]
+  studioTemplates       StudioTemplate[]
 
   @@index([youtubeVideoId, languageId, resourceFormat, category])
   @@index([languageId, resourceFormat, resourceSubmenu])
@@ -180,4 +187,210 @@ model Settings {
   youtubeChannelUrl String  @default("https://www.youtube.com/@marketplaceliteracy")
   supportUrl        String?
   footerText        String  @default("The Marketplace Literacy Project supports educators, facilitators, and learning programs with practical resources for subsistence marketplaces.")
+}
+
+// ---------------------------------------------------------------------------
+// Educator Studio (video localization). JSON columns are stored as String so
+// the SQLite and Postgres schemas stay identical.
+// ---------------------------------------------------------------------------
+
+model StudioSettings {
+  id                 Int      @id @default(1)
+  voiceProvider      String   @default("mock")
+  voiceModel         String   @default("eleven_multilingual_v2")
+  translationModel   String   @default("gpt-4.1-mini")
+  transcriptionModel String   @default("whisper-1")
+  globalCreditPool   Int      @default(0)
+  glossary           String   @default("")
+  updatedAt          DateTime @updatedAt
+}
+
+model StudioTemplate {
+  id                 String          @id @default(cuid())
+  title              String
+  description        String?
+  sourceVideoId      String?
+  sourceVideo        Video?          @relation(fields: [sourceVideoId], references: [id], onDelete: SetNull)
+  moduleId           String?
+  module             Module?         @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  sourceLanguageCode String          @default("en")
+  status             String          @default("draft")
+  thumbnailAssetId   String?
+  musicAssetId       String?
+  musicVolume        Float           @default(0.2)
+  frameWidth         Int             @default(1920)
+  frameHeight        Int             @default(1080)
+  fps                Int             @default(30)
+  createdById        String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  segments           StudioSegment[]
+  projects           StudioProject[]
+}
+
+model StudioSegment {
+  id              String                 @id @default(cuid())
+  templateId      String
+  template        StudioTemplate         @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  key             String
+  orderIndex      Int                    @default(0)
+  title           String
+  sourceScript    String                 @default("")
+  pauseAfterSec   Float                  @default(0.8)
+  composition     String                 @default("{}")
+  notes           String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  projectSegments StudioProjectSegment[]
+
+  @@unique([templateId, key])
+  @@index([templateId, orderIndex])
+}
+
+model StudioAsset {
+  id             String                 @id @default(cuid())
+  kind           String
+  name           String
+  storageKey     String                 @unique
+  url            String
+  mimeType       String
+  sizeBytes      Int                    @default(0)
+  width          Int?
+  height         Int?
+  durationSec    Float?
+  thumbnailUrl   String?
+  tags           String                 @default("")
+  uploadedById   String?
+  uploadedBy     User?                  @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime               @default(now())
+  narrations     StudioProjectSegment[] @relation("NarrationAsset")
+  fullNarrations StudioFullNarration[]
+
+  @@index([kind, createdAt])
+}
+
+model StudioProject {
+  id                 String                 @id @default(cuid())
+  templateId         String
+  template           StudioTemplate         @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title              String
+  targetLanguageCode String
+  targetLanguageName String
+  region             String?
+  variety            String?
+  audience           String?
+  register           String?
+  glossary           String                 @default("")
+  status             String                 @default("in_progress")
+  defaultVoiceId     String?
+  defaultVoiceName   String?
+  voiceSettings      String                 @default("{}")
+  renderQuality      String                 @default("1080p")
+  latestRenderJobId  String?
+  renderedAssetId    String?
+  publishedVideoId   String?
+  approvedAt         DateTime?
+  createdById        String
+  createdBy          User                   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  segments           StudioProjectSegment[]
+  fullNarrations     StudioFullNarration[]
+  jobs               StudioJob[]
+  voiceUsage         StudioVoiceUsage[]
+
+  @@index([createdById, updatedAt])
+}
+
+model StudioProjectSegment {
+  id                    String        @id @default(cuid())
+  projectId             String
+  project               StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  segmentId             String
+  segment               StudioSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  translation           String        @default("")
+  translationStatus     String        @default("missing")
+  translationSource     String        @default("none")
+  translationUpdatedAt  DateTime?
+  narrationAssetId      String?
+  narrationAsset        StudioAsset?  @relation("NarrationAsset", fields: [narrationAssetId], references: [id], onDelete: SetNull)
+  narrationSource       String        @default("none")
+  narrationStartSec     Float?
+  narrationEndSec       Float?
+  narrationDurationSec  Float         @default(0)
+  narrationStatus       String        @default("missing")
+  narrationUpdatedAt    DateTime?
+  narrationScriptHash   String?
+  alignmentConfidence   Float?
+  pauseAfterSecOverride Float?
+  compositionOverride   String?
+  voiceIdOverride       String?
+  reviewNote            String?
+  approvedAt            DateTime?
+  updatedAt             DateTime      @updatedAt
+
+  @@unique([projectId, segmentId])
+}
+
+model StudioFullNarration {
+  id        String        @id @default(cuid())
+  projectId String
+  project   StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     StudioAsset   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  status    String        @default("uploaded")
+  result    String        @default("{}")
+  error     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model StudioJob {
+  id            String        @id @default(cuid())
+  type          String
+  status        String        @default("queued")
+  projectId     String
+  project       StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  segmentId     String?
+  payload       String        @default("{}")
+  progress      Int           @default(0)
+  stage         String?
+  error         String?
+  errorDetail   String?
+  outputAssetId String?
+  createdById   String?
+  createdBy     User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  lockedBy      String?
+  lockedAt      DateTime?
+  attempts      Int           @default(0)
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([status, type, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model StudioVoiceUsage {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId     String
+  project       StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  segmentId     String?
+  languageCode  String
+  provider      String
+  model         String
+  voiceId       String
+  characters    Int           @default(0)
+  credits       Int           @default(0)
+  status        String        @default("reserved")
+  outputAssetId String?
+  isRetry       Boolean       @default(false)
+  requestKey    String?       @unique
+  createdAt     DateTime      @default(now())
+
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
 }

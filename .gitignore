@@ -37,3 +37,7 @@ ios/build/
 ios/*.xcarchive
 ios/*.ipa
 ios/*.mobileprovision
+
+# Educator Studio media (local storage driver)
+storage/
+dev.db.bak-*

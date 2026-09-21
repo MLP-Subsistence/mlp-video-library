@@ -17,6 +17,8 @@ export type ClipResource = {
   resourceSubmenu: string | null;
   thumbnailSrc: string;
   youtubeVideoId: string | null;
+  /** Direct MP4 (Educator Studio renders). Used when there is no YouTube id. */
+  videoUrl?: string | null;
 };
 
 export function ResourceFormatPlayer({
@@ -80,6 +82,8 @@ export function ResourceFormatPlayer({
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
             />
+          ) : selected.videoUrl ? (
+            <video src={selected.videoUrl} poster={selected.thumbnailSrc} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full bg-black" />
           ) : (
             <SmartImage src={selected.thumbnailSrc} alt="" fill className="h-full w-full object-cover" sizes="100vw" />
           )}
