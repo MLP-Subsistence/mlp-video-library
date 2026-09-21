@@ -17,7 +17,6 @@ function binary(name: "ffmpeg" | "ffprobe") {
   try {
     // Optional dependency; only present when the deployment installed it.
     const moduleName = name === "ffmpeg" ? "ffmpeg-static" : "ffprobe-static";
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const resolved = require(moduleName) as string | { path: string };
     const candidate = typeof resolved === "string" ? resolved : resolved?.path;
     if (candidate) return candidate;
