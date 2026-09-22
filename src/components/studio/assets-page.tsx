@@ -13,10 +13,10 @@ import type { AssetKind, StudioAssetDto, StudioAssetFolderDto } from "@/lib/stud
 export function AssetsPage() {
   const [kind, setKind] = useState<AssetKind>("image");
   const [query, setQuery] = useState("");
-  const [folderId, setFolderId] = useState<string | null>("originals");
+  const [folderId, setFolderId] = useState<string | null>(null);
   const [folders, setFolders] = useState<StudioAssetFolderDto[] | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
-  const { assets, error, reload, setAssets } = useAssetList(kind, query, true, kind === "image" ? folderId : null);
+  const { assets, error, reload, setAssets } = useAssetList(kind, query, kind !== "image" || folders !== null, kind === "image" ? folderId : null);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -25,9 +25,10 @@ export function AssetsPage() {
     void api<{ folders: StudioAssetFolderDto[] }>("/api/studio/assets/folders")
       .then((result) => {
         setFolders(result.folders);
+        setFolderId(result.folders[0]?.id ?? "originals");
         setFolderError(null);
       })
-      .catch((caught) => setFolderError((caught as Error).message));
+      .catch((caught) => { setFolders([]); setFolderError((caught as Error).message); });
   }, []);
 
   async function handleFiles(files: FileList | null) {
@@ -135,26 +136,32 @@ export function AssetsPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="inline-flex items-center gap-2 text-sm font-extrabold text-[#243447]"><FolderOpen className="size-4 text-[#a64026]" /> Original photos by video</h2>
-                <p className="mt-0.5 text-xs text-[#6b7c8f]">Video folders show verified originals already used in each master lesson. Unassigned originals stay in All verified originals; screengrabs are excluded.</p>
+                <p className="mt-0.5 text-xs text-[#6b7c8f]">Open a video folder to see the original Shutterstock photos matched to images in that video. Unmatched photos remain in All verified originals.</p>
               </div>
               <button type="button" onClick={() => setFolderId(null)} className={`rounded-md px-3 py-2 text-xs font-bold ${folderId === null ? "bg-[#243447] text-white" : "border border-[#d8dde5] text-[#526579]"}`}>All library images</button>
             </div>
-            <div className="mt-3 grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              <button type="button" onClick={() => setFolderId("originals")} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === "originals" ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
-                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f3e8e6] text-[#a64026]"><FolderOpen className="size-5" /></span>
-                <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-[#243447]">All verified originals</span><span className="block text-xs text-[#6b7c8f]">High Quality Shutterstock</span></span>
-              </button>
+            <div className="mt-3 grid max-h-72 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
               {folders?.map((folder) => (
                 <button key={folder.id} type="button" onClick={() => setFolderId(folder.id)} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === folder.id ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
                   <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f3e8e6] text-[#a64026]">
                     {folder.thumbnailUrl ? <span className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(folder.thumbnailUrl)})` }} aria-hidden /> : <Folder className="size-5" />}
                   </span>
-                  <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-[#243447]" title={folder.title}>{folder.title}</span><span className="block text-xs text-[#6b7c8f]">{folder.assetCount} original photo{folder.assetCount === 1 ? "" : "s"}</span></span>
+                  <span className="min-w-0"><span className="line-clamp-2 text-sm font-extrabold text-[#243447]" title={folder.title}>{folder.title}</span><span className="block text-xs text-[#6b7c8f]">{folder.assetCount} original photo{folder.assetCount === 1 ? "" : "s"}</span></span>
                 </button>
               ))}
+              <button type="button" onClick={() => setFolderId("originals")} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === "originals" ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f3e8e6] text-[#a64026]"><FolderOpen className="size-5" /></span>
+                <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-[#243447]">All verified originals</span><span className="block text-xs text-[#6b7c8f]">Matched and unmatched photos</span></span>
+              </button>
               {!folders && !folderError && <span className="col-span-full inline-flex items-center justify-center gap-2 p-4 text-sm text-[#6b7c8f]"><Spinner /> Loading video folders…</span>}
             </div>
           </section>
+        )}
+        {kind === "image" && folderId && folders && (
+          <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-lg font-extrabold text-[#243447]">{folderId === "originals" ? "All verified originals" : folders.find((folder) => folder.id === folderId)?.title || "Video photos"}</h2>
+            <p className="text-xs text-[#6b7c8f]">{folderId === "originals" ? "Original Shutterstock photos only" : `${folders.find((folder) => folder.id === folderId)?.assetCount ?? 0} matched original photos`}</p>
+          </div>
         )}
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {assets?.map((asset) => (

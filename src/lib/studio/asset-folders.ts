@@ -13,23 +13,25 @@ export function safeAssetTags(input: string | null | undefined, existingTags = "
   return existingTags.includes(HIGH_QUALITY_SHUTTERSTOCK_TAG) ? [editable, HIGH_QUALITY_SHUTTERSTOCK_TAG].filter(Boolean).join(", ") : editable;
 }
 
+/** Folder labels follow the lesson name, not the source playlist's regional suffix. */
+export function videoAssetFolderTitle(title: string) {
+  return title.trim().replace(/\s+[—–-]\s+Youth Africa$/i, "").trim();
+}
+
 async function defaultLessonTemplates() {
   const settings = await getStudioSettings();
-  if (!settings.defaultPlaylistId) return [];
-  const playlist = await prisma.playlist.findUnique({
+  const playlist = settings.defaultPlaylistId ? await prisma.playlist.findUnique({
     where: { id: settings.defaultPlaylistId },
-    include: { videos: { orderBy: { sortOrder: "asc" }, select: { videoId: true, video: { select: { title: true, resourceTitle: true } } } } }
-  });
-  if (!playlist) return [];
+    include: { videos: { orderBy: { sortOrder: "asc" }, select: { videoId: true } } }
+  }) : null;
   const templates = await prisma.studioTemplate.findMany({
-    where: { sourceVideoId: { in: playlist.videos.map((entry) => entry.videoId) } },
-    include: { segments: { select: { composition: true } } }
+    where: { sourceVideoId: { not: null } },
+    include: { sourceVideo: { select: { title: true, resourceTitle: true } }, segments: { select: { composition: true } } }
   });
-  const byVideo = new Map(templates.map((template) => [template.sourceVideoId, template]));
-  return playlist.videos.flatMap((entry) => {
-    const template = byVideo.get(entry.videoId);
-    return template ? [{ ...template, folderTitle: entry.video.resourceTitle || entry.video.title }] : [];
-  });
+  const order = new Map(playlist?.videos.map((entry, index) => [entry.videoId, index]) ?? []);
+  return templates
+    .map((template) => ({ ...template, folderTitle: videoAssetFolderTitle(template.sourceVideo?.resourceTitle || template.sourceVideo?.title || template.title) }))
+    .sort((a, b) => (order.get(a.sourceVideoId ?? "") ?? Number.MAX_SAFE_INTEGER) - (order.get(b.sourceVideoId ?? "") ?? Number.MAX_SAFE_INTEGER) || a.folderTitle.localeCompare(b.folderTitle));
 }
 
 function compositionIds(segments: Array<{ composition: string }>) {
@@ -38,7 +40,7 @@ function compositionIds(segments: Array<{ composition: string }>) {
   return ids;
 }
 
-/** One virtual folder per lesson in the main playlist. Folder contents stay in sync with each template. */
+/** One folder per Studio source video. Folder contents stay in sync with confirmed master visuals. */
 export async function listOriginalAssetFolders(): Promise<StudioAssetFolderDto[]> {
   const templates = await defaultLessonTemplates();
   const usedIds = new Set<string>();
@@ -55,7 +57,7 @@ export async function listOriginalAssetFolders(): Promise<StudioAssetFolderDto[]
   return templates.map((template) => {
     const assets = [...(idsByTemplate.get(template.id) ?? [])].map((id) => originalById.get(id)).filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
     return { id: template.id, title: template.folderTitle, assetCount: assets.length, thumbnailUrl: assets[0]?.thumbnailUrl || assets[0]?.url || null };
-  });
+  }).filter((folder) => folder.assetCount > 0);
 }
 
 export async function originalAssetIdsForFolder(folderId: string) {
