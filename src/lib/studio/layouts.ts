@@ -116,7 +116,7 @@ export function normalizeComposition(input: Partial<Composition> | null | undefi
 
 function clampShare(value: unknown) {
   const n = typeof value === "number" && Number.isFinite(value) ? value : 1;
-  return Math.min(Math.max(n, 0.05), 1);
+  return Math.max(n, 0.01);
 }
 
 /** Make sequential item shares sum to 1 while keeping their relative proportions. */

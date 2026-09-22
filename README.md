@@ -246,3 +246,21 @@ Do not guess DNS values. Use the exact values Netlify provides.
 ```
 
 This returns a small JSON response showing whether the app can reach the database.
+
+## iOS Preparation
+
+The iOS planning documents live in `docs/ios/`. Start with `docs/ios/IOS_PREPARATION_PACKET.md`, then use the App Store listing draft, privacy answers draft, release checklist, and asset checklist when the Apple Developer account is approved.
+
+## Android Release
+
+The Google Play update is implemented in `android/`. Start with `docs/android/ANDROID_RELEASE_README.md`, then review the validation report, Data safety review, and Play release notes in the same folder before uploading the signed bundle.
+
+## Educator Studio
+
+Educator Studio (`/studio`) lets authorized educators create localized versions of Marketplace Literacy lessons: translate, narrate (record, AI voice, upload, or one full recording that is aligned automatically), review on a synchronized timeline, generate a 1080p/720p MP4 and publish it back into the library. The public "Admin Login" button is now "Educator Studio"; staff still sign in at `/admin/login`.
+
+- Architecture audit and design: `docs/educator-studio/ARCHITECTURE_AUDIT.md`
+- Deployment (storage bucket, provider keys, worker, roles, credits): `docs/educator-studio/DEPLOYMENT.md`
+- Admin: `/admin/studio` (users & AI Voice credits, providers & glossary, jobs & usage ledger)
+- Worker (FFmpeg rendering + alignment): `npm run worker`
+- Tests: `npm run test:studio`

@@ -7,23 +7,12 @@ import { storage } from "@/lib/studio/storage";
 
 /**
  * Thin FFmpeg/FFprobe wrappers for the worker. Binaries come from
- * FFMPEG_PATH / FFPROBE_PATH, else the optional `ffmpeg-static` package, else
- * whatever is on PATH.
+ * FFMPEG_PATH / FFPROBE_PATH, else whatever is on PATH.
  */
 
 function binary(name: "ffmpeg" | "ffprobe") {
   const fromEnv = name === "ffmpeg" ? process.env.FFMPEG_PATH : process.env.FFPROBE_PATH;
-  if (fromEnv) return fromEnv;
-  try {
-    // Optional dependency; only present when the deployment installed it.
-    const moduleName = name === "ffmpeg" ? "ffmpeg-static" : "ffprobe-static";
-    const resolved = require(moduleName) as string | { path: string };
-    const candidate = typeof resolved === "string" ? resolved : resolved?.path;
-    if (candidate) return candidate;
-  } catch {
-    // fall through to PATH
-  }
-  return name;
+  return fromEnv || name;
 }
 
 export async function run(name: "ffmpeg" | "ffprobe", args: string[], options: { onStderr?: (line: string) => void } = {}) {
