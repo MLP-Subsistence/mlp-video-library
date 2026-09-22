@@ -29,6 +29,7 @@ export type TemplateDto = {
   musicAssetId: string | null;
   musicVolume: number;
   thumbnailAssetId: string | null;
+  masterAssetId: string | null;
   segments: TemplateSegmentDto[];
   assets: Record<string, StudioAssetDto>;
   projects: Array<{ id: string; targetLanguageName: string; status: string }>;
@@ -86,6 +87,7 @@ export async function loadTemplateDto(templateId: string): Promise<TemplateDto |
     musicAssetId: template.musicAssetId,
     musicVolume: template.musicVolume,
     thumbnailAssetId: template.thumbnailAssetId,
+    masterAssetId: template.masterAssetId,
     segments,
     assets,
     projects: template.projects,

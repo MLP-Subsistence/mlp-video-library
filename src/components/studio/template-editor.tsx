@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, CheckCircle2, Grid2X2, Languages, Music2, Plus, Trash2, X } from "lucide-react";
 import { AssetLibrary } from "@/components/studio/asset-library";
 import { LayoutEditor } from "@/components/studio/layout-editor";
+import { MediaMatchesPanel } from "@/components/studio/media-matches";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { Field, InlineNotice, Spinner, StatusPill, inputClass, textareaClass } from "@/components/studio/ui";
 import { CompositionPreview } from "@/components/studio/workspace/composition-preview";
@@ -194,6 +195,7 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
                     )}
                   </div>
                 </div>
+                {template.masterAssetId && <MediaMatchesPanel key={active.id} templateId={template.id} segmentId={active.id} segmentKey={active.key} onTemplate={setTemplate} />}
               </div>
               <SegmentForm key={active.id} segment={active} sourceLanguageCode={template.sourceLanguageCode} autosave={autosave} />
             </section>

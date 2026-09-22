@@ -385,6 +385,7 @@ export async function importMasterLesson(options: {
           pauseAfterSec: timing.pauseAfter,
           sourceStartSec: timing.start,
           sourceEndSec: timing.end,
+          frameAssetId: frameAssets[index] ?? null,
           notes: exact || timing.confidence >= 0.8 ? null : "Boundaries were estimated from pauses in the original audio — check the visual matches this line.",
           composition: serializeComposition({
             layout: "full",

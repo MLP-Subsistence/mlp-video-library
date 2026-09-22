@@ -240,6 +240,8 @@ model StudioSegment {
   composition     String                 @default("{}")
   sourceStartSec  Float?
   sourceEndSec    Float?
+  frameAssetId    String?
+  mediaMatches    StudioMediaMatch[]
   notes           String?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -267,6 +269,7 @@ model StudioAsset {
   createdAt      DateTime               @default(now())
   narrations     StudioProjectSegment[] @relation("NarrationAsset")
   fullNarrations StudioFullNarration[]
+  mediaMatches   StudioMediaMatch[]
 
   @@index([kind, createdAt])
 }
@@ -396,4 +399,25 @@ model StudioVoiceUsage {
 
   @@index([userId, createdAt])
   @@index([projectId, createdAt])
+}
+
+model StudioMediaMatch {
+  id          String        @id @default(cuid())
+  segmentId   String
+  segment     StudioSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  provider    String        @default("shutterstock")
+  externalId  String
+  previewUrl  String
+  pageUrl     String
+  description String        @default("")
+  rank        Int           @default(0)
+  status      String        @default("candidate")
+  assetId     String?
+  asset       StudioAsset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  licenseId   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([segmentId, provider, externalId])
+  @@index([segmentId, rank])
 }
