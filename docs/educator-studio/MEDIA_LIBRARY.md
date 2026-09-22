@@ -36,3 +36,16 @@ Rate limits: Shutterstock returns 429 with a reset time when the per-minute quot
 ## Status (2026-09-22)
 
 Built and verified locally without a token: the panel renders, the caption crop is correct (checked on lesson 1), "Use cropped frame" replaces the visual. The Shutterstock calls follow the official SDK's paths and bodies but have **not** been run against the live API yet — the first thing to do once the token exists is search one segment and confirm the candidate list looks right.
+
+## Rule from the owner (2026-09-22)
+
+**Never spend Shutterstock credits or money from this app.** Re-downloading images the account already licensed is free and allowed; licensing anything new is not, unless the owner explicitly says so (and that permission would cover credits only, never money). The API licensing path (`SHUTTERSTOCK_SUBSCRIPTION_ID`) therefore stays unset.
+
+## Account library check (2026-09-22)
+
+Using the signed-in account **367425665** (Madhu Viswanathan, "Unlimited Images + 50 GenAI Credits"), the Licensed Assets Library (`/catalog/licenses`) was exported — 1,687 images — via the site's own listing endpoint, and every public 600 px preview was perceptually hashed (`scripts/studio-media-library.ts index`). Matching all 609 master-segment frames against it (`… match`) found **no real matches** (best distances 12–14, i.e. noise; an identical pair scores ≤ 6). The library is Morocco/India-heavy and dated Dec 2022 – Sep 2026, so the images in the "Marketplace Literacy - Global" image-diary videos were licensed elsewhere (another Shutterstock account, or another source).
+
+What that means:
+- `index` / `match` / `ingest` work and are reusable: export another account's library the same way (open its Downloads page, run the small in-page script that saves `shutterstock-library-<userId>.json`), then `index --json … && match`, redownload the `needed-ids.json` images with the free **Redownload** button, and `ingest --downloads …` attaches them.
+- Free **Redownload** on the website is `POST /napi/licensees/current/redownload` (triggered by the card's ⋯ → Redownload → Redownload); the file lands in the browser's Downloads as `shutterstock_<id>.jpg`. One image (2727785083) was redownloaded as a test.
+- Until the right account is found, segments keep the original-video visual (captioned) or the **Use cropped frame** fallback.

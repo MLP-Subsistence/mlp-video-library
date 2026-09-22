@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { canManageTemplates, getCurrentUser, isAdminRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { StudioError } from "@/lib/studio/errors";
 import { projectWhereForUser } from "@/lib/studio/projects";
 
 export { studioPermissions } from "@/lib/studio/permissions";
@@ -9,19 +10,7 @@ export { projectWhereForUser };
 
 export type StudioUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 
-/**
- * Friendly, typed failures for API handlers. The message is safe to show to
- * educators; `detail` is only ever logged server-side.
- */
-export class StudioError extends Error {
-  status: number;
-  detail?: string;
-  constructor(message: string, status = 400, detail?: string) {
-    super(message);
-    this.status = status;
-    this.detail = detail;
-  }
-}
+export { StudioError };
 
 export async function requireStudioApiUser() {
   const user = await getCurrentUser();

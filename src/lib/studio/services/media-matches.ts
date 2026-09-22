@@ -1,7 +1,6 @@
-import "server-only";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
-import { StudioError } from "@/lib/studio/access";
+import { StudioError } from "@/lib/studio/errors";
 import { serializeComposition } from "@/lib/studio/layouts";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
 import { downloadLicensedFile, findSimilarImages, licenseImage, shutterstockConfigured, shutterstockLicensingConfigured } from "@/lib/studio/services/shutterstock";
