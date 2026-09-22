@@ -26,7 +26,7 @@ export const GET = studioRoute(async (request: Request, { params }: Params) => {
   if (format === "html") {
     const rows = segments
       .map(
-        (segment) => `<tr><td class="key">${escape(segment.key)}</td><td><strong>${escape(segment.title)}</strong><div class="src">${escape(segment.sourceScript)}</div><div class="trn">${escape(segment.translation)}</div></td><td class="dur">${formatClock(segment.narration.durationSec + segment.pauseAfterSec)}</td></tr>`
+        (segment) => `<tr><td class="key">${escape(segment.key)}</td><td><strong>${escape(segment.title)}</strong><div class="src">${escape(segment.sourceScript)}</div><div class="trn">${escape(segment.translation)}</div></td><td class="dur">${formatClock(segment.pauseBeforeSec + segment.narration.durationSec + segment.pauseAfterSec)}</td></tr>`
       )
       .join("");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(filename)}</title><style>

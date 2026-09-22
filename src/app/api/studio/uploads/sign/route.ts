@@ -20,7 +20,10 @@ export const POST = studioRoute(async (request: Request) => {
   }
   const size = Number(body.size || 0);
   if (!Number.isFinite(size) || size <= 0) throw new StudioError("The file appears to be empty.");
-  if (size > uploadLimits[kind]) throw new StudioError(`That file is too large. The limit for ${kind} files is ${Math.round(uploadLimits[kind] / (1024 * 1024))} MB.`);
+  const configuredLimitMb = Number(process.env.STUDIO_MAX_UPLOAD_MB);
+  const configuredLimit = Number.isFinite(configuredLimitMb) && configuredLimitMb > 0 ? configuredLimitMb * 1024 * 1024 : Infinity;
+  const limit = Math.min(uploadLimits[kind], configuredLimit);
+  if (size > limit) throw new StudioError(`That file is too large. The limit for ${kind} files is ${Math.round(limit / (1024 * 1024))} MB.`);
   const folder = /^[a-z0-9/_-]{1,80}$/i.test(body.folder || "") ? String(body.folder) : `library/${kind}`;
   const key = buildStorageKey(`${folder}/${user.id.slice(0, 8)}`, String(body.name || `${kind}-file`));
   const signed = await storage().signUpload(key, mimeType, size);

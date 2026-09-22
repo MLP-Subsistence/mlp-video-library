@@ -217,6 +217,7 @@ model StudioTemplate {
   status             String          @default("draft")
   thumbnailAssetId   String?
   musicAssetId       String?
+  masterAssetId      String?
   musicVolume        Float           @default(0.2)
   frameWidth         Int             @default(1920)
   frameHeight        Int             @default(1080)
@@ -238,6 +239,8 @@ model StudioSegment {
   sourceScript    String                 @default("")
   pauseAfterSec   Float                  @default(0.8)
   composition     String                 @default("{}")
+  sourceStartSec  Float?
+  sourceEndSec    Float?
   notes           String?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -322,6 +325,7 @@ model StudioProjectSegment {
   narrationUpdatedAt    DateTime?
   narrationScriptHash   String?
   alignmentConfidence   Float?
+  pauseBeforeSec        Float         @default(0)
   pauseAfterSecOverride Float?
   compositionOverride   String?
   voiceIdOverride       String?

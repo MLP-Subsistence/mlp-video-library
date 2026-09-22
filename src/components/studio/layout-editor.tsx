@@ -78,9 +78,14 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
     });
   };
 
-  const setShare = (index: number, share: number) => {
+  const setDisplaySeconds = (index: number, seconds: number) => {
     updateSlot(activeSlot, (entry) => {
-      const items = entry.items.map((item, i) => (i === index ? { ...item, share: Math.max(0.05, share) } : item));
+      const remainingCount = entry.items.length - 1;
+      if (remainingCount < 1) return entry;
+      const minimumShare = 0.1 / previewDuration;
+      const selectedShare = Math.min(1 - remainingCount * minimumShare, Math.max(minimumShare, seconds / previewDuration));
+      const otherTotal = entry.items.reduce((total, item, i) => total + (i === index ? 0 : item.share), 0);
+      const items = entry.items.map((item, i) => ({ ...item, share: i === index ? selectedShare : (1 - selectedShare) * (otherTotal ? item.share / otherTotal : 1 / remainingCount) }));
       return { ...entry, items: balanceShares(items) };
     });
   };
@@ -170,11 +175,12 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-extrabold text-[#243447]">{asset?.name ?? "Missing asset"}</span>
                       {slotItems.length > 1 && (
-                        <span className="mt-1 flex items-center gap-2 text-[11px] text-[#6b7c8f]">
-                          <input type="range" min={5} max={95} value={Math.round(item.share * 100)} onChange={(event) => setShare(index, Number(event.target.value) / 100)} className="w-20 accent-[#a64026]" aria-label="Share of segment time" />
-                          {(previewDuration * item.share).toFixed(1)} s
-                        </span>
+                        <label className="mt-1 block text-[11px] text-[#6b7c8f]">
+                          On screen for about {(previewDuration * item.share).toFixed(1)} sec
+                          <input type="range" min={0.1} max={Math.max(0.1, previewDuration - (slotItems.length - 1) * 0.1)} step={0.1} value={Math.max(0.1, previewDuration * item.share)} onChange={(event) => setDisplaySeconds(index, Number(event.target.value))} className="mt-1 block w-full accent-[#a64026]" aria-label={`Time on screen for ${asset?.name ?? `visual ${index + 1}`}`} />
+                        </label>
                       )}
+                      {slotItems.length === 1 && <span className="mt-1 block text-[11px] text-[#6b7c8f]">Stays on screen for the full {previewDuration.toFixed(1)} sec</span>}
                     </span>
                     <span className="flex flex-col">
                       {slotItems.length > 1 && (
@@ -193,7 +199,8 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
             <button type="button" onClick={() => setPicking({ slotIndex: activeSlot, replaceIndex: null })} className="mlp-btn-outline mt-3 w-full">
               <ImagePlus className="size-4" /> {slotItems.length ? "Add another visual (plays after)" : "Choose Media"}
             </button>
-            {slotItems.length > 1 && <p className="mt-2 text-xs text-[#6b7c8f]">These visuals play one after another inside this slot. Their timing follows the narration automatically.</p>}
+            {slotItems.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#6b7c8f]"><span>These visuals play one after another. Lengthening one shortens the others.</span><button type="button" onClick={() => updateSlot(activeSlot, (entry) => ({ ...entry, items: entry.items.map((item) => ({ ...item, share: 1 / entry.items.length })) }))} className="font-bold text-[#a64026]">Split time evenly</button></div>}
+            <p className="mt-2 text-xs text-[#6b7c8f]">To keep visuals on screen longer overall, add quiet time before or after the voice in Pacing.</p>
 
             <div className="mt-5 border-t border-[#e5e7eb] pt-4">
               <p className="text-sm font-extrabold text-[#243447]">Sizing Mode</p>

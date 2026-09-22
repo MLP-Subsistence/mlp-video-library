@@ -114,6 +114,12 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
         <section>
           <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Original — {languageName(project.template.sourceLanguageCode)}</h3>
           <p className="mt-2 text-[15px] leading-relaxed text-[#243447]">{segment.sourceScript || <span className="italic text-[#8b9bad]">No source script for this segment.</span>}</p>
+          {project.template.masterAssetUrl && segment.source && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs font-bold text-[#6b7c8f]">Listen to the original ({(segment.source.endSec - segment.source.startSec).toFixed(1)} s):</span>
+              <NarrationPlayer url={project.template.masterAssetUrl} startSec={segment.source.startSec} endSec={segment.source.endSec} />
+            </div>
+          )}
         </section>
 
         <section className="border-t border-[#edf0f3] pt-4">
@@ -233,31 +239,16 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
           </div>
         </section>
 
-        <section className="border-t border-[#edf0f3] pt-4">
-          <div className="grid grid-cols-[1fr_auto] gap-y-1 text-sm">
-            <span className="text-[#6b7c8f]">Narration</span>
-            <span className="text-right tabular-nums text-[#243447]">{segment.narration.durationSec.toFixed(1)} sec</span>
-            <span className="flex items-center gap-2 text-[#6b7c8f]">
-              Pause after
-              <input
-                type="number"
-                min={0}
-                max={10}
-                step={0.1}
-                value={segment.pauseAfterSec}
-                onChange={(event) => void patchSegment(segment, { pauseAfterSec: Number(event.target.value) }).catch(() => undefined)}
-                className="h-7 w-16 rounded border border-[#d8dde5] px-1 text-right text-xs"
-                aria-label="Pause after narration (seconds)"
-              />
-              {segment.pauseIsOverride && (
-                <button type="button" onClick={() => void patchSegment(segment, { pauseAfterSec: null }).catch(() => undefined)} className="text-[11px] font-bold text-[#a64026]" title="Use the master template pause">
-                  reset
-                </button>
-              )}
-            </span>
-            <span className="text-right tabular-nums text-[#243447]">{segment.pauseAfterSec.toFixed(1)} sec</span>
-            <span className="font-extrabold text-[#243447]">Segment Total</span>
-            <span className="text-right font-extrabold tabular-nums text-[#243447]">{(segment.narration.durationSec + segment.pauseAfterSec).toFixed(1)} sec</span>
+        <section className="space-y-3 border-t border-[#edf0f3] pt-4">
+          <div>
+            <h3 className="text-sm font-extrabold text-[#243447]">Pacing</h3>
+            <p className="text-xs text-[#6b7c8f]">The visual stays on screen while it is quiet. Later segments move automatically.</p>
+          </div>
+          <PacingControl label="Before voice" value={segment.pauseBeforeSec} disabled={busy !== null} onChoose={(seconds) => void run("timing", () => patchSegment(segment, { pauseBeforeSec: seconds }))} />
+          <PacingControl label="After voice" value={segment.pauseAfterSec} disabled={busy !== null} onChoose={(seconds) => void run("timing", () => patchSegment(segment, { pauseAfterSec: seconds }))} onReset={segment.pauseIsOverride ? () => void run("timing", () => patchSegment(segment, { pauseAfterSec: null })) : undefined} />
+          <div className="flex justify-between border-t border-[#edf0f3] pt-2 text-sm">
+            <span className="font-extrabold text-[#243447]">Segment total</span>
+            <span className="font-extrabold tabular-nums text-[#243447]">{(project.timeline.blocks.find((block) => block.segmentId === segment.segmentId)?.durationSec ?? segment.pauseBeforeSec + segment.narration.durationSec + segment.pauseAfterSec).toFixed(1)} sec</span>
           </div>
         </section>
       </div>
@@ -267,6 +258,33 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
           {busy === "approve" ? <Spinner /> : <ArrowRight className="size-4" />} {segment.approvedAt ? "Approved — Next Segment" : "Approve & Next Segment"}
         </button>
         {segment.warnings.length > 0 && <p className="mt-2 text-center text-xs text-[#6b7c8f]">{segment.warnings.map((warning) => warning.message).join(" · ")}</p>}
+      </div>
+    </div>
+  );
+}
+
+function PacingControl({ label, value, disabled, onChoose, onReset }: { label: string; value: number; disabled: boolean; onChoose: (seconds: number) => void; onReset?: () => void }) {
+  const presets = [0, 0.5, 1, 2];
+  return (
+    <div className="rounded-lg border border-[#e5e7eb] bg-[#f7f8fa] p-2.5">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+        <span className="font-bold text-[#243447]">{label}</span>
+        <span className="tabular-nums text-[#526579]">{value.toFixed(1)} sec</span>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {presets.map((seconds) => (
+          <button key={seconds} type="button" disabled={disabled} onClick={() => onChoose(seconds)} aria-pressed={Math.abs(value - seconds) < 0.01} className={`rounded-md border px-2 py-1 text-xs font-bold ${Math.abs(value - seconds) < 0.01 ? "border-[#a64026] bg-[#fbeaea] text-[#a64026]" : "border-[#d8dde5] bg-white text-[#526579]"}`}>
+            {seconds === 0 ? "None" : `${seconds} s`}
+          </button>
+        ))}
+        <details className="relative text-xs">
+          <summary className="cursor-pointer rounded-md border border-[#d8dde5] bg-white px-2 py-1 font-bold text-[#526579]">Custom</summary>
+          <label className="mt-1 flex items-center gap-1 text-[#526579]">
+            <span className="sr-only">{label} custom seconds</span>
+            <input key={value} type="number" min={0} max={10} step={0.1} defaultValue={value} disabled={disabled} onBlur={(event) => { const seconds = Number(event.currentTarget.value); if (Number.isFinite(seconds) && seconds >= 0 && seconds <= 10 && Math.abs(seconds - value) > 0.01) onChoose(seconds); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} aria-label={`${label} custom seconds`} className="w-16 rounded border border-[#d8dde5] bg-white px-1 py-1 text-right" /> sec
+          </label>
+        </details>
+        {onReset && <button type="button" disabled={disabled} onClick={onReset} className="px-1 text-xs font-bold text-[#a64026]">Template default</button>}
       </div>
     </div>
   );

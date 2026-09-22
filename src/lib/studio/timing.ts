@@ -12,8 +12,11 @@ export type TimingInput = {
   title: string;
   orderIndex: number;
   narrationDurationSec: number;
+  pauseBeforeSec?: number;
   pauseAfterSec: number;
   composition: Composition;
+  /** Length to show before narration exists (e.g. the original lesson's pacing). */
+  placeholderSec?: number;
 };
 
 /** Segments without narration still occupy a placeholder so the structure stays visible. */
@@ -25,15 +28,16 @@ export function computeTimeline(segments: TimingInput[]): Timeline {
   let cursor = 0;
   ordered.forEach((segment, index) => {
     const narrationSec = round(Math.max(0, segment.narrationDurationSec));
+    const pauseBeforeSec = round(Math.max(0, segment.pauseBeforeSec ?? 0));
     const pauseSec = round(Math.max(0, segment.pauseAfterSec));
-    const effectiveNarration = narrationSec > 0 ? narrationSec : PLACEHOLDER_SEGMENT_SEC;
-    const durationSec = round(effectiveNarration + pauseSec);
+    const effectiveNarration = narrationSec > 0 ? narrationSec : segment.placeholderSec && segment.placeholderSec > 0 ? round(segment.placeholderSec) : PLACEHOLDER_SEGMENT_SEC;
+    const durationSec = round(pauseBeforeSec + effectiveNarration + pauseSec);
     const items: TimelineBlock["items"] = [];
     for (const slot of segment.composition.slots) {
       let offset = 0;
       for (const item of slot.items) {
         const itemSec = round(durationSec * item.share);
-        items.push({ slotId: slot.id, assetId: item.assetId, startSec: round(cursor + offset), durationSec: itemSec });
+        items.push({ slotId: slot.id, assetId: item.assetId, startSec: round(cursor + offset), durationSec: itemSec, sourceStartSec: item.startSec ?? 0 });
         offset += itemSec;
       }
     }
@@ -43,6 +47,7 @@ export function computeTimeline(segments: TimingInput[]): Timeline {
       index,
       title: segment.title,
       startSec: round(cursor),
+      pauseBeforeSec,
       narrationSec,
       pauseSec,
       durationSec,

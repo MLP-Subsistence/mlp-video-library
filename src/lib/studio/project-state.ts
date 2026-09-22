@@ -44,7 +44,7 @@ export async function loadProjectDto(projectId: string, user: { id: string; role
   if (!project) return null;
   await ensureProjectSegments(project.id, project.templateId);
 
-  const [rows, fullNarration, credits, renderedAsset, musicAsset] = await Promise.all([
+  const [rows, fullNarration, credits, renderedAsset, musicAsset, masterAsset] = await Promise.all([
     prisma.studioProjectSegment.findMany({
       where: { projectId: project.id },
       include: { segment: true, narrationAsset: true },
@@ -53,7 +53,8 @@ export async function loadProjectDto(projectId: string, user: { id: string; role
     prisma.studioFullNarration.findFirst({ where: { projectId: project.id }, orderBy: { createdAt: "desc" }, include: { asset: true } }),
     creditSummary(user.id),
     project.renderedAssetId ? prisma.studioAsset.findUnique({ where: { id: project.renderedAssetId } }) : null,
-    project.template.musicAssetId ? prisma.studioAsset.findUnique({ where: { id: project.template.musicAssetId } }) : null
+    project.template.musicAssetId ? prisma.studioAsset.findUnique({ where: { id: project.template.musicAssetId } }) : null,
+    project.template.masterAssetId ? prisma.studioAsset.findUnique({ where: { id: project.template.masterAssetId } }) : null
   ]);
 
   const assetIds = new Set<string>();
@@ -90,8 +91,10 @@ export async function loadProjectDto(projectId: string, user: { id: string; role
         status: narrationStatus,
         confidence: row.alignmentConfidence
       },
+      pauseBeforeSec: row.pauseBeforeSec,
       pauseAfterSec: row.pauseAfterSecOverride ?? row.segment.pauseAfterSec,
       pauseIsOverride: row.pauseAfterSecOverride !== null,
+      source: row.segment.sourceStartSec !== null && row.segment.sourceEndSec !== null ? { startSec: row.segment.sourceStartSec, endSec: row.segment.sourceEndSec } : null,
       composition,
       compositionIsOverride: Boolean(row.compositionOverride),
       voiceIdOverride: row.voiceIdOverride,
@@ -109,7 +112,7 @@ export async function loadProjectDto(projectId: string, user: { id: string; role
   for (const segment of segments) {
     const narration = segment.narration.durationSec || 0;
     if (narration <= 0) continue;
-    const segmentSec = narration + segment.pauseAfterSec;
+    const segmentSec = segment.pauseBeforeSec + narration + segment.pauseAfterSec;
     for (const slot of segment.composition.slots) {
       for (const item of slot.items) {
         const asset = assets[item.assetId];
@@ -128,8 +131,10 @@ export async function loadProjectDto(projectId: string, user: { id: string; role
       title: segment.title,
       orderIndex: segment.orderIndex,
       narrationDurationSec: segment.narration.durationSec,
+      pauseBeforeSec: segment.pauseBeforeSec,
       pauseAfterSec: segment.pauseAfterSec,
-      composition: segment.composition
+      composition: segment.composition,
+      placeholderSec: segment.source ? segment.source.endSec - segment.source.startSec : undefined
     }))
   );
 
@@ -162,7 +167,8 @@ export async function loadProjectDto(projectId: string, user: { id: string; role
       fps: project.template.fps,
       musicAssetId: project.template.musicAssetId,
       musicAssetUrl: musicAsset?.url ?? null,
-      musicVolume: project.template.musicVolume
+      musicVolume: project.template.musicVolume,
+      masterAssetUrl: masterAsset?.url ?? null
     },
     segments,
     assets,

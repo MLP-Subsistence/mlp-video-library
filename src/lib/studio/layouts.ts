@@ -103,7 +103,7 @@ export function normalizeComposition(input: Partial<Composition> | null | undefi
     const items = Array.isArray(provided?.items)
       ? provided!.items
           .filter((item) => item && typeof item.assetId === "string" && item.assetId.length > 0)
-          .map((item) => ({ assetId: item.assetId, share: clampShare(item.share) }))
+          .map((item) => ({ assetId: item.assetId, share: clampShare(item.share), ...(typeof item.startSec === "number" && item.startSec > 0 ? { startSec: Math.round(item.startSec * 1000) / 1000 } : {}) }))
       : [];
     return {
       id: provided?.id || `slot_${index + 1}`,
@@ -120,10 +120,10 @@ function clampShare(value: unknown) {
 }
 
 /** Make sequential item shares sum to 1 while keeping their relative proportions. */
-export function balanceShares(items: Array<{ assetId: string; share: number }>) {
+export function balanceShares<T extends { assetId: string; share: number }>(items: T[]): T[] {
   if (items.length === 0) return items;
   const total = items.reduce((sum, item) => sum + item.share, 0) || 1;
-  return items.map((item) => ({ assetId: item.assetId, share: item.share / total }));
+  return items.map((item) => ({ ...item, share: item.share / total }));
 }
 
 export function compositionAssetIds(composition: Composition) {

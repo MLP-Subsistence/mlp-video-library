@@ -12,6 +12,7 @@ import type { Composition, NarrationSource, ProjectDto, ProjectSegmentDto } from
 export type SegmentPatch = {
   translation?: string;
   translationAction?: "approve" | "unapprove";
+  pauseBeforeSec?: number;
   pauseAfterSec?: number | null;
   composition?: Composition | null;
   narration?: { assetId: string; durationSec: number; source: NarrationSource } | null;

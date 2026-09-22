@@ -55,7 +55,7 @@ export function CompositionPreview({
           <div key={slot.id} className="absolute overflow-hidden bg-[#0d1a2b]" style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.w * 100}%`, height: `${rect.h * 100}%` }}>
             {asset ? (
               asset.kind === "video" ? (
-                <SlotVideo url={asset.url} fit={slot.fit} timeSec={localTime - activeStart} playing={playing} />
+                <SlotVideo url={asset.url} fit={slot.fit} timeSec={(active?.startSec ?? 0) + (localTime - activeStart)} playing={playing} />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={asset.url} alt="" className="h-full w-full" style={{ objectFit: slot.fit === "contain" ? "contain" : "cover" }} draggable={false} />

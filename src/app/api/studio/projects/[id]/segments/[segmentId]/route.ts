@@ -24,6 +24,7 @@ export const PATCH = studioRoute(async (request: Request, { params }: Params) =>
   const body = await readJson<{
     translation?: string;
     translationAction?: "approve" | "unapprove";
+    pauseBeforeSec?: number;
     pauseAfterSec?: number | null;
     composition?: Composition | null;
     narration?: { assetId: string; durationSec: number; source: NarrationSource } | null;
@@ -60,6 +61,11 @@ export const PATCH = studioRoute(async (request: Request, { params }: Params) =>
   if (body.translationAction === "unapprove") data.translationStatus = row.translation.trim() ? "draft" : "missing";
 
   // --- Timing / composition ------------------------------------------------
+  if (body.pauseBeforeSec !== undefined) {
+    const seconds = Number(body.pauseBeforeSec);
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds > 10) throw new StudioError("Choose a lead-in between 0 and 10 seconds.");
+    data.pauseBeforeSec = Math.round(seconds * 10) / 10;
+  }
   if (body.pauseAfterSec !== undefined) {
     data.pauseAfterSecOverride = body.pauseAfterSec === null ? null : Math.min(10, Math.max(0, Number(body.pauseAfterSec) || 0));
   }

@@ -8,7 +8,7 @@ import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { EmptyState, Field, InlineNotice, Modal, Spinner, StatusPill, inputClass } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
 import { studioAudiences, studioLanguages, studioRegisters } from "@/lib/studio/languages";
-import type { ProjectSummaryDto, TemplateSummaryDto } from "@/lib/studio/types";
+import type { LibraryPlaylistDto, ProjectSummaryDto } from "@/lib/studio/types";
 
 export function projectStatusLabel(status: string) {
   switch (status) {
@@ -123,9 +123,11 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
   );
 }
 
+
 function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: { open: boolean; onClose: () => void; onCreated: (id: string) => void; canManageTemplates: boolean }) {
-  const [templates, setTemplates] = useState<TemplateSummaryDto[] | null>(null);
-  const [templateId, setTemplateId] = useState("");
+  const [playlists, setPlaylists] = useState<LibraryPlaylistDto[] | null>(null);
+  const [playlistId, setPlaylistId] = useState("");
+  const [videoId, setVideoId] = useState("");
   const [languageChoice, setLanguageChoice] = useState("rw");
   const [customLanguage, setCustomLanguage] = useState("");
   const [region, setRegion] = useState("");
@@ -137,19 +139,22 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
 
   useEffect(() => {
     if (!open) return;
-    api<{ templates: TemplateSummaryDto[] }>("/api/studio/templates?ready=1")
+    api<{ playlists: LibraryPlaylistDto[] }>("/api/studio/library/playlists")
       .then((data) => {
         setError(null);
-        setTemplates(data.templates);
-        setTemplateId((current) => current || data.templates[0]?.id || "");
+        setPlaylists(data.playlists);
+        setPlaylistId((current) => current || data.playlists.find((entry) => entry.readyCount > 0)?.id || data.playlists[0]?.id || "");
       })
       .catch((caught) => setError((caught as Error).message));
   }, [open]);
 
   const language = useMemo(() => studioLanguages.find((entry) => entry.code === languageChoice) ?? null, [languageChoice]);
-  const selectedTemplate = templates?.find((entry) => entry.id === templateId) ?? null;
+  const playlist = playlists?.find((entry) => entry.id === playlistId) ?? null;
+  const video = playlist?.videos.find((entry) => entry.id === videoId) ?? null;
+  const step = !video ? 1 : 2;
 
   async function submit() {
+    if (!video?.templateId) return;
     setBusy(true);
     setError(null);
     try {
@@ -157,7 +162,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
       const languageCode = languageChoice === "custom" ? customLanguage.trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 8) || "xx" : languageChoice;
       const result = await api<{ id: string }>("/api/studio/projects", {
         method: "POST",
-        json: { templateId, languageCode, languageName, region: region || null, variety: variety || null, audience: audience || null, register: register || null }
+        json: { templateId: video.templateId, languageCode, languageName, region: region || null, variety: variety || null, audience: audience || null, register: register || null }
       });
       onCreated(result.id);
     } catch (caught) {
@@ -167,16 +172,24 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
     }
   }
 
+  const languageName = languageChoice === "custom" ? customLanguage || "…" : language?.name;
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       title="New Localization"
-      description="Choose a lesson and the language you will narrate it in."
+      description="Pick a playlist, then the lesson you want to narrate in another language."
+      wide
       footer={
         <>
+          {video && (
+            <button type="button" onClick={() => setVideoId("")} className="mr-auto text-sm font-bold text-[#a64026]">
+              ← Choose a different lesson
+            </button>
+          )}
           <button type="button" onClick={onClose} className="mlp-btn-outline">Cancel</button>
-          <button type="button" onClick={submit} disabled={busy || !templateId || (languageChoice === "custom" && !customLanguage.trim())} className="mlp-btn-primary">
+          <button type="button" onClick={submit} disabled={busy || !video?.templateId || video.templateStatus !== "ready" || (languageChoice === "custom" && !customLanguage.trim())} className="mlp-btn-primary">
             {busy ? <Spinner /> : <Languages className="size-4" />} Start Localization
           </button>
         </>
@@ -187,91 +200,125 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
           <InlineNotice tone="error">{error}</InlineNotice>
         </div>
       )}
-      <section>
-        <h3 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-[#6b7c8f]">Lesson</h3>
-        {templates === null ? (
-          <div className="flex items-center gap-2 text-sm text-[#6b7c8f]"><Spinner /> Loading lessons…</div>
-        ) : templates.length === 0 ? (
-          <InlineNotice tone="warning">
-            No lessons are ready for localization yet.{canManageTemplates ? " Prepare one under Master Templates and mark it ready." : " Ask an MLP content manager to prepare a master template."}
-          </InlineNotice>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {templates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => setTemplateId(template.id)}
-                className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${templateId === template.id ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] bg-white hover:border-[#c9d0da]"}`}
-              >
-                <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-lg bg-[#f2f4f7]">
-                  {template.thumbnailUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={template.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="grid h-full w-full place-items-center text-[#8b9bad]"><FolderKanban className="size-5" /></span>
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-extrabold text-[#243447]">{template.title}</span>
-                  <span className="block truncate text-xs text-[#6b7c8f]">{template.moduleName ?? "Marketplace Literacy"} · {template.segmentCount} segments</span>
-                  <span className="block truncate text-xs text-[#6b7c8f]">{template.languages.length ? `Also in: ${template.languages.join(", ")}` : "No localizations yet"}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2">
-        <Field label="Language">
-          <select
-            value={languageChoice}
-            onChange={(event) => {
-              const next = event.target.value;
-              setLanguageChoice(next);
-              setRegion(studioLanguages.find((entry) => entry.code === next)?.regions?.[0] ?? "");
-              setVariety("");
-            }}
-            className={inputClass}
-          >
-            {studioLanguages.map((entry) => (
-              <option key={entry.code} value={entry.code}>{entry.name}</option>
-            ))}
-            <option value="custom">Another language…</option>
-          </select>
-        </Field>
-        {languageChoice === "custom" ? (
-          <Field label="Language name">
-            <input value={customLanguage} onChange={(event) => setCustomLanguage(event.target.value)} placeholder="e.g. Tigrinya" className={inputClass} />
-          </Field>
-        ) : (
-          <Field label="Region / country">
-            <input list="studio-regions" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Optional" className={inputClass} />
-            <datalist id="studio-regions">{(language?.regions ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
-          </Field>
-        )}
-        {(language?.varieties?.length || languageChoice === "custom") ? (
-          <Field label="Variety / dialect" hint="Only when it changes how the narration should sound.">
-            <input list="studio-varieties" value={variety} onChange={(event) => setVariety(event.target.value)} placeholder="Optional" className={inputClass} />
-            <datalist id="studio-varieties">{(language?.varieties ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
-          </Field>
-        ) : null}
-        <Field label="Audience">
-          <select value={audience} onChange={(event) => setAudience(event.target.value)} className={inputClass}>
-            {studioAudiences.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-          </select>
-        </Field>
-        <Field label="Register">
-          <select value={register} onChange={(event) => setRegister(event.target.value)} className={inputClass}>
-            {studioRegisters.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-          </select>
-        </Field>
-      </section>
-      {selectedTemplate && (
-        <p className="mt-5 text-sm text-[#6b7c8f]">
-          You will localize <strong className="text-[#243447]">{selectedTemplate.title}</strong> ({selectedTemplate.segmentCount} segments) into <strong className="text-[#243447]">{languageChoice === "custom" ? customLanguage || "…" : language?.name}</strong>.
-        </p>
+      {step === 1 && (
+        <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+          <div>
+            <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">1 · Playlist</h3>
+            {playlists === null ? (
+              <div className="flex items-center gap-2 text-sm text-[#6b7c8f]"><Spinner /> Loading playlists…</div>
+            ) : playlists.length === 0 ? (
+              <InlineNotice tone="warning">The library has no playlists yet.</InlineNotice>
+            ) : (
+              <div className="max-h-[52vh] space-y-1 overflow-y-auto pr-1">
+                {playlists.map((entry) => (
+                  <button key={entry.id} type="button" onClick={() => { setPlaylistId(entry.id); setVideoId(""); }} className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm ${playlistId === entry.id ? "bg-[#fbeaea] font-extrabold text-[#243447] ring-1 ring-[#e5ccd0]" : "font-semibold text-[#526579] hover:bg-[#f7f8fa]"}`}>
+                    <span className="min-w-0">
+                      <span className="block truncate">{entry.title}</span>
+                      <span className="block text-xs font-normal text-[#8b9bad]">{entry.language ?? "—"} · {entry.videoCount} lesson{entry.videoCount === 1 ? "" : "s"}</span>
+                    </span>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${entry.readyCount ? "bg-green-50 text-green-700" : "bg-[#f2f4f7] text-[#8b9bad]"}`}>{entry.readyCount} ready</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">2 · Lesson{playlist ? ` in ${playlist.title}` : ""}</h3>
+            {!playlist ? (
+              <p className="text-sm text-[#6b7c8f]">Choose a playlist first.</p>
+            ) : (
+              <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                {playlist.videos.map((entry) => {
+                  const ready = entry.templateStatus === "ready";
+                  return (
+                    <div key={entry.id} className={`flex items-center gap-3 rounded-xl border p-3 ${ready ? "border-[#d8dde5] bg-white" : "border-dashed border-[#d8dde5] bg-[#fbfcfd]"}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={entry.thumbnailUrl} alt="" className="h-14 w-24 shrink-0 rounded-lg object-cover" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-extrabold text-[#243447]">{entry.title}</span>
+                        <span className="block truncate text-xs text-[#6b7c8f]">{entry.category} · {entry.resourceFormat}{entry.duration ? ` · ${entry.duration}` : ""}</span>
+                        <span className="block truncate text-xs text-[#6b7c8f]">
+                          {ready ? `${entry.segmentCount} segments${entry.localizedInto.length ? ` · also in ${entry.localizedInto.join(", ")}` : ""}` : entry.templateStatus === "draft" ? "Master template still in draft" : "Not prepared for localization yet"}
+                        </span>
+                      </span>
+                      {ready ? (
+                        <button type="button" onClick={() => setVideoId(entry.id)} className="mlp-btn-primary h-9 px-3 text-xs">Choose</button>
+                      ) : canManageTemplates ? (
+                        <a href={entry.templateId ? `/studio/templates/${entry.templateId}` : "/studio/templates"} className="mlp-btn-outline h-9 px-3 text-xs">{entry.templateId ? "Finish template" : "Prepare"}</a>
+                      ) : (
+                        <span className="text-xs text-[#8b9bad]">Ask a content manager</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {playlist.videos.length === 0 && <p className="text-sm text-[#6b7c8f]">This playlist has no lessons.</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {step === 2 && video && (
+        <>
+          <div className="flex items-center gap-3 rounded-xl border border-[#e5ccd0] bg-[#fbeaea]/50 p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={video.thumbnailUrl} alt="" className="h-14 w-24 shrink-0 rounded-lg object-cover" />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-extrabold text-[#243447]">{video.title}</span>
+              <span className="block text-xs text-[#6b7c8f]">{playlist?.title} · {video.segmentCount} segments</span>
+            </span>
+          </div>
+          <h3 className="mb-2 mt-5 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">3 · Language</h3>
+          <section className="grid gap-4 sm:grid-cols-2">
+            <Field label="Language">
+              <select
+                value={languageChoice}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setLanguageChoice(next);
+                  setRegion(studioLanguages.find((entry) => entry.code === next)?.regions?.[0] ?? "");
+                  setVariety("");
+                }}
+                className={inputClass}
+              >
+                {studioLanguages.map((entry) => (
+                  <option key={entry.code} value={entry.code}>{entry.name}</option>
+                ))}
+                <option value="custom">Another language…</option>
+              </select>
+            </Field>
+            {languageChoice === "custom" ? (
+              <Field label="Language name">
+                <input value={customLanguage} onChange={(event) => setCustomLanguage(event.target.value)} placeholder="e.g. Tigrinya" className={inputClass} />
+              </Field>
+            ) : (
+              <Field label="Region / country">
+                <input list="studio-regions" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Optional" className={inputClass} />
+                <datalist id="studio-regions">{(language?.regions ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
+              </Field>
+            )}
+            {(language?.varieties?.length || languageChoice === "custom") ? (
+              <Field label="Variety / dialect" hint="Only when it changes how the narration should sound.">
+                <input list="studio-varieties" value={variety} onChange={(event) => setVariety(event.target.value)} placeholder="Optional" className={inputClass} />
+                <datalist id="studio-varieties">{(language?.varieties ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
+              </Field>
+            ) : null}
+            <Field label="Audience">
+              <select value={audience} onChange={(event) => setAudience(event.target.value)} className={inputClass}>
+                {studioAudiences.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+              </select>
+            </Field>
+            <Field label="Register">
+              <select value={register} onChange={(event) => setRegister(event.target.value)} className={inputClass}>
+                {studioRegisters.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+              </select>
+            </Field>
+          </section>
+          <p className="mt-5 text-sm text-[#6b7c8f]">
+            You will localize <strong className="text-[#243447]">{video.title}</strong> ({video.segmentCount} segments) into <strong className="text-[#243447]">{languageName}</strong>. The original visuals and pacing come with it; you replace the narration.
+          </p>
+        </>
       )}
     </Modal>
   );

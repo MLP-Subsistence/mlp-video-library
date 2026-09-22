@@ -23,6 +23,14 @@ test("pause after narration extends the segment and shifts later segments", () =
   assert.equal(timeline.blocks[1].startSec, 8);
 });
 
+test("quiet before narration extends the visual and shifts later segments", () => {
+  const timeline = computeTimeline([{ ...segment("s1", 0, 3.6, 0.5), pauseBeforeSec: 1 }, segment("s2", 1, 2)]);
+  assert.equal(timeline.blocks[0].pauseBeforeSec, 1);
+  assert.equal(timeline.blocks[0].narrationSec, 3.6);
+  assert.equal(timeline.blocks[0].durationSec, 5.1);
+  assert.equal(timeline.blocks[1].startSec, 5.1);
+});
+
 test("segments without narration keep a placeholder so the structure stays visible", () => {
   const timeline = computeTimeline([segment("s1", 0, 0), segment("s2", 1, 2)]);
   assert.ok(timeline.blocks[0].durationSec > 0);

@@ -11,6 +11,8 @@ export type CompositionItem = {
   assetId: string;
   /** Proportion of the segment duration this item occupies inside its slot (sequential items). */
   share: number;
+  /** For video assets: where inside the clip playback starts (seconds). Lets a master video be reused per segment. */
+  startSec?: number;
 };
 
 export type CompositionSlot = {
@@ -88,8 +90,11 @@ export type ProjectSegmentDto = {
     status: NarrationStatus;
     confidence: number | null;
   };
+  pauseBeforeSec: number;
   pauseAfterSec: number;
   pauseIsOverride: boolean;
+  /** Where this segment sits inside the original master video, when known. */
+  source: { startSec: number; endSec: number } | null;
   composition: Composition;
   compositionIsOverride: boolean;
   voiceIdOverride: string | null;
@@ -104,11 +109,12 @@ export type TimelineBlock = {
   index: number;
   title: string;
   startSec: number;
+  pauseBeforeSec: number;
   narrationSec: number;
   pauseSec: number;
   durationSec: number;
   endSec: number;
-  items: Array<{ slotId: string; assetId: string; startSec: number; durationSec: number }>;
+  items: Array<{ slotId: string; assetId: string; startSec: number; durationSec: number; sourceStartSec: number }>;
 };
 
 export type Timeline = {
@@ -146,6 +152,8 @@ export type ProjectDto = {
     musicAssetId: string | null;
     musicAssetUrl: string | null;
     musicVolume: number;
+    /** Original master video (with its English narration) for reference playback. */
+    masterAssetUrl: string | null;
   };
   segments: ProjectSegmentDto[];
   assets: Record<string, StudioAssetDto>;
@@ -219,4 +227,26 @@ export type TemplateSummaryDto = {
   thumbnailUrl: string | null;
   languages: string[];
   sourceVideoId: string | null;
+};
+
+export type LibraryPlaylistDto = {
+  id: string;
+  title: string;
+  language: string | null;
+  languageCode: string | null;
+  videoCount: number;
+  readyCount: number;
+  videos: Array<{
+    id: string;
+    title: string;
+    category: string;
+    resourceFormat: string;
+    thumbnailUrl: string;
+    duration: string | null;
+    hasTranscript: boolean;
+    templateId: string | null;
+    templateStatus: "ready" | "draft" | null;
+    segmentCount: number;
+    localizedInto: string[];
+  }>;
 };

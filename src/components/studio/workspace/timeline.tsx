@@ -181,7 +181,7 @@ export function Timeline({
                           const asset = assets[item.assetId];
                           return (
                             <div key={`${item.slotId}-${index}`} className="relative h-full overflow-hidden border-r border-white/60 last:border-r-0" style={{ width: `${(item.durationSec / block.durationSec) * 100}%` }} title={asset?.name}>
-                              {asset && <Thumb asset={asset} />}
+                              {asset && <Thumb asset={asset} atSec={item.sourceStartSec} />}
                             </div>
                           );
                         })}
@@ -205,7 +205,10 @@ export function Timeline({
                 return (
                   <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} warnings={audioWarnings}>
                     <div className="flex h-full w-full items-stretch">
-                      <div className={`h-full ${narration.url ? (isActive ? "text-[#a64026]" : "text-[#8a5a4c]") : "text-[#c9d0da]"}`} style={{ width: `${(block.narrationSec > 0 ? block.narrationSec / block.durationSec : (block.durationSec - block.pauseSec) / block.durationSec) * 100}%` }} title={narration.url ? `${narration.source === "ai" ? "AI voice" : narration.source === "record" ? "Recording" : narration.source === "full" ? "Full narration" : "Uploaded audio"} · ${block.narrationSec.toFixed(1)} s` : "Narration missing"}>
+                      {block.pauseBeforeSec > 0 && (
+                        <div className="h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(36,52,71,0.08)_3px,rgba(36,52,71,0.08)_6px)]" style={{ width: `${(block.pauseBeforeSec / block.durationSec) * 100}%` }} title={`Quiet before voice ${block.pauseBeforeSec.toFixed(1)} sec`} />
+                      )}
+                      <div className={`h-full ${narration.url ? (isActive ? "text-[#a64026]" : "text-[#8a5a4c]") : "text-[#c9d0da]"}`} style={{ width: `${(block.narrationSec > 0 ? block.narrationSec : block.durationSec - block.pauseBeforeSec - block.pauseSec) / block.durationSec * 100}%` }} title={narration.url ? `${narration.source === "ai" ? "AI voice" : narration.source === "record" ? "Recording" : narration.source === "full" ? "Full narration" : "Uploaded audio"} · ${block.narrationSec.toFixed(1)} s` : "Narration missing"}>
                         {narration.url ? (
                           <Waveform url={narration.url} startSec={narration.startSec ?? 0} endSec={(narration.startSec ?? 0) + narration.durationSec} seed={segment.key} />
                         ) : (
@@ -213,21 +216,13 @@ export function Timeline({
                         )}
                       </div>
                       {block.pauseSec > 0 && (
-                        <div className="h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(36,52,71,0.08)_3px,rgba(36,52,71,0.08)_6px)]" style={{ width: `${(block.pauseSec / block.durationSec) * 100}%` }} title={`Pause ${block.pauseSec.toFixed(1)} sec`} />
+                        <div className="h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(36,52,71,0.08)_3px,rgba(36,52,71,0.08)_6px)]" style={{ width: `${(block.pauseSec / block.durationSec) * 100}%` }} title={`Quiet after voice ${block.pauseSec.toFixed(1)} sec`} />
                       )}
                     </div>
                   </Block>
                 );
               })}
             </Track>
-
-            {project.template.musicAssetUrl && (
-              <Track label="Music" icon={Music2} labelWidth={LABEL_WIDTH}>
-                <div className="absolute inset-y-1 left-0 overflow-hidden rounded-md bg-[#f3e8e6] text-[#b98c7f]" style={{ width: trackWidth }} title="Music bed from the master template (mixed under the narration)">
-                  <Waveform url={project.template.musicAssetUrl} startSec={0} endSec={Math.min(total, 60)} seed="music" />
-                </div>
-              </Track>
-            )}
 
             {/* Playhead */}
             <div className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-[#a64026]" style={{ left: LABEL_WIDTH + timeSec * pxPerSec }}>
@@ -240,8 +235,9 @@ export function Timeline({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[#edf0f3] px-3 py-1.5 text-xs text-[#6b7c8f] sm:px-4">
           <span className="font-bold text-[#243447]">{activeBlock.title}</span>
           <span>Starts {formatClock(activeBlock.startSec)}</span>
+          {activeBlock.pauseBeforeSec > 0 && <span>Before voice {activeBlock.pauseBeforeSec.toFixed(1)} s</span>}
           <span>Narration {activeBlock.narrationSec.toFixed(1)} s</span>
-          <span>Pause {activeBlock.pauseSec.toFixed(1)} s</span>
+          <span>After voice {activeBlock.pauseSec.toFixed(1)} s</span>
           <span>Segment {activeBlock.durationSec.toFixed(1)} s</span>
         </div>
       )}
@@ -287,7 +283,7 @@ function BlockFace({ segment, block, assets }: { segment: ProjectSegmentDto; blo
   return (
     <div className="flex h-full w-full items-center gap-2 pl-1 pr-5">
       <span className="relative h-full w-12 shrink-0 overflow-hidden rounded-sm bg-[#e5e7eb]">
-        {first ? <Thumb asset={first} /> : <span className="grid h-full w-full place-items-center text-[#8b9bad]"><ImageIcon className="size-3.5" /></span>}
+        {first ? <Thumb asset={first} atSec={block.items[0]?.sourceStartSec ?? 0} /> : <span className="grid h-full w-full place-items-center text-[#8b9bad]"><ImageIcon className="size-3.5" /></span>}
       </span>
       <span className="min-w-0">
         <span className="block truncate text-[11px] font-extrabold text-[#243447]">
@@ -301,7 +297,9 @@ function BlockFace({ segment, block, assets }: { segment: ProjectSegmentDto; blo
   );
 }
 
-function Thumb({ asset }: { asset: import("@/lib/studio/types").StudioAssetDto }) {
+function Thumb({ asset, atSec = 0 }: { asset: import("@/lib/studio/types").StudioAssetDto; atSec?: number }) {
+  // A master video reused per segment shows the frame at that segment's own offset (media fragment).
+  if (asset.kind === "video" && atSec > 0) return <video src={`${asset.url}#t=${atSec.toFixed(2)}`} muted preload="metadata" className="h-full w-full object-cover" />;
   const src = asset.thumbnailUrl || (asset.kind === "image" ? asset.url : null);
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element

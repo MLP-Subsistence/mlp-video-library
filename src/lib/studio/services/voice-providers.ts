@@ -56,13 +56,12 @@ export const mockVoiceProvider: VoiceProvider = {
 /**
  * ElevenLabs adapter.
  *
- * The MLP owner is completing this integration. Everything the studio needs is
- * expressed by the two methods below; credits, ledger, storage, timeline and
- * rendering already work against them (verified with the mock provider).
+ * Credits, ledger, storage, timeline and rendering are provider-independent;
+ * this adapter supplies the live ElevenLabs implementation.
  *
  * Expected environment: ELEVENLABS_API_KEY (server/worker only).
- * Suggested endpoints (check current ElevenLabs docs before wiring):
- *   GET  https://api.elevenlabs.io/v1/voices
+ * Endpoints verified against the ElevenLabs API reference:
+ *   GET  https://api.elevenlabs.io/v2/voices
  *   POST https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128
  *        body: { text, model_id, voice_settings: { stability, similarity_boost, style, speed } }
  *        response: audio/mpeg bytes; header `x-character-count` reports billed characters when present.
@@ -72,14 +71,35 @@ export const elevenLabsVoiceProvider: VoiceProvider = {
   configured: () => Boolean(process.env.ELEVENLABS_API_KEY),
   async listVoices() {
     if (!process.env.ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");
-    const response = await fetch("https://api.elevenlabs.io/v1/voices", {
-      headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY }
-    });
-    if (!response.ok) throw new Error(`ElevenLabs voices ${response.status}`);
-    const data = (await response.json()) as {
-      voices?: Array<{ voice_id: string; name: string; description?: string; preview_url?: string; labels?: Record<string, string>; verified_languages?: Array<{ language?: string }> }>;
+    type ElevenLabsVoice = {
+      voice_id: string;
+      name: string;
+      description?: string;
+      preview_url?: string;
+      labels?: Record<string, string>;
+      verified_languages?: Array<{ language?: string }>;
     };
-    return (data.voices ?? []).map((voice) => ({
+    const voices: ElevenLabsVoice[] = [];
+    let nextPageToken: string | null = null;
+    do {
+      const url = new URL("https://api.elevenlabs.io/v2/voices");
+      url.searchParams.set("page_size", "100");
+      url.searchParams.set("include_total_count", "false");
+      if (nextPageToken) url.searchParams.set("next_page_token", nextPageToken);
+      const response = await fetch(url, {
+        headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY }
+      });
+      if (!response.ok) throw new Error(`ElevenLabs voices ${response.status}`);
+      const data = (await response.json()) as {
+        voices?: ElevenLabsVoice[];
+        has_more?: boolean;
+        next_page_token?: string | null;
+      };
+      voices.push(...(data.voices ?? []));
+      nextPageToken = data.has_more ? data.next_page_token ?? null : null;
+    } while (nextPageToken);
+
+    return voices.map((voice) => ({
       id: voice.voice_id,
       name: voice.name,
       description: voice.description ?? undefined,

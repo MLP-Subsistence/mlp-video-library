@@ -171,6 +171,8 @@ async function renderSegment(options: {
       } else {
         // Video (or animated GIF): trim to the slot, hold the last frame when the clip is shorter.
         if (asset.mimeType === "image/gif") args.push("-stream_loop", "-1");
+        // A master video reused per segment starts at the segment's own offset inside the clip.
+        if (item.startSec && item.startSec > 0) args.push("-ss", item.startSec.toFixed(3));
         args.push("-t", (itemDuration + 0.5).toFixed(3), "-i", file);
         filters.push(
           `[${inputIndex}:v]${fit},setsar=1,fps=${fps},format=yuv420p,trim=0:${itemDuration.toFixed(3)},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${itemDuration.toFixed(3)},trim=0:${itemDuration.toFixed(3)},setpts=PTS-STARTPTS[${label}]`
@@ -197,7 +199,8 @@ async function renderSegment(options: {
     } else {
       args.push("-i", narrationFile);
     }
-    filters.push(`[${inputIndex}:a]aresample=48000,aformat=channel_layouts=stereo,apad=whole_dur=${duration.toFixed(3)},atrim=0:${duration.toFixed(3)}[aout]`);
+    const leadInMs = Math.round(block.pauseBeforeSec * 1000);
+    filters.push(`[${inputIndex}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=delays=${leadInMs}:all=1,apad=whole_dur=${duration.toFixed(3)},atrim=0:${duration.toFixed(3)}[aout]`);
     inputIndex += 1;
   } else {
     filters.push(`anullsrc=r=48000:cl=stereo:d=${duration.toFixed(3)}[aout]`);
@@ -216,4 +219,3 @@ async function renderSegment(options: {
   const info = await probe(options.output);
   if (!info.hasVideo) throw new Error(`Segment ${segment.key} produced no video stream`);
 }
-

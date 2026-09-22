@@ -50,12 +50,13 @@ export function usePreviewPlayer(project: ProjectDto) {
       blockRef.current = block;
       const segment = block ? current.segments.find((entry) => entry.segmentId === block.segmentId) : null;
       const narration = segment?.narration;
-      const withinNarration = block && narration?.url && narration.durationSec > 0 && time - block.startSec < narration.durationSec;
+      const localTime = block ? time - block.startSec - block.pauseBeforeSec : -1;
+      const withinNarration = block && narration?.url && narration.durationSec > 0 && localTime >= 0 && localTime < narration.durationSec;
       if (!withinNarration || !narration?.url || !block) {
         if (!audio.paused) audio.pause();
         return;
       }
-      const offset = (narration.startSec ?? 0) + (time - block.startSec);
+      const offset = (narration.startSec ?? 0) + localTime;
       if (audio.src !== narration.url) {
         audio.src = narration.url;
         audio.load();
@@ -93,7 +94,7 @@ export function usePreviewPlayer(project: ProjectDto) {
       const narration = segment?.narration;
       if (block && narration?.url && narration.durationSec > 0 && audio && audio.src === narration.url && !audio.paused && !audio.ended) {
         const audioOffset = audio.currentTime - (narration.startSec ?? 0);
-        if (audioOffset >= 0 && audioOffset <= narration.durationSec + 0.05) next = block.startSec + Math.min(audioOffset, narration.durationSec);
+        if (audioOffset >= 0 && audioOffset <= narration.durationSec + 0.05) next = block.startSec + block.pauseBeforeSec + Math.min(audioOffset, narration.durationSec);
       }
       const limit = range ? range.endSec : current.timeline.totalSec;
       if (next >= limit) {
@@ -105,11 +106,11 @@ export function usePreviewPlayer(project: ProjectDto) {
       timeRef.current = next;
       setTimeSec(next);
       const nextBlock = blockAtTime(current.timeline, next);
-      if (nextBlock?.segmentId !== blockRef.current?.segmentId) syncAudio(next, true);
-      else {
-        // Narration finished inside the block → we are in the pause; make sure audio is quiet.
-        if (nextBlock && narration && next - nextBlock.startSec >= narration.durationSec && audio && !audio.paused) audio.pause();
-      }
+      const nextSegment = nextBlock ? current.segments.find((entry) => entry.segmentId === nextBlock.segmentId) : null;
+      const narrationLocalTime = nextBlock ? next - nextBlock.startSec - nextBlock.pauseBeforeSec : -1;
+      const shouldPlayNarration = Boolean(nextSegment?.narration.url && narrationLocalTime >= 0 && narrationLocalTime < nextSegment.narration.durationSec);
+      if (nextBlock?.segmentId !== blockRef.current?.segmentId || (shouldPlayNarration && (audio?.paused || audio?.src !== nextSegment?.narration.url))) syncAudio(next, true);
+      else if (!shouldPlayNarration && audio && !audio.paused) audio.pause();
       frame.current = requestAnimationFrame((next) => tickRef.current(next));
     },
     [range, stop, syncAudio]
