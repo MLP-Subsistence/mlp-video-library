@@ -41,3 +41,7 @@ ios/*.mobileprovision
 # Educator Studio media (local storage driver)
 storage/
 dev.db.bak-*
+
+# Studio content bundles for production sync
+sync/
+prisma/.schema.postgres.sync.prisma

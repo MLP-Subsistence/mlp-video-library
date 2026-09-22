@@ -100,3 +100,20 @@ STUDIO_MEDIA_DIR=<folder with imgA.png imgB.jpg clipC.mp4 narr7.wav music.mp3 co
 ```
 
 `scripts/studio-e2e/run.mjs` performs the full pipeline against a running dev server (uploads → template → project → translations → mock AI voice → 7-second upload for segment 3 → timeline ripple check → DOCX export → render) and prints the timeline before/after, which is the V1 acceptance test from the brief. `npx tsx scripts/studio-e2e/session-cookie.mts` prints a session cookie for it.
+
+
+## 6. Shipping prepared lessons to the site
+
+Master templates are prepared on a machine with FFmpeg and the original videos (the local app, SQLite + `storage/studio/`). `scripts/studio-sync-production.ts` copies a playlist's lessons — videos, templates, segments, media matches, assets and their files — to production with the same ids:
+
+```bash
+# 1. on the preparing machine (local .env)
+npx tsx scripts/studio-sync-production.ts export --playlist "Marketplace Literacy Youth Africa" --out sync/youth-africa
+
+# 2. against production (values from the Netlify site: netlify env:get <NAME> --site c4c93f37-…)
+DATABASE_URL=… DIRECT_URL=… STUDIO_STORAGE_DRIVER=s3 STUDIO_S3_ENDPOINT=… STUDIO_S3_REGION=… STUDIO_S3_BUCKET=… STUDIO_S3_ACCESS_KEY_ID=… STUDIO_S3_SECRET_ACCESS_KEY=… STUDIO_S3_PUBLIC_URL=… npx tsx scripts/studio-sync-production.ts import --bundle sync/youth-africa --set-main
+```
+
+`--dry-run` connects and reports what would change without writing. The import generates a Postgres client into `node_modules/.prisma/client-postgres`, so the local SQLite client keeps working. Re-running skips files already in the bucket and upserts rows. The Youth Africa bundle is 772 files / 806 MB (25 master videos ≤ 47 MB each, under the 50 MB Supabase object limit).
+
+**Status 2026-09-22:** code deployed (`da95257`), studio tables created on the production Postgres (`prisma db push`, additive). The Supabase bucket is configured on Netlify (`STUDIO_S3_ENDPOINT/BUCKET/PUBLIC_URL`) but `STUDIO_S3_ACCESS_KEY_ID` / `STUDIO_S3_SECRET_ACCESS_KEY` are empty, so neither the content import nor in-app uploads (narration, assets) work on the site until the bucket keys are set (Supabase → Project Settings → Storage → S3 access keys). `OPENAI_API_KEY` / `ELEVENLABS_API_KEY` are also empty (translation and AI voice disabled with a friendly message).
