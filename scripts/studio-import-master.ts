@@ -8,7 +8,7 @@ import { importMasterLesson, lessonNumberFromFilename, parseScriptText } from "@
  *
  *   npx tsx scripts/studio-import-master.ts --media "<folder with the .mp4 files>" \
  *       --script docs/educator-studio/scripts/marketplace-literacy-global-en.txt \
- *       --playlist "Marketplace Literacy - Global" [--only 1,2,3-1] [--format "Image Diaries"]
+ *       --playlist "Marketplace Literacy - Global" [--only 1,2,3-1] [--format "Image Diaries"] [--title-suffix "— Youth Africa"] [--region Africa]
  *
  * Needs FFmpeg on PATH (or FFMPEG_PATH/FFPROBE_PATH) and the same DATABASE_URL /
  * storage settings as the web app. Safe to re-run: lessons whose template
@@ -24,10 +24,12 @@ async function main() {
   const scriptFile = arg("script", "docs/educator-studio/scripts/marketplace-literacy-global-en.txt")!;
   const playlistTitle = arg("playlist", "Marketplace Literacy - Global")!;
   const resourceFormat = arg("format", "Image Diaries");
+  const titleSuffix = arg("title-suffix", "");
+  const region = arg("region", "Global");
   const only = (arg("only") ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
   if (!mediaDir) throw new Error("--media <folder> is required");
 
-  const lessons = parseScriptText(await readFile(scriptFile, "utf8"));
+  const lessons = parseScriptText(await readFile(scriptFile, "utf8")).map((lesson) => ({ ...lesson, title: titleSuffix ? `${lesson.title} ${titleSuffix}`.trim() : lesson.title }));
   const files = (await readdir(mediaDir)).filter((file) => /\.(mp4|mov|m4v)$/i.test(file));
   const byNumber = new Map<string, string>();
   for (const file of files) {
@@ -46,7 +48,7 @@ async function main() {
       continue;
     }
     try {
-      const result = await importMasterLesson({ lesson, mediaFile, playlistTitle, resourceFormat, createdById: admin?.id ?? null, log: (message) => console.log(`  ${message}`) });
+      const result = await importMasterLesson({ lesson, mediaFile, playlistTitle, resourceFormat, region, createdById: admin?.id ?? null, log: (message) => console.log(`  ${message}`) });
       if (result.skipped) console.log(`- ${lesson.number} ${lesson.title}: skipped (${result.skipped})`);
       else {
         imported += 1;

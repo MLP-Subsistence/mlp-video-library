@@ -24,13 +24,14 @@ export default async function AdminStudioPage({ searchParams }: { searchParams: 
   const tab = tabs.some(([key]) => key === params.tab) ? (params.tab as (typeof tabs)[number][0]) : "users";
   const me = await getCurrentUser();
   const admin = isAdminRole(me?.role);
-  const [users, usage, settings, jobs, projects, ledger] = await Promise.all([
+  const [users, usage, settings, jobs, projects, ledger, playlists] = await Promise.all([
     prisma.user.findMany({ orderBy: [{ role: "asc" }, { name: "asc" }] }),
     prisma.studioVoiceUsage.groupBy({ by: ["userId"], _sum: { credits: true }, where: { status: { in: ["reserved", "charged"] } } }),
     getStudioSettings(),
     prisma.studioJob.findMany({ orderBy: { createdAt: "desc" }, take: 40, include: { project: { select: { title: true, targetLanguageName: true } }, createdBy: { select: { name: true } } } }),
     prisma.studioProject.count(),
-    prisma.studioVoiceUsage.findMany({ orderBy: { createdAt: "desc" }, take: 40, include: { user: { select: { name: true } }, project: { select: { title: true } } } })
+    prisma.studioVoiceUsage.findMany({ orderBy: { createdAt: "desc" }, take: 40, include: { user: { select: { name: true } }, project: { select: { title: true } } } }),
+    prisma.playlist.findMany({ where: { videos: { some: {} } }, include: { language: true }, orderBy: [{ language: { sortOrder: "asc" } }, { title: "asc" }] })
   ]);
   const usedByUser = new Map(usage.map((row) => [row.userId, row._sum.credits ?? 0]));
   const globalUsed = usage.reduce((sum, row) => sum + (row._sum.credits ?? 0), 0);
@@ -129,7 +130,10 @@ export default async function AdminStudioPage({ searchParams }: { searchParams: 
             <TextField label="Translation model" name="translationModel" defaultValue={settings.translationModel} />
             <TextField label="Transcription model (full narration alignment)" name="transcriptionModel" defaultValue={settings.transcriptionModel} />
             <TextField label="Global AI Voice credit pool (0 = no cap)" name="globalCreditPool" type="number" defaultValue={settings.globalCreditPool} />
-            <div />
+            <SelectField label="Main lesson playlist (shown first in New Localization)" name="defaultPlaylistId" defaultValue={settings.defaultPlaylistId ?? ""}>
+              <option value="">No default</option>
+              {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.title}{playlist.language ? ` (${playlist.language.name})` : ""}</option>)}
+            </SelectField>
             <TextArea label="Shared glossary — one term per line, optionally 'term = preferred translation'" name="glossary" defaultValue={settings.glossary} />
             <div className="md:col-span-2"><SaveButton label="Save studio settings" disabled={!admin} /></div>
           </form>

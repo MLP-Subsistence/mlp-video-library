@@ -236,6 +236,8 @@ export type LibraryPlaylistDto = {
   languageCode: string | null;
   videoCount: number;
   readyCount: number;
+  /** Chosen by the administrator as the main lesson playlist; listed and preselected first. */
+  isDefault: boolean;
   videos: Array<{
     id: string;
     title: string;

@@ -78,7 +78,8 @@ export async function updateStudioSettingsAction(formData: FormData) {
       translationModel: cleanText(formData.get("translationModel")) || "gpt-4.1-mini",
       transcriptionModel: cleanText(formData.get("transcriptionModel")) || "whisper-1",
       globalCreditPool: Math.max(0, Math.round(Number(formData.get("globalCreditPool")) || 0)),
-      glossary: (cleanOptional(formData.get("glossary")) ?? "").slice(0, 8000)
+      glossary: (cleanOptional(formData.get("glossary")) ?? "").slice(0, 8000),
+      defaultPlaylistId: cleanOptional(formData.get("defaultPlaylistId"))
     }
   });
   back({ success: "Studio settings saved." }, "settings");

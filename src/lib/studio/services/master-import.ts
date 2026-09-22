@@ -229,6 +229,7 @@ export async function importMasterLesson(options: {
   playlistTitle: string;
   languageCode?: string;
   resourceFormat?: string;
+  region?: string;
   createdById?: string | null;
   log?: (message: string) => void;
 }): Promise<ImportResult> {
@@ -236,6 +237,7 @@ export async function importMasterLesson(options: {
   const log = options.log ?? (() => undefined);
   const languageCode = options.languageCode ?? "en";
   const resourceFormat = options.resourceFormat ?? "Image Diaries";
+  const region = options.region ?? "Global";
 
   const language = await prisma.language.findFirst({ where: { code: languageCode } });
   if (!language) throw new Error(`Language ${languageCode} is not in the library`);
@@ -246,13 +248,13 @@ export async function importMasterLesson(options: {
   let playlist = await prisma.playlist.findFirst({ where: { title: options.playlistTitle, languageId: language.id } });
   if (!playlist) {
     playlist = await prisma.playlist.create({
-      data: { title: options.playlistTitle, shortTitle: options.playlistTitle, languageId: language.id, moduleId: lessonModule?.id ?? null, visibility: "Published", featured: true, tags: `Marketplace Literacy, ${language.name}, ${resourceFormat}` }
+      data: { title: options.playlistTitle, shortTitle: options.playlistTitle, languageId: language.id, moduleId: lessonModule?.id ?? null, region, visibility: "Published", featured: true, tags: `Marketplace Literacy, ${language.name}, ${resourceFormat}` }
     });
     log(`created playlist "${playlist.title}"`);
   }
   const wanted = normalizeTitle(lesson.title);
   const candidates = await prisma.video.findMany({ where: { languageId: language.id }, select: { id: true, title: true, resourceTitle: true } });
-  let video = candidates.find((entry) => normalizeTitle(entry.resourceTitle || entry.title) === wanted || normalizeTitle(entry.title).endsWith(wanted)) ?? null;
+  let video = candidates.find((entry) => normalizeTitle(entry.resourceTitle || entry.title) === wanted) ?? null;
   const transcript = lesson.lines.join("\n");
   if (!video) {
     video = await prisma.video.create({
@@ -267,6 +269,7 @@ export async function importMasterLesson(options: {
         orderIndex: lesson.sequence,
         languageId: language.id,
         moduleId: lessonModule?.id ?? null,
+        region,
         visibility: "Draft",
         tags: `Marketplace Literacy, ${language.name}, ${categoryName}, ${resourceFormat}`
       },

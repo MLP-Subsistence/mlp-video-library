@@ -49,3 +49,9 @@ What that means:
 - `index` / `match` / `ingest` work and are reusable: export another account's library the same way (open its Downloads page, run the small in-page script that saves `shutterstock-library-<userId>.json`), then `index --json … && match`, redownload the `needed-ids.json` images with the free **Redownload** button, and `ingest --downloads …` attaches them.
 - Free **Redownload** on the website is `POST /napi/licensees/current/redownload` (triggered by the card's ⋯ → Redownload → Redownload); the file lands in the browser's Downloads as `shutterstock_<id>.jpg`. One image (2727785083) was redownloaded as a test.
 - Until the right account is found, segments keep the original-video visual (captioned) or the **Use cropped frame** fallback.
+
+## Youth Africa masters (2026-09-22)
+
+The owner's main template set is now **"Marketplace Literacy Youth Africa"** — 25 lessons (1 … 15) imported from `D:\From Downloadssss\MLP PLAYLISTS\MLP AFRICA\New folder (2)` with `--title-suffix "— Youth Africa" --region Africa` (same English script; 7 lessons matched pause-for-line exactly, the rest via the DP matcher, 4-1 and 7-1 need a look). An administrator picks the **Main lesson playlist** under `/admin/studio → Providers & Glossary`; it is listed first and preselected in New Localization (`StudioSettings.defaultPlaylistId`).
+
+Matching the 397 Youth Africa segment frames against account 367425665's 1,687 licensed images also found **no real matches** (top candidates are unrelated at distance 12–16), even though the library holds ~300 African photos. The Ghana/West-Africa photos in these videos (orange-shirt vendor, "OPEN" sign, kente market scenes) were therefore licensed on another account or came from another source — the video producer should say which.

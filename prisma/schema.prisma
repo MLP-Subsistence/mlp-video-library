@@ -201,6 +201,7 @@ model StudioSettings {
   transcriptionModel String   @default("whisper-1")
   globalCreditPool   Int      @default(0)
   glossary           String   @default("")
+  defaultPlaylistId  String?
   updatedAt          DateTime @updatedAt
 }
 

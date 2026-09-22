@@ -143,7 +143,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
       .then((data) => {
         setError(null);
         setPlaylists(data.playlists);
-        setPlaylistId((current) => current || data.playlists.find((entry) => entry.readyCount > 0)?.id || data.playlists[0]?.id || "");
+        setPlaylistId((current) => current || data.playlists.find((entry) => entry.isDefault)?.id || data.playlists.find((entry) => entry.readyCount > 0)?.id || data.playlists[0]?.id || "");
       })
       .catch((caught) => setError((caught as Error).message));
   }, [open]);
@@ -214,7 +214,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
                 {playlists.map((entry) => (
                   <button key={entry.id} type="button" onClick={() => { setPlaylistId(entry.id); setVideoId(""); }} className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm ${playlistId === entry.id ? "bg-[#fbeaea] font-extrabold text-[#243447] ring-1 ring-[#e5ccd0]" : "font-semibold text-[#526579] hover:bg-[#f7f8fa]"}`}>
                     <span className="min-w-0">
-                      <span className="block truncate">{entry.title}</span>
+                      <span className="block truncate">{entry.title}{entry.isDefault ? <span className="ml-1 rounded bg-[#fbeaea] px-1 text-[10px] font-extrabold uppercase text-[#a64026]">Main</span> : null}</span>
                       <span className="block text-xs font-normal text-[#8b9bad]">{entry.language ?? "—"} · {entry.videoCount} lesson{entry.videoCount === 1 ? "" : "s"}</span>
                     </span>
                     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${entry.readyCount ? "bg-green-50 text-green-700" : "bg-[#f2f4f7] text-[#8b9bad]"}`}>{entry.readyCount} ready</span>

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ok, requireStudioApiUser, studioRoute } from "@/lib/studio/access";
 import { resourceImage } from "@/lib/resource-taxonomy";
+import { getStudioSettings } from "@/lib/studio/settings";
 import type { LibraryPlaylistDto } from "@/lib/studio/types";
 
 /**
@@ -11,7 +12,7 @@ import type { LibraryPlaylistDto } from "@/lib/studio/types";
  */
 export const GET = studioRoute(async () => {
   await requireStudioApiUser();
-  const [playlists, templates] = await Promise.all([
+  const [playlists, templates, settings] = await Promise.all([
     prisma.playlist.findMany({
       where: { visibility: { not: "Hidden" } },
       include: { language: true, videos: { include: { video: { include: { language: true } } }, orderBy: { sortOrder: "asc" } } },
@@ -20,7 +21,8 @@ export const GET = studioRoute(async () => {
     prisma.studioTemplate.findMany({
       where: { sourceVideoId: { not: null } },
       include: { _count: { select: { segments: true } }, projects: { select: { targetLanguageName: true } } }
-    })
+    }),
+    getStudioSettings()
   ]);
   const templateByVideo = new Map(templates.map((template) => [template.sourceVideoId as string, template]));
   const result: LibraryPlaylistDto[] = playlists
@@ -49,10 +51,11 @@ export const GET = studioRoute(async () => {
         languageCode: playlist.language?.code ?? null,
         videoCount: videos.length,
         readyCount: videos.filter((video) => video.templateStatus === "ready").length,
+        isDefault: playlist.id === settings.defaultPlaylistId,
         videos
       };
     });
   // Playlists with prepared lessons first so educators find them immediately.
-  result.sort((a, b) => b.readyCount - a.readyCount || a.title.localeCompare(b.title));
+  result.sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || b.readyCount - a.readyCount || a.title.localeCompare(b.title));
   return ok({ playlists: result });
 });
