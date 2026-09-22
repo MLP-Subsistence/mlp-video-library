@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
-import { useMatch } from "@/lib/studio/services/media-matches";
+import { applyMediaMatch } from "@/lib/studio/services/media-matches";
 import { bestDistance, frameHashes, phash } from "@/lib/studio/services/phash";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
 
@@ -170,7 +170,7 @@ async function ingestDownloads() {
     }
     for (const match of matches) {
       if (match.status === "chosen" && match.assetId === asset.id) continue;
-      await useMatch(match.id, { uploadedAssetId: asset.id, userId: admin?.id ?? null });
+      await applyMediaMatch(match.id, { uploadedAssetId: asset.id, userId: admin?.id ?? null });
       attached += 1;
     }
   }

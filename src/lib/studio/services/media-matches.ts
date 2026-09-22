@@ -91,7 +91,7 @@ async function setSegmentVisual(segmentId: string, assetId: string) {
 }
 
 /** Fallback without Shutterstock: store the caption-cropped frame as an image asset and use it. */
-export async function useCleanFrame(segmentId: string, userId: string | null) {
+export async function applyCleanFrame(segmentId: string, userId: string | null) {
   const { segment, frame, bytes, width, height } = await cleanFrameBytes(segmentId);
   const key = buildStorageKey(`masters/clean-frames/${segment.templateId}`, `${segment.key}-clean.jpg`);
   await storage().put(key, bytes, "image/jpeg");
@@ -118,7 +118,7 @@ export async function useCleanFrame(segmentId: string, userId: string | null) {
  * manager already licensed the file on shutterstock.com and uploaded it; without
  * it we license through the API subscription and download the file.
  */
-export async function useMatch(matchId: string, options: { uploadedAssetId?: string | null; userId: string | null }) {
+export async function applyMediaMatch(matchId: string, options: { uploadedAssetId?: string | null; userId: string | null }) {
   const match = await prisma.studioMediaMatch.findUnique({ where: { id: matchId }, include: { segment: true } });
   if (!match) throw new StudioError("That match no longer exists.", 404);
   let assetId = options.uploadedAssetId ?? null;
