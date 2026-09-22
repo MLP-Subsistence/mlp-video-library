@@ -1,11 +1,11 @@
-import type { Composition, CompositionSlot, LayoutDefinition } from "@/lib/studio/types";
+import type { Composition, CompositionSlot, LayoutDefinition, LayoutSlotRect } from "@/lib/studio/types";
 
 /**
  * Visual layouts are data. Slot rectangles are expressed in 0..1 frame units
  * so the same definition drives the browser preview, the timeline detail
  * and the FFmpeg render.
  */
-export const layouts: LayoutDefinition[] = [
+const standardLayouts: LayoutDefinition[] = [
   {
     id: "full",
     label: "Full Screen",
@@ -78,6 +78,62 @@ export const layouts: LayoutDefinition[] = [
     ]
   }
 ];
+
+/**
+ * Friendly circle collages. The stored layout id includes the number of
+ * circles, so the user's choice survives without adding another database
+ * field. The rectangles are sized for a 16:9 lesson frame and render as
+ * near-perfect circles in both the browser and FFmpeg.
+ */
+function circleLayout(count: number): LayoutDefinition {
+  const definitions: Record<number, LayoutSlotRect[]> = {
+    2: [
+      { x: 0.08, y: 0.16, w: 0.38, h: 0.68, shape: "circle" },
+      { x: 0.54, y: 0.16, w: 0.38, h: 0.68, shape: "circle" }
+    ],
+    3: [
+      { x: 0.03, y: 0.24, w: 0.29, h: 0.52, shape: "circle" },
+      { x: 0.355, y: 0.24, w: 0.29, h: 0.52, shape: "circle" },
+      { x: 0.68, y: 0.24, w: 0.29, h: 0.52, shape: "circle" }
+    ],
+    4: [
+      { x: 0.205, y: 0.02, w: 0.27, h: 0.48, shape: "circle" },
+      { x: 0.525, y: 0.02, w: 0.27, h: 0.48, shape: "circle" },
+      { x: 0.205, y: 0.5, w: 0.27, h: 0.48, shape: "circle" },
+      { x: 0.525, y: 0.5, w: 0.27, h: 0.48, shape: "circle" }
+    ],
+    5: [
+      { x: 0.22, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.54, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.05, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.38, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.71, y: 0.53, w: 0.24, h: 0.43, shape: "circle" }
+    ],
+    6: [
+      { x: 0.05, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.38, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.71, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.05, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.38, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
+      { x: 0.71, y: 0.53, w: 0.24, h: 0.43, shape: "circle" }
+    ]
+  };
+  const safeCount = Math.min(6, Math.max(2, Math.round(count)));
+  return {
+    id: `circles${safeCount}`,
+    label: `${safeCount} Circles`,
+    description: `${safeCount} circular media areas.`,
+    slots: definitions[safeCount]
+  };
+}
+
+export const circleLayouts = [2, 3, 4, 5, 6].map(circleLayout);
+export const layouts: LayoutDefinition[] = [...standardLayouts, ...circleLayouts];
+
+export function circleCountForLayout(id: string | null | undefined) {
+  const match = /^circles([2-6])$/.exec(id ?? "");
+  return match ? Number(match[1]) : null;
+}
 
 export function getLayout(id: string | null | undefined): LayoutDefinition {
   return layouts.find((layout) => layout.id === id) ?? layouts[0];

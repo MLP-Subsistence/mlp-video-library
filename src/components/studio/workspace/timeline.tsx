@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Play, Plus } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Play, Plus, Type } from "lucide-react";
 import { Waveform } from "@/components/studio/workspace/waveform";
 import { formatClock } from "@/lib/studio/timing";
 import type { ProjectDto, ProjectSegmentDto, TimelineBlock } from "@/lib/studio/types";
@@ -174,6 +174,25 @@ export function Timeline({
               ))}
             </div>
 
+            {/* Text track: the translation already edited in the Script panel. */}
+            <Track label="Text" icon={Type} labelWidth={LABEL_WIDTH} compact>
+              {timeline.blocks.map((block) => {
+                const segment = segmentById.get(block.segmentId);
+                if (!segment) return null;
+                const isActive = block.segmentId === activeSegmentId;
+                const text = segment.translation.trim() || segment.sourceScript.trim() || segment.title;
+                const textWarnings = segment.warnings.filter((warning) => warning.code.startsWith("translation"));
+                return (
+                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} warnings={textWarnings}>
+                    <div className="flex h-full items-center gap-1.5 px-2" title={text}>
+                      <Type className="size-3 shrink-0 text-[#a64026]" />
+                      <span className="truncate text-[10px] font-bold text-[#243447]">{text}</span>
+                    </div>
+                  </Block>
+                );
+              })}
+            </Track>
+
             {/* Video track */}
             <Track label="Video" icon={Film} labelWidth={LABEL_WIDTH} large={large}>
               {timeline.blocks.map((block) => {
@@ -218,7 +237,7 @@ export function Timeline({
                 if (!segment) return null;
                 const isActive = block.segmentId === activeSegmentId;
                 const narration = segment.narration;
-                const audioWarnings = segment.warnings.filter((warning) => warning.code.startsWith("narration") || warning.code.startsWith("translation"));
+                const audioWarnings = segment.warnings.filter((warning) => warning.code.startsWith("narration"));
                 return (
                   <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} warnings={audioWarnings}>
                     <div className="flex h-full w-full items-stretch">
@@ -262,9 +281,9 @@ export function Timeline({
   );
 }
 
-function Track({ label, icon: Icon, labelWidth, large, children }: { label: string; icon: typeof Film; labelWidth: number; large?: boolean; children: React.ReactNode }) {
+function Track({ label, icon: Icon, labelWidth, large, compact, children }: { label: string; icon: typeof Film; labelWidth: number; large?: boolean; compact?: boolean; children: React.ReactNode }) {
   return (
-    <div className={`relative flex items-stretch border-b border-[#edf0f3] last:border-b-0 ${large ? "h-28" : "h-14"}`}>
+    <div className={`relative flex items-stretch border-b border-[#edf0f3] last:border-b-0 ${compact ? "h-11" : large ? "h-28" : "h-14"}`}>
       <div className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-white pl-3 text-[10px] font-extrabold uppercase tracking-wide text-[#6b7c8f]" style={{ width: labelWidth }}>
         <Icon className="size-3.5" /> {label}
       </div>

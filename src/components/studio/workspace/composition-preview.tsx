@@ -52,7 +52,7 @@ export function CompositionPreview({
         }
         const asset = active ? assets[active.assetId] : null;
         return (
-          <div key={slot.id} className="absolute overflow-hidden bg-[#0d1a2b]" style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.w * 100}%`, height: `${rect.h * 100}%` }}>
+          <div key={slot.id} className="absolute overflow-hidden bg-[#0d1a2b]" style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.w * 100}%`, height: `${rect.h * 100}%`, borderRadius: rect.shape === "circle" ? "9999px" : undefined }}>
             {asset ? (
               asset.kind === "video" ? (
                 <SlotVideo url={asset.url} fit={slot.fit} timeSec={(active?.startSec ?? 0) + (localTime - activeStart)} playing={playing} />

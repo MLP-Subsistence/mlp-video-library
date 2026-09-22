@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { ok, readJson, requireStudioApiUser, StudioError, studioRoute } from "@/lib/studio/access";
 import { assetToDto } from "@/lib/studio/project-state";
 import { cleanOptional, cleanText } from "@/lib/sanitize";
-import { assetUsage } from "@/lib/studio/services/assets";
+import { assetUsageMap } from "@/lib/studio/services/assets";
 import { allowedMimeTypes, isSafeStorageKey, storage, storageObjectExists } from "@/lib/studio/storage";
 import type { AssetKind } from "@/lib/studio/types";
 
@@ -23,8 +23,8 @@ export const GET = studioRoute(async (request: Request) => {
     orderBy: { createdAt: "desc" },
     take
   });
-  const usage = withUsage ? await Promise.all(assets.map((asset) => assetUsage(asset.id))) : [];
-  return ok({ assets: assets.map((asset, index) => assetToDto(asset, withUsage ? usage[index].segments : undefined)) });
+  const usage = withUsage ? await assetUsageMap(assets.map((asset) => asset.id)) : null;
+  return ok({ assets: assets.map((asset) => assetToDto(asset, usage ? usage.get(asset.id)?.segments ?? 0 : undefined)) });
 });
 
 /** Step 3 of an upload: the file is already in storage; record it. */

@@ -181,9 +181,16 @@ async function renderSegment(options: {
       }
       itemLabels.push(`[${label}]`);
     });
+    const joinedSlotLabel = `slot${slotCounter}joined`;
+    if (itemLabels.length === 1) filters.push(`${itemLabels[0]}null[${joinedSlotLabel}]`);
+    else filters.push(`${itemLabels.join("")}concat=n=${itemLabels.length}:v=1:a=0[${joinedSlotLabel}]`);
     const slotLabel = `slot${slotCounter}`;
-    if (itemLabels.length === 1) filters.push(`${itemLabels[0]}null[${slotLabel}]`);
-    else filters.push(`${itemLabels.join("")}concat=n=${itemLabels.length}:v=1:a=0[${slotLabel}]`);
+    if (rect.shape === "circle") {
+      // Add a circular alpha mask so circle collages match the browser preview.
+      filters.push(`[${joinedSlotLabel}]format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte((X-W/2)*(X-W/2)/((W/2)*(W/2))+(Y-H/2)*(Y-H/2)/((H/2)*(H/2)),1),255,0)'[${slotLabel}]`);
+    } else {
+      filters.push(`[${joinedSlotLabel}]null[${slotLabel}]`);
+    }
     const next = `v${slotCounter}`;
     filters.push(`[${current}][${slotLabel}]overlay=${sx}:${sy}:eof_action=repeat[${next}]`);
     current = next;

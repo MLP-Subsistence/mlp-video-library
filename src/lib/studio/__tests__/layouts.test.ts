@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compositionAssetIds, compositionHasVisual, emptyComposition, getLayout, layouts, normalizeComposition, parseComposition, replaceMainVisual } from "../layouts";
+import { circleCountForLayout, compositionAssetIds, compositionHasVisual, emptyComposition, getLayout, layouts, normalizeComposition, parseComposition, replaceMainVisual } from "../layouts";
 
 test("every layout has slot rectangles inside the frame", () => {
   for (const layout of layouts) {
@@ -10,6 +10,17 @@ test("every layout has slot rectangles inside the frame", () => {
     }
   }
   assert.equal(getLayout("does-not-exist").id, "full");
+});
+
+test("circle layouts retain their chosen number of media areas", () => {
+  for (let count = 2; count <= 6; count += 1) {
+    const layout = getLayout(`circles${count}`);
+    assert.equal(layout.slots.length, count);
+    assert.ok(layout.slots.every((slot) => slot.shape === "circle"));
+    assert.equal(circleCountForLayout(layout.id), count);
+    assert.equal(emptyComposition(layout.id).slots.length, count);
+  }
+  assert.equal(circleCountForLayout("grid4"), null);
 });
 
 test("parseComposition survives garbage and normalizes shares", () => {

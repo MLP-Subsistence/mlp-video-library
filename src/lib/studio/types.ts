@@ -26,7 +26,7 @@ export type Composition = {
   slots: CompositionSlot[];
 };
 
-export type LayoutSlotRect = { x: number; y: number; w: number; h: number };
+export type LayoutSlotRect = { x: number; y: number; w: number; h: number; shape?: "rect" | "circle" };
 
 export type LayoutDefinition = {
   id: string;
