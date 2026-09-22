@@ -14,7 +14,7 @@ https://marketplaceliteracyapp.org/
 - Apple ID: `6797343611`
 - Bundle ID: `org.marketplaceliteracy.app`
 - Version: `1.0.0`
-- First build number: `1`
+- Next prepared build number: `8` (verify against App Store Connect before upload)
 
 ## Why this uses XcodeGen
 
@@ -43,4 +43,3 @@ In Xcode:
 Use the GitHub Actions workflow at `.github/workflows/ios-app-store.yml`, or mirror the same commands in Codemagic/Bitrise.
 
 Signing/upload still requires Apple credentials stored as secure secrets. Do not commit certificates, private keys, API keys, provisioning profiles, or passwords.
-

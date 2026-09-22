@@ -39,6 +39,9 @@ export default function PrivacyPage() {
               <p className="mt-3">
                 Administrators may choose to upload resource thumbnails and submit resource titles, descriptions, transcripts, notes, and other library metadata. Public visitors may optionally submit search terms when using the library search feature.
               </p>
+              <p className="mt-3">
+                On iPhone and iPad, saved lessons, completion status, personal lesson notes, and a copy of the public lesson catalog are stored on the device for offline access. These learning records are not sent to Marketplace Literacy Project servers and are removed when the app is deleted.
+              </p>
             </section>
 
             <section>
