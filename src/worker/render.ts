@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "fs/promises";
 import path from "path";
+import sharp from "sharp";
 import type { StudioAsset } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getLayout } from "@/lib/studio/layouts";
@@ -120,6 +121,13 @@ export async function renderProject(options: { projectId: string; userId: string
   }
 }
 
+/** White polygon on black: FFmpeg's `alphamerge` turns this into the slot's alpha. */
+async function writePolygonMask(file: string, points: Array<[number, number]>, width: number, height: number) {
+  const path2d = points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${(x * width).toFixed(2)},${(y * height).toFixed(2)}`).join(" ");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#000"/><path d="${path2d} Z" fill="#fff"/></svg>`;
+  await sharp(Buffer.from(svg)).png().toFile(file);
+}
+
 function slug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "lesson";
 }
@@ -145,6 +153,9 @@ async function renderSegment(options: {
   filters.push(`color=c=black:s=${width}x${height}:r=${fps}:d=${duration.toFixed(3)}[base]`);
   let current = "base";
   let slotCounter = 0;
+  // Alpha masks for clipped slots are written before FFmpeg runs.
+  const maskJobs: Array<{ file: string; points: Array<[number, number]>; width: number; height: number }> = [];
+  const maskFiles = segment.composition.slots.map((_, index) => path.join(path.dirname(options.output), `${segment.id}-mask-${index}.png`));
 
   segment.composition.slots.forEach((slot, slotIndex) => {
     if (slot.items.length === 0) return;
@@ -186,7 +197,15 @@ async function renderSegment(options: {
     if (itemLabels.length === 1) filters.push(`${itemLabels[0]}null[${joinedSlotLabel}]`);
     else filters.push(`${itemLabels.join("")}concat=n=${itemLabels.length}:v=1:a=0[${joinedSlotLabel}]`);
     const slotLabel = `slot${slotCounter}`;
-    if (rect.shape === "circle") {
+    if (rect.clip?.length) {
+      // Pie slices: cut the polygon out with an alpha mask built from the same
+      // points the browser preview clips with.
+      maskJobs.push({ file: maskFiles[slotCounter], points: rect.clip, width: sw, height: sh });
+      args.push("-loop", "1", "-framerate", String(fps), "-t", duration.toFixed(3), "-i", maskFiles[slotCounter]);
+      filters.push(`[${inputIndex}:v]format=gray,scale=${sw}:${sh},fps=${fps}[mask${slotCounter}]`);
+      inputIndex += 1;
+      filters.push(`[${joinedSlotLabel}]format=rgba[rgba${slotCounter}];[rgba${slotCounter}][mask${slotCounter}]alphamerge[${slotLabel}]`);
+    } else if (rect.shape === "circle") {
       // Add a circular alpha mask so circle collages match the browser preview.
       filters.push(`[${joinedSlotLabel}]format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte((X-W/2)*(X-W/2)/((W/2)*(W/2))+(Y-H/2)*(Y-H/2)/((H/2)*(H/2)),1),255,0)'[${slotLabel}]`);
     } else {
@@ -197,6 +216,8 @@ async function renderSegment(options: {
     current = next;
     slotCounter += 1;
   });
+  for (const job of maskJobs) await writePolygonMask(job.file, job.points, job.width, job.height);
+
   const onScreenText = segment.composition.textOverlay;
   if (onScreenText?.text.trim()) {
     const overlayFile = path.join(path.dirname(options.output), `${segment.id}-text.png`);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { circleCountForLayout, compositionAssetIds, compositionHasVisual, emptyComposition, getLayout, layouts, normalizeComposition, parseComposition, replaceMainVisual } from "../layouts";
+import { clipPathForSlot, pieCountForLayout, compositionAssetIds, compositionHasVisual, emptyComposition, getLayout, layouts, normalizeComposition, parseComposition, replaceMainVisual } from "../layouts";
 import { DEFAULT_TEXT_OVERLAY } from "../text-overlay";
 
 test("every layout has slot rectangles inside the frame", () => {
@@ -13,15 +13,33 @@ test("every layout has slot rectangles inside the frame", () => {
   assert.equal(getLayout("does-not-exist").id, "full");
 });
 
-test("circle layouts retain their chosen number of media areas", () => {
-  for (let count = 2; count <= 6; count += 1) {
-    const layout = getLayout(`circles${count}`);
+test("a pie layout cuts the circle into the chosen number of slices", () => {
+  for (let count = 2; count <= 8; count += 1) {
+    const layout = getLayout(`pie${count}`);
     assert.equal(layout.slots.length, count);
-    assert.ok(layout.slots.every((slot) => slot.shape === "circle"));
-    assert.equal(circleCountForLayout(layout.id), count);
+    assert.ok(layout.slots.every((slot) => slot.shape === "wedge"), layout.id);
+    assert.equal(pieCountForLayout(layout.id), count);
     assert.equal(emptyComposition(layout.id).slots.length, count);
+    for (const slot of layout.slots) {
+      // Every slice stays inside the frame and carries a polygon in its own box.
+      assert.ok(slot.x >= 0 && slot.y >= 0 && slot.x + slot.w <= 1.0001 && slot.y + slot.h <= 1.0001, `${layout.id} bounds`);
+      assert.ok((slot.clip?.length ?? 0) >= 8, `${layout.id} clip points`);
+      assert.ok(slot.clip!.every(([x, y]) => x >= -0.0001 && x <= 1.0001 && y >= -0.0001 && y <= 1.0001), `${layout.id} clip range`);
+      assert.ok(clipPathForSlot(slot)!.startsWith("polygon("));
+    }
   }
-  assert.equal(circleCountForLayout("grid4"), null);
+  assert.equal(pieCountForLayout("grid4"), null);
+  assert.equal(clipPathForSlot(getLayout("split2").slots[0]), undefined);
+  // The slices together cover the circle: two opposite slices are mirror images.
+  const [first, second] = getLayout("pie2").slots;
+  assert.ok(Math.abs(first.w - second.w) < 0.001 && Math.abs(first.h - second.h) < 0.001);
+});
+
+test("segments saved with the old circle collage still render", () => {
+  const legacy = getLayout("circles3");
+  assert.equal(legacy.slots.length, 3);
+  assert.ok(legacy.slots.every((slot) => slot.shape === "circle"));
+  assert.equal(pieCountForLayout(legacy.id), null);
 });
 
 test("parseComposition survives garbage and normalizes shares", () => {

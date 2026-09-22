@@ -81,63 +81,103 @@ const standardLayouts: LayoutDefinition[] = [
 ];
 
 /**
- * Friendly circle collages. The stored layout id includes the number of
- * circles, so the user's choice survives without adding another database
- * field. The rectangles are sized for a 16:9 lesson frame and render as
- * near-perfect circles in both the browser and FFmpeg.
+ * One circle cut into equal slices, like a pie chart: each slice is its own
+ * media slot. The stored layout id carries the number of slices (`pie5`), so
+ * the choice survives without another database field.
+ *
+ * A slice is described by the bounding box of its wedge (so the media is
+ * scaled and cropped to that area) plus a polygon in the box's own 0..1
+ * coordinates, which the preview applies as a CSS clip-path and the renderer
+ * bakes into an alpha mask. The frame is 16:9, so the horizontal radius is
+ * the vertical one divided by the aspect ratio to keep the pie round.
  */
-function circleLayout(count: number): LayoutDefinition {
-  const definitions: Record<number, LayoutSlotRect[]> = {
-    2: [
-      { x: 0.08, y: 0.16, w: 0.38, h: 0.68, shape: "circle" },
-      { x: 0.54, y: 0.16, w: 0.38, h: 0.68, shape: "circle" }
-    ],
-    3: [
-      { x: 0.03, y: 0.24, w: 0.29, h: 0.52, shape: "circle" },
-      { x: 0.355, y: 0.24, w: 0.29, h: 0.52, shape: "circle" },
-      { x: 0.68, y: 0.24, w: 0.29, h: 0.52, shape: "circle" }
-    ],
-    4: [
-      { x: 0.205, y: 0.02, w: 0.27, h: 0.48, shape: "circle" },
-      { x: 0.525, y: 0.02, w: 0.27, h: 0.48, shape: "circle" },
-      { x: 0.205, y: 0.5, w: 0.27, h: 0.48, shape: "circle" },
-      { x: 0.525, y: 0.5, w: 0.27, h: 0.48, shape: "circle" }
-    ],
-    5: [
-      { x: 0.22, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.54, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.05, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.38, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.71, y: 0.53, w: 0.24, h: 0.43, shape: "circle" }
-    ],
-    6: [
-      { x: 0.05, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.38, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.71, y: 0.04, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.05, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.38, y: 0.53, w: 0.24, h: 0.43, shape: "circle" },
-      { x: 0.71, y: 0.53, w: 0.24, h: 0.43, shape: "circle" }
-    ]
-  };
-  const safeCount = Math.min(6, Math.max(2, Math.round(count)));
+const FRAME_ASPECT = 16 / 9;
+const PIE_RADIUS_Y = 0.47;
+/** A hairline gap so neighbouring slices read as separate pieces. */
+const PIE_GAP_RAD = 0.012;
+
+export const PIE_MIN_SLICES = 2;
+export const PIE_MAX_SLICES = 8;
+
+function wedgeSlot(index: number, count: number): LayoutSlotRect {
+  const cx = 0.5;
+  const cy = 0.5;
+  const ry = PIE_RADIUS_Y;
+  const rx = ry / FRAME_ASPECT;
+  const sweep = (Math.PI * 2) / count;
+  const start = -Math.PI / 2 + index * sweep + PIE_GAP_RAD;
+  const end = -Math.PI / 2 + (index + 1) * sweep - PIE_GAP_RAD;
+  const steps = Math.max(6, Math.ceil((sweep / (Math.PI * 2)) * 96));
+  const points: Array<[number, number]> = [[cx, cy]];
+  for (let step = 0; step <= steps; step += 1) {
+    const angle = start + ((end - start) * step) / steps;
+    points.push([cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)]);
+  }
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const w = Math.max(0.02, maxX - minX);
+  const h = Math.max(0.02, maxY - minY);
   return {
-    id: `circles${safeCount}`,
-    label: `${safeCount} Circles`,
-    description: `${safeCount} circular media areas.`,
-    slots: definitions[safeCount]
+    x: minX,
+    y: minY,
+    w,
+    h,
+    shape: "wedge",
+    clip: points.map(([px, py]) => [(px - minX) / w, (py - minY) / h] as [number, number])
   };
 }
 
-export const circleLayouts = [2, 3, 4, 5, 6].map(circleLayout);
-export const layouts: LayoutDefinition[] = [...standardLayouts, ...circleLayouts];
+function pieLayout(count: number): LayoutDefinition {
+  const slices = Math.min(PIE_MAX_SLICES, Math.max(PIE_MIN_SLICES, Math.round(count)));
+  return {
+    id: `pie${slices}`,
+    label: `Pie — ${slices} slices`,
+    description: `One circle split into ${slices} slices, each with its own image or video.`,
+    slots: Array.from({ length: slices }, (_, index) => wedgeSlot(index, slices))
+  };
+}
 
-export function circleCountForLayout(id: string | null | undefined) {
-  const match = /^circles([2-6])$/.exec(id ?? "");
+export const pieLayouts = Array.from({ length: PIE_MAX_SLICES - PIE_MIN_SLICES + 1 }, (_, index) => pieLayout(index + PIE_MIN_SLICES));
+
+/** Circle collages from before the pie layout; kept so saved segments still render. */
+const legacyCircleLayouts: LayoutDefinition[] = [2, 3, 4, 5, 6].map((count) => ({
+  id: `circles${count}`,
+  label: `${count} Circles`,
+  description: `${count} circular media areas.`,
+  slots: Array.from({ length: count }, (_, index) => {
+    const columns = count <= 3 ? count : Math.ceil(count / 2);
+    const rows = count <= 3 ? 1 : 2;
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const h = rows === 1 ? 0.6 : 0.44;
+    const w = h / FRAME_ASPECT;
+    const gapX = (1 - columns * w) / (columns + 1);
+    const gapY = (1 - rows * h) / (rows + 1);
+    return { x: gapX + column * (w + gapX), y: gapY + row * (h + gapY), w, h, shape: "circle" as const };
+  })
+}));
+
+export const layouts: LayoutDefinition[] = [...standardLayouts, ...pieLayouts];
+const allLayouts: LayoutDefinition[] = [...layouts, ...legacyCircleLayouts];
+
+/** Number of slices for a pie layout id, or null for every other layout. */
+export function pieCountForLayout(id: string | null | undefined) {
+  const match = /^pie([2-8])$/.exec(id ?? "");
   return match ? Number(match[1]) : null;
 }
 
+/** CSS `clip-path` for a slot, or undefined when the slot is a plain rectangle. */
+export function clipPathForSlot(rect: LayoutSlotRect) {
+  if (!rect.clip?.length) return undefined;
+  return `polygon(${rect.clip.map(([x, y]) => `${(x * 100).toFixed(2)}% ${(y * 100).toFixed(2)}%`).join(", ")})`;
+}
+
 export function getLayout(id: string | null | undefined): LayoutDefinition {
-  return layouts.find((layout) => layout.id === id) ?? layouts[0];
+  return allLayouts.find((layout) => layout.id === id) ?? allLayouts[0];
 }
 
 export function emptyComposition(layoutId = "full"): Composition {

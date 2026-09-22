@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronUp, ImagePlus, Minus, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { AssetLibrary, AssetThumb } from "@/components/studio/asset-library";
 import { Modal } from "@/components/studio/ui";
-import { balanceShares, circleCountForLayout, emptyComposition, getLayout, layouts, normalizeComposition } from "@/lib/studio/layouts";
+import { PIE_MAX_SLICES, PIE_MIN_SLICES, balanceShares, clipPathForSlot, emptyComposition, getLayout, layouts, normalizeComposition, pieCountForLayout } from "@/lib/studio/layouts";
 import type { Composition, StudioAssetDto } from "@/lib/studio/types";
 
 /**
@@ -39,11 +39,14 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
   const [busy, setBusy] = useState(false);
 
   const layout = getLayout(composition.layout);
-  const circleCount = circleCountForLayout(composition.layout);
+  const pieCount = pieCountForLayout(composition.layout);
   const layoutChoices = useMemo(() => {
-    const ordinary = layouts.filter((entry) => circleCountForLayout(entry.id) === null);
-    return [...ordinary, getLayout(`circles${circleCount ?? 3}`)];
-  }, [circleCount]);
+    // Every pie size shares one card; the stepper below picks the number of slices.
+    const ordinary = layouts.filter((entry) => pieCountForLayout(entry.id) === null);
+    return [...ordinary, getLayout(`pie${pieCount ?? 6}`)];
+  }, [pieCount]);
+  // Pie slices are "slices"; every other layout calls its areas "screens".
+  const slotNoun = pieCount !== null ? "Slice" : "Screen";
   const slot = composition.slots[activeSlot] ?? composition.slots[0];
   const slotItems = slot?.items ?? [];
 
@@ -59,7 +62,7 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
     setActiveSlot(Math.min(activeSlot, next.slots.length - 1));
   };
 
-  const changeCircleCount = (count: number) => changeLayout(`circles${Math.min(6, Math.max(2, count))}`);
+  const changePieCount = (count: number) => changeLayout(`pie${Math.min(PIE_MAX_SLICES, Math.max(PIE_MIN_SLICES, count))}`);
 
   const updateSlot = (index: number, updater: (slot: Composition["slots"][number]) => Composition["slots"][number]) => {
     setComposition((current) => ({ ...current, slots: current.slots.map((entry, i) => (i === index ? updater(entry) : entry)) }));
@@ -140,25 +143,36 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
                 <button key={entry.id} type="button" onClick={() => changeLayout(entry.id)} className={`rounded-xl border p-3 text-left transition ${composition.layout === entry.id ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
                   <span className="relative block aspect-video overflow-hidden rounded-md bg-[#f2f4f7]">
                     {entry.slots.map((rect, index) => (
-                      <span key={index} className="absolute border border-[#c9d0da] bg-white" style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.w * 100}%`, height: `${rect.h * 100}%`, borderRadius: rect.shape === "circle" ? "9999px" : "2px" }} />
+                      <span
+                        key={index}
+                        className="absolute border border-[#c9d0da] bg-white"
+                        style={{
+                          left: `${rect.x * 100}%`,
+                          top: `${rect.y * 100}%`,
+                          width: `${rect.w * 100}%`,
+                          height: `${rect.h * 100}%`,
+                          borderRadius: rect.shape === "circle" ? "9999px" : rect.shape === "wedge" ? undefined : "2px",
+                          clipPath: clipPathForSlot(rect)
+                        }}
+                      />
                     ))}
                   </span>
-                  <span className="mt-2 block text-sm font-extrabold text-[#243447]">{circleCountForLayout(entry.id) ? "Circle Collage" : entry.label}</span>
+                  <span className="mt-2 block text-sm font-extrabold text-[#243447]">{pieCountForLayout(entry.id) ? "Pie Chart" : entry.label}</span>
                   <span className="block text-xs text-[#6b7c8f]">{entry.description}</span>
                 </button>
               ))}
             </div>
 
-            {circleCount !== null && (
+            {pieCount !== null && (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d8dde5] bg-[#f7f8fa] px-4 py-3">
                 <span>
-                  <span className="block text-sm font-extrabold text-[#243447]">Number of circles</span>
-                  <span className="block text-xs text-[#6b7c8f]">Each circle can have its own image or video.</span>
+                  <span className="block text-sm font-extrabold text-[#243447]">Number of slices</span>
+                  <span className="block text-xs text-[#6b7c8f]">The circle is cut into equal slices; each slice holds its own image or video.</span>
                 </span>
                 <span className="flex items-center gap-2">
-                  <button type="button" onClick={() => changeCircleCount(circleCount - 1)} disabled={circleCount <= 2} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] bg-white disabled:opacity-40" aria-label="Use fewer circles"><Minus className="size-4" /></button>
-                  <strong className="w-8 text-center text-lg text-[#243447]">{circleCount}</strong>
-                  <button type="button" onClick={() => changeCircleCount(circleCount + 1)} disabled={circleCount >= 6} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] bg-white disabled:opacity-40" aria-label="Use more circles"><Plus className="size-4" /></button>
+                  <button type="button" onClick={() => changePieCount(pieCount - 1)} disabled={pieCount <= PIE_MIN_SLICES} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] bg-white disabled:opacity-40" aria-label="Use fewer slices"><Minus className="size-4" /></button>
+                  <strong className="w-8 text-center text-lg text-[#243447]">{pieCount}</strong>
+                  <button type="button" onClick={() => changePieCount(pieCount + 1)} disabled={pieCount >= PIE_MAX_SLICES} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] bg-white disabled:opacity-40" aria-label="Use more slices"><Plus className="size-4" /></button>
                 </span>
               </div>
             )}
@@ -176,29 +190,37 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
                       setActiveSlot(index);
                       if (entry.items.length === 0) setPicking({ slotIndex: index, replaceIndex: null });
                     }}
-                    className={`absolute overflow-hidden text-left ${activeSlot === index ? "ring-4 ring-inset ring-[#a64026]" : "ring-1 ring-inset ring-white/20"}`}
-                    style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.w * 100}%`, height: `${rect.h * 100}%`, borderRadius: rect.shape === "circle" ? "9999px" : undefined }}
-                    aria-label={`${entry.items.length ? "Edit" : "Add media to"} screen ${index + 1}`}
+                    className={`absolute overflow-hidden text-left ${rect.shape === "wedge" ? (activeSlot === index ? "outline outline-2 -outline-offset-2 outline-[#a64026]" : "") : activeSlot === index ? "ring-4 ring-inset ring-[#a64026]" : "ring-1 ring-inset ring-white/20"}`}
+                    style={{
+                      left: `${rect.x * 100}%`,
+                      top: `${rect.y * 100}%`,
+                      width: `${rect.w * 100}%`,
+                      height: `${rect.h * 100}%`,
+                      borderRadius: rect.shape === "circle" ? "9999px" : undefined,
+                      clipPath: clipPathForSlot(rect),
+                      backgroundColor: rect.shape === "wedge" ? (activeSlot === index ? "rgba(166,64,38,.35)" : "rgba(255,255,255,.08)") : undefined
+                    }}
+                    aria-label={`${entry.items.length ? "Edit" : "Add media to"} ${rect.shape === "wedge" ? "slice" : "screen"} ${index + 1}`}
                   >
-                    {first ? <AssetThumb asset={first} /> : <span className="grid h-full w-full place-items-center gap-1 text-center text-white/75"><span><ImagePlus className="mx-auto size-6" /> <span className="mt-1 block text-[10px] font-extrabold">Add image/video</span></span></span>}
-                    <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-extrabold text-white">Screen {index + 1}{slotSummary[index] > 1 ? ` · ${slotSummary[index]} in sequence` : ""}</span>
+                    {first ? <AssetThumb asset={first} /> : <span className="grid h-full w-full place-items-center gap-1 text-center text-white/75"><span><ImagePlus className="mx-auto size-5" />{rect.shape !== "wedge" && <span className="mt-1 block text-[10px] font-extrabold">Add image/video</span>}</span></span>}
+                    <span className={`absolute rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-extrabold text-white ${rect.shape === "wedge" ? "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" : "left-2 top-2"}`}>{rect.shape === "wedge" ? index + 1 : `Screen ${index + 1}`}{slotSummary[index] > 1 ? ` · ${slotSummary[index]} in sequence` : ""}</span>
                   </button>
                 );
               })}
             </div>
-            <p className="mt-2 text-xs text-[#6b7c8f]">Click an empty screen to add an image or video. Click a filled screen to change its media or timing.</p>
+            <p className="mt-2 text-xs text-[#6b7c8f]">Click an empty {pieCount ? "slice" : "screen"} to add an image or video. Click a filled one to change its media or timing.</p>
           </div>
 
           <aside className="rounded-xl bg-[#f7f8fa] p-4 ring-1 ring-[#edf0f3]">
-            <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Screen Settings</h3>
+            <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">{slotNoun} Settings</h3>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {composition.slots.map((entry, index) => (
                 <button key={entry.id} type="button" onClick={() => setActiveSlot(index)} className={`rounded-md px-2.5 py-1.5 text-xs font-extrabold ${activeSlot === index ? "bg-[#a64026] text-white" : "border border-[#d8dde5] bg-white text-[#526579]"}`}>
-                  Screen {index + 1}{entry.items.length ? " ✓" : ""}
+                  {slotNoun} {index + 1}{entry.items.length ? " ✓" : ""}
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-sm font-extrabold text-[#a64026]">Editing Screen {activeSlot + 1}</p>
+            <p className="mt-2 text-sm font-extrabold text-[#a64026]">Editing {slotNoun.toLowerCase()} {activeSlot + 1}</p>
 
             <div className="mt-3 space-y-2">
               {slotItems.map((item, index) => {
@@ -231,7 +253,7 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
               })}
             </div>
             <button type="button" onClick={() => setPicking({ slotIndex: activeSlot, replaceIndex: null })} className="mlp-btn-outline mt-3 w-full">
-              <ImagePlus className="size-4" /> {slotItems.length ? "Add another image/video (plays after)" : `Add image/video to Screen ${activeSlot + 1}`}
+              <ImagePlus className="size-4" /> {slotItems.length ? "Add another image/video (plays after)" : `Add image/video to ${slotNoun.toLowerCase()} ${activeSlot + 1}`}
             </button>
             {slotItems.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#6b7c8f]"><span>These visuals play one after another. Lengthening one shortens the others.</span><button type="button" onClick={() => updateSlot(activeSlot, (entry) => ({ ...entry, items: entry.items.map((item) => ({ ...item, share: 1 / entry.items.length })) }))} className="font-bold text-[#a64026]">Split time evenly</button></div>}
             <p className="mt-2 text-xs text-[#6b7c8f]">To keep visuals on screen longer overall, add quiet time before or after the voice in Pacing.</p>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
-import { getLayout } from "@/lib/studio/layouts";
+import { clipPathForSlot, getLayout } from "@/lib/studio/layouts";
 import { normalizeTextOverlay, rgba } from "@/lib/studio/text-overlay";
 import type { Composition, StudioAssetDto, TextOverlay, TimelineBlock } from "@/lib/studio/types";
 
@@ -57,7 +57,18 @@ export function CompositionPreview({
         }
         const asset = active ? assets[active.assetId] : null;
         return (
-          <div key={slot.id} className="absolute overflow-hidden bg-[#0d1a2b]" style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.w * 100}%`, height: `${rect.h * 100}%`, borderRadius: rect.shape === "circle" ? "9999px" : undefined }}>
+          <div
+            key={slot.id}
+            className="absolute overflow-hidden bg-[#0d1a2b]"
+            style={{
+              left: `${rect.x * 100}%`,
+              top: `${rect.y * 100}%`,
+              width: `${rect.w * 100}%`,
+              height: `${rect.h * 100}%`,
+              borderRadius: rect.shape === "circle" ? "9999px" : undefined,
+              clipPath: clipPathForSlot(rect)
+            }}
+          >
             {asset ? (
               asset.kind === "video" ? (
                 <SlotVideo url={asset.url} fit={slot.fit} timeSec={(active?.startSec ?? 0) + (localTime - activeStart)} playing={playing} />
@@ -70,7 +81,7 @@ export function CompositionPreview({
                 <ImageOff className="size-6" />
               </div>
             )}
-            {composition.slots.length > 1 && <span className="absolute inset-0 ring-1 ring-inset ring-white/10" />}
+            {composition.slots.length > 1 && rect.shape !== "wedge" && <span className="absolute inset-0 ring-1 ring-inset ring-white/10" />}
           </div>
         );
       })}

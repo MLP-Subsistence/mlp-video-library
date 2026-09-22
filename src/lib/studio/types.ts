@@ -75,7 +75,15 @@ export type TextStylePreset = {
   style: Partial<TextOverlay>;
 };
 
-export type LayoutSlotRect = { x: number; y: number; w: number; h: number; shape?: "rect" | "circle" };
+export type LayoutSlotRect = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  shape?: "rect" | "circle" | "wedge";
+  /** Polygon in the slot's own box (0..1), used to cut pie slices out of the media. */
+  clip?: Array<[number, number]>;
+};
 
 export type LayoutDefinition = {
   id: string;
