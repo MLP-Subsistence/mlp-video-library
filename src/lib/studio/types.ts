@@ -265,7 +265,7 @@ export type VoiceOption = {
 };
 
 /** A voice from the provider's public library, not yet in the account. */
-export type SharedVoiceOption = VoiceOption & { publicOwnerId: string; accent?: string; useCase?: string };
+export type SharedVoiceOption = VoiceOption & { publicOwnerId: string; accent?: string; useCase?: string; gender?: string; age?: string };
 
 export type VoiceModelOption = {
   id: string;

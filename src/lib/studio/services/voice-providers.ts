@@ -24,6 +24,18 @@ export type SynthesisResult = {
   billedCharacters: number | null;
 };
 
+/** Filters the provider's public voice library understands. Everything is optional. */
+export type SharedVoiceQuery = {
+  search?: string;
+  language?: string;
+  gender?: string;
+  age?: string;
+  accent?: string;
+  useCase?: string;
+  category?: string;
+  pageSize?: number;
+};
+
 export type CloneRequest = {
   name: string;
   description?: string;
@@ -41,7 +53,7 @@ export interface VoiceProvider {
   configured(): boolean;
   listVoices(): Promise<VoiceOption[]>;
   synthesize(request: SynthesisRequest): Promise<SynthesisResult>;
-  listSharedVoices?(query: { search?: string; language?: string; pageSize?: number }): Promise<SharedVoiceOption[]>;
+  listSharedVoices?(query: SharedVoiceQuery): Promise<SharedVoiceOption[]>;
   addSharedVoice?(args: { publicOwnerId: string; voiceId: string; name: string }): Promise<VoiceOption>;
   cloneVoice?(request: CloneRequest): Promise<VoiceOption>;
   deleteVoice?(voiceId: string): Promise<void>;
@@ -174,10 +186,21 @@ export const elevenLabsVoiceProvider: VoiceProvider = {
       use_case?: string;
       language?: string;
       category?: string;
+      gender?: string;
+      age?: string;
     };
     const params = new URLSearchParams({ page_size: String(Math.min(60, Math.max(1, query.pageSize ?? 24))) });
-    if (query.search) params.set("search", query.search);
-    if (query.language) params.set("language", query.language);
+    // The library's own filter names; empty values are simply left out.
+    const filters: Array<[string, string | undefined]> = [
+      ["search", query.search],
+      ["language", query.language],
+      ["gender", query.gender],
+      ["age", query.age],
+      ["accent", query.accent],
+      ["use_cases", query.useCase],
+      ["category", query.category]
+    ];
+    for (const [key, value] of filters) if (value?.trim()) params.set(key, value.trim());
     const data = await elevenLabs<{ voices?: SharedVoice[] }>(`/v1/shared-voices?${params.toString()}`);
     return (data.voices ?? []).map((voice) => ({
       id: voice.voice_id,
@@ -188,6 +211,8 @@ export const elevenLabsVoiceProvider: VoiceProvider = {
       accent: voice.accent ?? undefined,
       useCase: voice.use_case ?? undefined,
       category: voice.category ?? undefined,
+      gender: voice.gender ?? undefined,
+      age: voice.age ?? undefined,
       languages: voice.language ? [voice.language] : []
     }));
   },

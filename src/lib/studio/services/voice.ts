@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { StudioError } from "@/lib/studio/access";
 import { getStudioSettings } from "@/lib/studio/settings";
 import { creditSummary, parseVoiceSettings, scriptHash } from "@/lib/studio/services/credits";
-import { getVoiceProvider } from "@/lib/studio/services/voice-providers";
+import { getVoiceProvider, type SharedVoiceQuery } from "@/lib/studio/services/voice-providers";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
 import { readWavDurationSec } from "@/lib/studio/wav";
 
@@ -36,7 +36,7 @@ export async function listVoices() {
  * public voice library, copying one into the account, cloning a voice from
  * recordings, removing a voice, and reading the account's own limits.
  */
-export async function listSharedVoices(query: { search?: string; language?: string }) {
+export async function listSharedVoices(query: SharedVoiceQuery) {
   const { provider } = await requireProvider();
   if (!provider.listSharedVoices) throw new StudioError("The current voice provider has no voice library.", 501);
   try {

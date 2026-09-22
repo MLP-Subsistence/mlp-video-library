@@ -245,7 +245,7 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
               </div>
             )}
 
-            {tab === "library" && <VoiceLibrary canManage={canManageVoices} onAdded={onVoiceAdded} onNotice={setNotice} />}
+            {tab === "library" && <VoiceLibrary canManage={canManageVoices} provider={voices?.provider ?? account?.provider ?? "mock"} onAdded={onVoiceAdded} onNotice={setNotice} />}
 
             {tab === "clone" && <VoiceCloner canManage={canManageVoices} canClone={account?.status?.canCloneVoices ?? false} provider={voices?.provider ?? account?.provider ?? "mock"} onCloned={onVoiceAdded} onNotice={setNotice} />}
 
@@ -398,21 +398,72 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
 }
 
 /** Browse the provider's public library and copy a voice into the account (free). */
-function VoiceLibrary({ canManage, onAdded, onNotice }: { canManage: boolean; onAdded: (voice: VoiceOption) => void; onNotice: (notice: { tone: "info" | "success" | "warning" | "error"; text: string } | null) => void }) {
-  const [query, setQuery] = useState("");
-  const [language, setLanguage] = useState("");
+const VOICE_LANGUAGES = [
+  ["", "Any language"],
+  ["en", "English"],
+  ["fr", "French"],
+  ["es", "Spanish"],
+  ["pt", "Portuguese"],
+  ["sw", "Swahili"],
+  ["ar", "Arabic"],
+  ["hi", "Hindi"],
+  ["te", "Telugu"],
+  ["ta", "Tamil"],
+  ["de", "German"],
+  ["it", "Italian"],
+  ["zh", "Chinese"]
+] as const;
+
+const VOICE_GENDERS = [
+  ["", "Any voice"],
+  ["female", "Female"],
+  ["male", "Male"],
+  ["neutral", "Neutral"]
+] as const;
+
+const VOICE_AGES = [
+  ["", "Any age"],
+  ["young", "Young"],
+  ["middle_aged", "Middle aged"],
+  ["old", "Older"]
+] as const;
+
+const VOICE_USE_CASES = [
+  ["", "Any use"],
+  ["informative_educational", "Teaching"],
+  ["narrative_story", "Storytelling"],
+  ["conversational", "Conversational"],
+  ["advertisement", "Advertisement"],
+  ["social_media", "Social media"],
+  ["characters_animation", "Characters"]
+] as const;
+
+const VOICE_CATEGORIES = [
+  ["", "Any quality"],
+  ["professional", "Professional"],
+  ["high_quality", "High quality"],
+  ["famous", "Famous"]
+] as const;
+
+/** Accents worth one click for MLP's languages; anything else can be typed. */
+const VOICE_ACCENTS = ["", "african", "american", "british", "australian", "indian", "irish", "canadian", "nigerian", "kenyan", "south african"] as const;
+
+function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: boolean; provider: string; onAdded: (voice: VoiceOption) => void; onNotice: (notice: { tone: "info" | "success" | "warning" | "error"; text: string } | null) => void }) {
+  const [filters, setFilters] = useState({ q: "", language: "", gender: "", age: "", accent: "", useCase: "", category: "" });
   const [results, setResults] = useState<SharedVoiceOption[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
+  const connected = provider !== "mock";
 
-  const search = async () => {
+  const search = async (override?: Partial<typeof filters>) => {
+    const next = { ...filters, ...override };
+    setFilters(next);
     setSearching(true);
     onNotice(null);
     try {
       const params = new URLSearchParams();
-      if (query.trim()) params.set("q", query.trim());
-      if (language.trim()) params.set("language", language.trim());
+      for (const [key, value] of Object.entries(next)) if (value.trim()) params.set(key, value.trim());
       const result = await api<{ voices: SharedVoiceOption[] }>(`/api/studio/voice/library?${params.toString()}`);
       setResults(result.voices);
     } catch (caught) {
@@ -429,7 +480,7 @@ function VoiceLibrary({ canManage, onAdded, onNotice }: { canManage: boolean; on
     try {
       const result = await api<{ voice: VoiceOption }>("/api/studio/voice/library", { method: "POST", json: { publicOwnerId: voice.publicOwnerId, voiceId: voice.id, name: voice.name } });
       onAdded(result.voice);
-      onNotice({ tone: "success", text: `"${voice.name}" was added to the MLP voices and can now be chosen for a lesson.` });
+      onNotice({ tone: "success", text: `"${voice.name}" was added to the MLP voices and is now this lesson's voice.` });
     } catch (caught) {
       onNotice({ tone: "error", text: (caught as Error).message });
     } finally {
@@ -446,42 +497,94 @@ function VoiceLibrary({ canManage, onAdded, onNotice }: { canManage: boolean; on
     void audio.play().catch(() => setPlaying(null));
   };
 
+  const activeFilters = Object.entries(filters).filter(([key, value]) => key !== "q" && value.trim()).length;
+
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
       <h2 className="text-lg font-extrabold text-[#243447]">Voice library</h2>
       <p className="mt-1 text-sm text-[#6b7c8f]">Search the provider&apos;s public voices, listen to them, and add the ones you want to the MLP account. Searching, listening and adding cost no credits.</p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
-          <Search className="size-4 text-[#8b9bad]" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void search(); }} placeholder="Warm female narrator, storyteller, African accent…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search the voice library" />
-        </label>
-        <input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="Language (en, fr, sw…)" className="h-10 w-40 rounded-lg border border-[#d8dde5] px-3 text-sm" aria-label="Language code" />
-        <button type="button" onClick={() => void search()} disabled={searching} className="mlp-btn-primary h-10">{searching ? <Spinner /> : <Search className="size-4" />} Search</button>
-      </div>
 
-      {!results ? (
-        <p className="mt-4 text-sm text-[#6b7c8f]">Search to see voices. Nothing is added to the account until you press Add.</p>
-      ) : results.length === 0 ? (
-        <p className="mt-4 text-sm text-[#6b7c8f]">No voices matched. Try a different description, or leave the search empty to see popular voices.</p>
-      ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {results.map((voice) => (
-            <div key={`${voice.publicOwnerId}:${voice.id}`} className="flex items-center gap-3 rounded-xl border border-[#d8dde5] p-3">
-              <button type="button" onClick={() => listen(voice)} disabled={!voice.previewUrl} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447] disabled:opacity-40" aria-label={`Listen to ${voice.name}`}>
-                {playing === voice.id ? <Spinner /> : <Play className="size-4" />}
-              </button>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-extrabold text-[#243447]">{voice.name}</span>
-                <span className="block truncate text-xs text-[#6b7c8f]">{[voice.accent, voice.useCase, voice.languages?.[0], voice.description].filter(Boolean).join(" · ") || "Library voice"}</span>
-              </span>
-              <button type="button" onClick={() => void add(voice)} disabled={!canManage || adding !== null} className="mlp-btn-outline h-9 px-3 text-xs" title={canManage ? "Add to the MLP voices" : "Only content managers can add voices to the account"}>
-                {adding === voice.id ? <Spinner className="size-3.5" /> : <Plus className="size-3.5" />} Add
-              </button>
-            </div>
-          ))}
+      {!connected ? (
+        <div className="mt-4">
+          <InlineNotice tone="warning">
+            No voice provider is connected yet, so the library is empty. An administrator switches the provider to ElevenLabs in <a href="/admin/studio?tab=settings" className="font-bold underline">/admin/studio</a> once the API key is in place.
+          </InlineNotice>
         </div>
+      ) : (
+        <>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
+              <Search className="size-4 text-[#8b9bad]" />
+              <input value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void search(); }} placeholder="Warm narrator, storyteller, teacher…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search the voice library" />
+            </label>
+            <button type="button" onClick={() => void search()} disabled={searching} className="mlp-btn-primary h-10">{searching ? <Spinner /> : <Search className="size-4" />} Search</button>
+          </div>
+
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <FilterSelect label="Language" value={filters.language} options={VOICE_LANGUAGES} onChange={(value) => void search({ language: value })} />
+            <FilterSelect label="Voice" value={filters.gender} options={VOICE_GENDERS} onChange={(value) => void search({ gender: value })} />
+            <FilterSelect label="Age" value={filters.age} options={VOICE_AGES} onChange={(value) => void search({ age: value })} />
+            <FilterSelect label="Best for" value={filters.useCase} options={VOICE_USE_CASES} onChange={(value) => void search({ useCase: value })} />
+            <FilterSelect label="Quality" value={filters.category} options={VOICE_CATEGORIES} onChange={(value) => void search({ category: value })} />
+            <label className="block text-xs font-bold text-[#526579]">
+              Accent
+              <input
+                list="mlp-voice-accents"
+                value={filters.accent}
+                onChange={(event) => setFilters({ ...filters, accent: event.target.value })}
+                onBlur={() => void search()}
+                onKeyDown={(event) => { if (event.key === "Enter") void search(); }}
+                placeholder="Any accent"
+                className="mlp-input mt-1 h-10 w-full text-sm"
+              />
+              <datalist id="mlp-voice-accents">
+                {VOICE_ACCENTS.filter(Boolean).map((accent) => <option key={accent} value={accent} />)}
+              </datalist>
+            </label>
+          </div>
+
+          {activeFilters > 0 && (
+            <button type="button" onClick={() => void search({ language: "", gender: "", age: "", accent: "", useCase: "", category: "" })} className="mt-2 text-xs font-bold text-[#a64026]">
+              Clear {activeFilters} filter{activeFilters === 1 ? "" : "s"}
+            </button>
+          )}
+
+          {!results ? (
+            <p className="mt-4 text-sm text-[#6b7c8f]">Search, or just pick a filter, to see voices. Nothing is added to the account until you press Add.</p>
+          ) : results.length === 0 ? (
+            <p className="mt-4 text-sm text-[#6b7c8f]">No voices matched those filters. Try fewer filters, or a different description.</p>
+          ) : (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {results.map((voice) => (
+                <div key={`${voice.publicOwnerId}:${voice.id}`} className="flex items-center gap-3 rounded-xl border border-[#d8dde5] p-3">
+                  <button type="button" onClick={() => listen(voice)} disabled={!voice.previewUrl} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447] disabled:opacity-40" aria-label={`Listen to ${voice.name}`}>
+                    {playing === voice.id ? <Spinner /> : <Play className="size-4" />}
+                  </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-extrabold text-[#243447]">{voice.name}</span>
+                    <span className="block truncate text-xs text-[#6b7c8f]">{[voice.gender, voice.age?.replace("_", " "), voice.accent, voice.languages?.[0], voice.useCase?.replace(/_/g, " ")].filter(Boolean).join(" · ") || voice.description || "Library voice"}</span>
+                  </span>
+                  <button type="button" onClick={() => void add(voice)} disabled={!canManage || adding !== null} className="mlp-btn-outline h-9 px-3 text-xs" title={canManage ? "Add to the MLP voices" : "Only content managers can add voices to the account"}>
+                    {adding === voice.id ? <Spinner className="size-3.5" /> : <Plus className="size-3.5" />} Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: ReadonlyArray<readonly [string, string]>; onChange: (value: string) => void }) {
+  return (
+    <label className="block text-xs font-bold text-[#526579]">
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="mlp-input mt-1 h-10 w-full text-sm">
+        {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
+      </select>
+    </label>
   );
 }
 
