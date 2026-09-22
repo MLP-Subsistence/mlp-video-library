@@ -15,15 +15,89 @@ export { creditSummary, parseVoiceSettings, scriptHash };
  * one character sent to the provider.
  */
 
-export async function listVoices() {
+async function requireProvider() {
   const settings = await getStudioSettings();
   const provider = getVoiceProvider(settings.voiceProvider);
   if (!provider.configured()) throw new StudioError("AI Voice is not set up on this server yet. Please contact the MLP administrator.", 503);
+  return { provider, settings };
+}
+
+export async function listVoices() {
+  const { provider, settings } = await requireProvider();
   try {
     return { provider: provider.id, model: settings.voiceModel, voices: await provider.listVoices() };
   } catch (error) {
     throw new StudioError("The AI Voice service could not list voices right now. Please try again shortly.", 502, String(error));
   }
+}
+
+/**
+ * Everything below is free of narration credits: browsing the provider's
+ * public voice library, copying one into the account, cloning a voice from
+ * recordings, removing a voice, and reading the account's own limits.
+ */
+export async function listSharedVoices(query: { search?: string; language?: string }) {
+  const { provider } = await requireProvider();
+  if (!provider.listSharedVoices) throw new StudioError("The current voice provider has no voice library.", 501);
+  try {
+    return { provider: provider.id, voices: await provider.listSharedVoices({ ...query, pageSize: 24 }) };
+  } catch (error) {
+    throw new StudioError("The voice library could not be searched right now. Please try again shortly.", 502, String(error));
+  }
+}
+
+export async function addSharedVoice(args: { publicOwnerId: string; voiceId: string; name: string }) {
+  const { provider } = await requireProvider();
+  if (!provider.addSharedVoice) throw new StudioError("The current voice provider cannot add library voices.", 501);
+  const name = args.name.trim().slice(0, 60);
+  if (!name) throw new StudioError("Give the voice a name first.");
+  try {
+    return await provider.addSharedVoice({ ...args, name });
+  } catch (error) {
+    const message = String(error);
+    if (/voice_limit|slot/i.test(message)) throw new StudioError("The ElevenLabs account has no free voice slots. Remove a voice you no longer use first.", 409, message);
+    throw new StudioError("That voice could not be added to the account. Please try again shortly.", 502, message);
+  }
+}
+
+export async function cloneVoice(args: { name: string; description?: string; removeBackgroundNoise?: boolean; files: Array<{ filename: string; bytes: Buffer; contentType: string }> }) {
+  const { provider } = await requireProvider();
+  if (!provider.cloneVoice) throw new StudioError("The current voice provider cannot clone voices. Switch the provider to ElevenLabs in /admin/studio first.", 501);
+  const name = args.name.trim().slice(0, 60);
+  if (!name) throw new StudioError("Give the new voice a name.");
+  if (args.files.length === 0) throw new StudioError("Add at least one recording of the voice (30 seconds to a few minutes of clear speech).");
+  const totalBytes = args.files.reduce((sum, file) => sum + file.bytes.length, 0);
+  if (totalBytes > 40 * 1024 * 1024) throw new StudioError("Those recordings are larger than 40 MB in total. Use shorter samples.");
+  try {
+    return await provider.cloneVoice({ ...args, name });
+  } catch (error) {
+    const message = String(error);
+    if (/can_not_use_instant_voice_cloning|401|403/i.test(message)) throw new StudioError("This ElevenLabs plan does not allow instant voice cloning.", 403, message);
+    if (/voice_limit|slot/i.test(message)) throw new StudioError("The ElevenLabs account has no free voice slots. Remove a voice you no longer use first.", 409, message);
+    throw new StudioError("That voice could not be cloned. Check the recordings and try again.", 502, message);
+  }
+}
+
+export async function deleteProviderVoice(voiceId: string) {
+  const { provider } = await requireProvider();
+  if (!provider.deleteVoice) throw new StudioError("The current voice provider cannot remove voices.", 501);
+  const inUse = await prisma.studioProject.count({ where: { defaultVoiceId: voiceId } });
+  if (inUse > 0) throw new StudioError(`That voice is still the project voice for ${inUse} localization${inUse === 1 ? "" : "s"}. Choose another voice there first.`, 409);
+  try {
+    await provider.deleteVoice(voiceId);
+  } catch (error) {
+    throw new StudioError("That voice could not be removed. Please try again shortly.", 502, String(error));
+  }
+  return { id: voiceId };
+}
+
+export async function voiceAccountStatus() {
+  const { provider, settings } = await requireProvider();
+  const [status, models] = await Promise.all([
+    provider.accountStatus ? provider.accountStatus().catch(() => null) : Promise.resolve(null),
+    provider.listModels ? provider.listModels().catch(() => []) : Promise.resolve([])
+  ]);
+  return { provider: provider.id, defaultModel: settings.voiceModel, status, models };
 }
 
 export async function generateSegmentVoice(options: { userId: string; projectId: string; projectSegmentId: string; force?: boolean }) {
@@ -44,6 +118,8 @@ export async function generateSegmentVoice(options: { userId: string; projectId:
   const voiceId = segment.voiceIdOverride || project.defaultVoiceId;
   if (!voiceId) throw new StudioError("Choose a voice for this project on the AI Voice page first.");
 
+  const projectSettings = parseVoiceSettings(project.voiceSettings);
+  const model = projectSettings.model?.trim() || settings.voiceModel;
   const hash = scriptHash(text);
   const alreadyCurrent = segment.narrationSource === "ai" && segment.narrationScriptHash === hash && segment.narrationStatus === "ready" && segment.narrationAssetId;
   if (alreadyCurrent && !options.force) {
@@ -57,7 +133,7 @@ export async function generateSegmentVoice(options: { userId: string; projectId:
   }
 
   // Idempotency: the same script + voice + model for the same segment is one request.
-  const requestKey = `${segment.id}:${voiceId}:${settings.voiceModel}:${hash}${options.force ? `:${Date.now()}` : ""}`;
+  const requestKey = `${segment.id}:${voiceId}:${model}:${hash}${options.force ? `:${Date.now()}` : ""}`;
   const existing = await prisma.studioVoiceUsage.findUnique({ where: { requestKey } });
   if (existing && existing.status === "reserved") throw new StudioError("This narration is already being generated. Please wait a moment.", 409);
 
@@ -72,7 +148,7 @@ export async function generateSegmentVoice(options: { userId: string; projectId:
       segmentId: segment.id,
       languageCode: project.targetLanguageCode,
       provider: provider.id,
-      model: settings.voiceModel,
+      model,
       voiceId,
       characters,
       credits: characters,
@@ -85,9 +161,9 @@ export async function generateSegmentVoice(options: { userId: string; projectId:
     const result = await provider.synthesize({
       text,
       voiceId,
-      model: settings.voiceModel,
+      model,
       languageCode: project.targetLanguageCode,
-      settings: parseVoiceSettings(project.voiceSettings)
+      settings: projectSettings
     });
     const key = buildStorageKey(`projects/${project.id}/narration`, `${segment.segment.key}-ai${result.extension}`);
     await storage().put(key, result.bytes, result.mimeType);

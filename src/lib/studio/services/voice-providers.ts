@@ -1,4 +1,4 @@
-import type { VoiceOption, VoiceSettings } from "@/lib/studio/types";
+import type { SharedVoiceOption, VoiceAccountStatus, VoiceModelOption, VoiceOption, VoiceSettings } from "@/lib/studio/types";
 import { buildPlaceholderSpeech, estimateSpeechSeconds } from "@/lib/studio/wav";
 
 /**
@@ -24,11 +24,29 @@ export type SynthesisResult = {
   billedCharacters: number | null;
 };
 
+export type CloneRequest = {
+  name: string;
+  description?: string;
+  removeBackgroundNoise?: boolean;
+  files: Array<{ filename: string; bytes: Buffer; contentType: string }>;
+};
+
+/**
+ * Everything below `synthesize` is optional and costs no narration credits:
+ * browsing voices, copying one from the public library, cloning a voice from
+ * recordings, removing a voice, and reading the account's own limits.
+ */
 export interface VoiceProvider {
   readonly id: "mock" | "elevenlabs";
   configured(): boolean;
   listVoices(): Promise<VoiceOption[]>;
   synthesize(request: SynthesisRequest): Promise<SynthesisResult>;
+  listSharedVoices?(query: { search?: string; language?: string; pageSize?: number }): Promise<SharedVoiceOption[]>;
+  addSharedVoice?(args: { publicOwnerId: string; voiceId: string; name: string }): Promise<VoiceOption>;
+  cloneVoice?(request: CloneRequest): Promise<VoiceOption>;
+  deleteVoice?(voiceId: string): Promise<void>;
+  listModels?(): Promise<VoiceModelOption[]>;
+  accountStatus?(): Promise<VoiceAccountStatus>;
 }
 
 /** Placeholder provider so the whole narration → timeline → render pipeline runs without ElevenLabs. */
@@ -50,8 +68,42 @@ export const mockVoiceProvider: VoiceProvider = {
       durationSec,
       billedCharacters: request.text.length
     };
+  },
+  async listSharedVoices() {
+    return [];
+  },
+  async listModels() {
+    return [{ id: "eleven_multilingual_v2", name: "Placeholder model", description: "Development only — no provider is connected.", costFactor: 1 }];
+  },
+  async accountStatus() {
+    return { provider: "mock", tier: "development", characterCount: null, characterLimit: null, canCloneVoices: false, voicesUsed: null, voiceLimit: null };
   }
 };
+
+const ELEVENLABS_API = "https://api.elevenlabs.io";
+
+function elevenLabsKey() {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) throw new Error("ELEVENLABS_API_KEY is not configured");
+  return key;
+}
+
+async function elevenLabs<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${ELEVENLABS_API}${path}`, {
+    ...init,
+    headers: { "xi-api-key": elevenLabsKey(), ...(init.headers ?? {}) }
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`ElevenLabs ${path} ${response.status}: ${text.slice(0, 300)}`);
+  }
+  return (await response.json()) as T;
+}
+
+/** Per-character cost relative to the standard models, as ElevenLabs bills them. */
+function modelCostFactor(id: string) {
+  return /flash|turbo/i.test(id) ? 0.5 : 1;
+}
 
 /**
  * ElevenLabs adapter.
@@ -77,6 +129,7 @@ export const elevenLabsVoiceProvider: VoiceProvider = {
       description?: string;
       preview_url?: string;
       labels?: Record<string, string>;
+      category?: string;
       verified_languages?: Array<{ language?: string }>;
     };
     const voices: ElevenLabsVoice[] = [];
@@ -105,8 +158,103 @@ export const elevenLabsVoiceProvider: VoiceProvider = {
       description: voice.description ?? undefined,
       previewUrl: voice.preview_url ?? null,
       labels: voice.labels,
+      category: voice.category,
       languages: (voice.verified_languages ?? []).map((entry) => entry.language ?? "").filter(Boolean)
     }));
+  },
+  /** Public library browsing — free, and nothing is added to the account until `addSharedVoice`. */
+  async listSharedVoices(query) {
+    type SharedVoice = {
+      voice_id: string;
+      public_owner_id: string;
+      name: string;
+      description?: string;
+      preview_url?: string;
+      accent?: string;
+      use_case?: string;
+      language?: string;
+      category?: string;
+    };
+    const params = new URLSearchParams({ page_size: String(Math.min(60, Math.max(1, query.pageSize ?? 24))) });
+    if (query.search) params.set("search", query.search);
+    if (query.language) params.set("language", query.language);
+    const data = await elevenLabs<{ voices?: SharedVoice[] }>(`/v1/shared-voices?${params.toString()}`);
+    return (data.voices ?? []).map((voice) => ({
+      id: voice.voice_id,
+      publicOwnerId: voice.public_owner_id,
+      name: voice.name,
+      description: voice.description ?? undefined,
+      previewUrl: voice.preview_url ?? null,
+      accent: voice.accent ?? undefined,
+      useCase: voice.use_case ?? undefined,
+      category: voice.category ?? undefined,
+      languages: voice.language ? [voice.language] : []
+    }));
+  },
+  /** Copy a library voice into the account. Free; it only uses one voice slot. */
+  async addSharedVoice({ publicOwnerId, voiceId, name }) {
+    const data = await elevenLabs<{ voice_id: string }>(`/v1/voices/add/${encodeURIComponent(publicOwnerId)}/${encodeURIComponent(voiceId)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ new_name: name })
+    });
+    return { id: data.voice_id, name, category: "library" };
+  },
+  /** Instant voice cloning from recordings. Free of narration credits; uses a voice slot. */
+  async cloneVoice(request) {
+    const form = new FormData();
+    form.set("name", request.name);
+    if (request.description) form.set("description", request.description);
+    if (request.removeBackgroundNoise) form.set("remove_background_noise", "true");
+    for (const file of request.files) {
+      form.append("files", new Blob([new Uint8Array(file.bytes)], { type: file.contentType }), file.filename);
+    }
+    const response = await fetch(`${ELEVENLABS_API}/v1/voices/add`, { method: "POST", headers: { "xi-api-key": elevenLabsKey() }, body: form });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`ElevenLabs clone ${response.status}: ${text.slice(0, 300)}`);
+    }
+    const data = (await response.json()) as { voice_id: string; requires_verification?: boolean };
+    return { id: data.voice_id, name: request.name, description: request.description, category: "cloned" };
+  },
+  async deleteVoice(voiceId) {
+    const response = await fetch(`${ELEVENLABS_API}/v1/voices/${encodeURIComponent(voiceId)}`, { method: "DELETE", headers: { "xi-api-key": elevenLabsKey() } });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`ElevenLabs delete voice ${response.status}: ${text.slice(0, 200)}`);
+    }
+  },
+  async listModels() {
+    type Model = { model_id: string; name?: string; description?: string; can_do_text_to_speech?: boolean; languages?: Array<{ language_id?: string; name?: string }> };
+    const models = await elevenLabs<Model[]>("/v1/models");
+    return models
+      .filter((model) => model.can_do_text_to_speech !== false)
+      .map((model) => ({
+        id: model.model_id,
+        name: model.name ?? model.model_id,
+        description: model.description ?? undefined,
+        costFactor: modelCostFactor(model.model_id),
+        languages: (model.languages ?? []).map((entry) => entry.name ?? entry.language_id ?? "").filter(Boolean)
+      }));
+  },
+  async accountStatus() {
+    const data = await elevenLabs<{
+      tier?: string;
+      character_count?: number;
+      character_limit?: number;
+      can_use_instant_voice_cloning?: boolean;
+      voice_limit?: number;
+      voice_slots_used?: number;
+    }>("/v1/user/subscription");
+    return {
+      provider: "elevenlabs",
+      tier: data.tier ?? null,
+      characterCount: data.character_count ?? null,
+      characterLimit: data.character_limit ?? null,
+      canCloneVoices: data.can_use_instant_voice_cloning ?? false,
+      voicesUsed: data.voice_slots_used ?? null,
+      voiceLimit: data.voice_limit ?? null
+    };
   },
   async synthesize(request) {
     if (!process.env.ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");

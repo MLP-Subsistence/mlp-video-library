@@ -27,11 +27,13 @@ export function parseVoiceSettings(raw: string | null | undefined): VoiceSetting
   try {
     const parsed = raw ? (JSON.parse(raw) as VoiceSettings) : {};
     const pick = (value: unknown, min: number, max: number) => (typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined);
+    const model = typeof parsed.model === "string" && /^[a-z0-9_.-]{3,60}$/i.test(parsed.model.trim()) ? parsed.model.trim() : undefined;
     return {
       stability: pick(parsed.stability, 0, 1),
       similarity: pick(parsed.similarity, 0, 1),
       style: pick(parsed.style, 0, 1),
-      speed: pick(parsed.speed, 0.7, 1.2)
+      speed: pick(parsed.speed, 0.7, 1.2),
+      ...(model ? { model } : {})
     };
   } catch {
     return {};

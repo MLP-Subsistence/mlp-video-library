@@ -2,9 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { normalizeRole } from "@/lib/roles";
 import type { ProjectSummaryDto } from "@/lib/studio/types";
 
-/** Educators see only their own projects; staff see everything. */
+/**
+ * Master templates are shared samples that everyone can localize, but the work
+ * itself is personal: a signed-in account sees only the localization projects
+ * it created. Administrators keep full visibility so they can support the team
+ * (and they already manage users, jobs and credits in /admin).
+ */
 export function projectWhereForUser(user: { id: string; role: string }) {
-  return normalizeRole(user.role) === "educator" ? { createdById: user.id } : {};
+  return normalizeRole(user.role) === "admin" ? {} : { createdById: user.id };
 }
 
 export async function listProjectSummaries(user: { id: string; role: string }): Promise<ProjectSummaryDto[]> {

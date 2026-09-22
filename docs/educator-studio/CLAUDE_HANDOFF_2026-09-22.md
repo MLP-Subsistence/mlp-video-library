@@ -86,6 +86,17 @@ Checks: `npx tsc --noEmit` clean, `npx eslint src` clean (including two pre-exis
 
 **Pie layout (replaces the circle collage):** `pie2`…`pie8` cut one circle into equal slices, each slice a media slot; the count is picked from a row of 2–8 buttons ("How many slices make up the circle?") on a single **Pie Chart** card. Slices never touch: each one is inset by `PIE_GAP` along both straight edges, which keeps the gap the same width from the rim inwards and trims the point, leaving a small hole in the middle. A slice is stored as the bounding box of its wedge plus a polygon in that box (`LayoutSlotRect.clip`), so the browser clips it with `clip-path: polygon(...)` (`clipPathForSlot`) and the worker bakes the identical polygon into an alpha mask (`writePolygonMask` + FFmpeg `alphamerge`). The old `circles2…6` ids are kept out of the picker but still resolve, so any segment saved with a circle collage keeps rendering. `scripts/studio-e2e/pie-demo.mts <slices>` composites a pie from real photos the way the renderer masks it.
 
+**AI Voice page — subpages and the credit-free ElevenLabs features:** `/studio/projects/<id>/voice` is now five tabs — **Voices, Voice library, Clone a voice, Settings, Segments** — with credits, the localization summary and the language context in the sidebar.
+
+- *Voices*: the account's voices with search and preview; cloned voices can be removed (refused while a localization still uses them).
+- *Voice library*: searches the provider's public voices (`GET /v1/shared-voices`), plays their samples and copies one into the MLP account (`POST /v1/voices/add/{owner}/{voice}`). Content managers/admins only.
+- *Clone a voice*: instant cloning from uploaded recordings (`POST /v1/voices/add`, multipart, up to 8 files / 40 MB, optional noise removal). The samples go straight to the provider and are not stored by the studio. Content managers/admins only, and the button stays disabled unless the plan reports `can_use_instant_voice_cloning`.
+- *Settings*: the four voice sliders plus a **per-localization model** (stored inside the existing `voiceSettings` JSON — no migration; the renderer and ledger use it) and a read-only account panel (plan, provider characters, voice slots, cloning availability) from `GET /v1/user/subscription` and `GET /v1/models`.
+
+None of these calls spend narration credits — only generating narration does, which the sidebar now says out loud. New routes: `GET/POST /api/studio/voice/library`, `POST /api/studio/voice/clone`, `GET /api/studio/voice/account`, `DELETE /api/studio/voice/voices/[voiceId]`; new optional `VoiceProvider` methods keep the mock provider working offline (it returns empty/disabled results with friendly messages).
+
+**Personal work, shared samples:** master templates stay visible to everyone, but a localization project is now visible only to the account that created it (`projectWhereForUser`) — previously content managers saw everyone's. Administrators keep full visibility for support, since they already manage users, jobs and credits in `/admin`.
+
 ## Remaining work and manual/operational gates
 
 1. **Production worker:** identify a persistent host with Node/FFmpeg/FFprobe, production DB and bucket configuration; start `npm.cmd run worker` (or an equivalent managed service), then verify an actual queued render and full-narration alignment. Netlify itself cannot do FFmpeg work. `C:\ffmpeg\bin\ffmpeg.exe` was available locally, but local availability is not production worker availability.

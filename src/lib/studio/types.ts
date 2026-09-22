@@ -249,6 +249,8 @@ export type VoiceSettings = {
   similarity?: number;
   style?: number;
   speed?: number;
+  /** Optional per-project model; falls back to the studio-wide default. */
+  model?: string;
 };
 
 export type VoiceOption = {
@@ -258,6 +260,31 @@ export type VoiceOption = {
   languages?: string[];
   previewUrl?: string | null;
   labels?: Record<string, string>;
+  /** "cloned" and "generated" voices belong to the account and can be removed. */
+  category?: string;
+};
+
+/** A voice from the provider's public library, not yet in the account. */
+export type SharedVoiceOption = VoiceOption & { publicOwnerId: string; accent?: string; useCase?: string };
+
+export type VoiceModelOption = {
+  id: string;
+  name: string;
+  description?: string;
+  /** Credits charged per character, relative to the standard model. */
+  costFactor?: number;
+  languages?: string[];
+};
+
+/** What the provider account allows — shown so nobody has to open the ElevenLabs dashboard. */
+export type VoiceAccountStatus = {
+  provider: string;
+  tier: string | null;
+  characterCount: number | null;
+  characterLimit: number | null;
+  canCloneVoices: boolean;
+  voicesUsed: number | null;
+  voiceLimit: number | null;
 };
 
 export type JobDto = {
