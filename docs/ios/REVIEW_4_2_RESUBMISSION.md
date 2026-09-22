@@ -1,6 +1,6 @@
 # Guideline 4.2 resubmission packet
 
-Status: implementation prepared locally; do not submit this wording until the new iOS build and production catalog endpoint have been verified on a device.
+Status: the native build has been compiled and launched on iPhone and iPad simulators, and the production catalog endpoint has returned 607 published lessons. Physical-device playback, persistence, and offline behavior remain release checks.
 
 ## App Review reply
 
@@ -10,12 +10,12 @@ To inspect the changes: open Discover, select a language and format, search for 
 
 ## App Store What's New
 
-Explore the Marketplace Literacy library in a native iPhone experience. Search lessons by language and format, save favorites, track completed lessons, and keep private notes. Previously loaded lesson details can be read offline.
+Explore the Marketplace Literacy library in a native iPhone and iPad experience. Search lessons by language and format, save favorites, track completed lessons, and keep private notes. Previously loaded lesson details can be read offline.
 
 ## Release checks
 
-1. Deploy `/api/mobile/catalog` and verify it returns only published lessons in active languages over HTTPS.
-2. Build and install the new iOS binary on iPhone, including the review device size.
+1. Verify `/api/mobile/catalog` continues to return only published lessons in active languages over HTTPS.
+2. Build and install the signed iOS binary on a physical iPhone, including the review device size.
 3. Verify initial load, search, filters, YouTube and direct video playback, saved lessons, completion, notes, relaunch persistence, and offline catalog reading.
 4. Capture new App Store screenshots from the native build and update the listing to describe the new features accurately.
 5. Confirm App Privacy answers reflect on-device notes and cached catalog, and that any reviewer account details still match the submitted build.

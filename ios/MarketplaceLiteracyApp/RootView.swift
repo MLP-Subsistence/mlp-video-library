@@ -250,8 +250,10 @@ private struct YouTubeLessonPlayer: UIViewRepresentable {
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.scrollView.isScrollEnabled = false
         view.backgroundColor = .black
-        if let url = URL(string: "https://www.youtube.com/embed/\(videoID)?playsinline=1") {
-            view.load(URLRequest(url: url))
+        if let url = URL(string: "https://www.youtube-nocookie.com/embed/\(videoID)?playsinline=1") {
+            var request = URLRequest(url: url)
+            request.setValue("https://org.marketplaceliteracy.app", forHTTPHeaderField: "Referer")
+            view.load(request)
         }
         return view
     }
