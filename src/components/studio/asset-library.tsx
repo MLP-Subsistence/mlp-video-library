@@ -13,18 +13,19 @@ const tabs: Array<{ kind: AssetKind; label: string; icon: typeof ImageIcon }> = 
   { kind: "audio", label: "Audio", icon: FileAudio }
 ];
 
-export function useAssetList(kind: AssetKind, query: string, open: boolean) {
+export function useAssetList(kind: AssetKind, query: string, open: boolean, folderId?: string | null) {
   const [assets, setAssets] = useState<StudioAssetDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reload = useCallback(async () => {
     try {
-      const data = await api<{ assets: StudioAssetDto[] }>(`/api/studio/assets?kind=${kind}&usage=1&q=${encodeURIComponent(query)}`);
+      const folder = folderId ? `&folder=${encodeURIComponent(folderId)}` : "";
+      const data = await api<{ assets: StudioAssetDto[] }>(`/api/studio/assets?kind=${kind}&usage=1&q=${encodeURIComponent(query)}${folder}${folderId ? "&take=500" : ""}`);
       setAssets(data.assets);
       setError(null);
     } catch (caught) {
       setError((caught as Error).message);
     }
-  }, [kind, query]);
+  }, [folderId, kind, query]);
   useEffect(() => {
     if (!open) return;
     const timer = setTimeout(() => {

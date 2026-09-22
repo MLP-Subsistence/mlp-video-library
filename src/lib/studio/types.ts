@@ -56,6 +56,13 @@ export type StudioAssetDto = {
   usedIn?: number;
 };
 
+export type StudioAssetFolderDto = {
+  id: string;
+  title: string;
+  assetCount: number;
+  thumbnailUrl: string | null;
+};
+
 export type SegmentWarning = {
   code:
     | "translation_missing"

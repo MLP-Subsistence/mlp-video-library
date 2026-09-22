@@ -3,9 +3,10 @@ import path from "path";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { applyCleanFrame, applyMediaMatch } from "@/lib/studio/services/media-matches";
-import { bestDistance, frameHashes, minDistance, phash, windowHashes } from "@/lib/studio/services/phash";
+import { bestDistance, frameHashes, hamming, minDistance, phash, windowHashes } from "@/lib/studio/services/phash";
 import { serializeComposition } from "@/lib/studio/layouts";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
+import { HIGH_QUALITY_SHUTTERSTOCK_TAG, listOriginalAssetFolders } from "@/lib/studio/asset-folders";
 
 /**
  * Media library from the MLP Shutterstock account (user 367425665).
@@ -29,6 +30,8 @@ import { buildStorageKey, storage } from "@/lib/studio/storage";
  *   ingest  — pick up files re-downloaded from Shutterstock
  *             (Downloads/shutterstock_<id>.jpg), store them as assets and
  *             attach each to the segments whose chosen/best match is that id.
+ *   organize-source — mark assets that match one trusted originals folder,
+ *             enabling per-video folders without including screengrabs.
  *
  *   npx tsx scripts/studio-media-library.ts index  --json "C:/Users/<you>/Downloads/shutterstock-library-367425665.json"
  *   npx tsx scripts/studio-media-library.ts match  [--max-distance 14] [--auto 8]
@@ -394,6 +397,75 @@ async function ingestDownloads() {
   console.log(`attached ${attached} segment visuals`);
 }
 
+async function organizeSource() {
+  const dir = arg("dir");
+  if (!dir) throw new Error("--dir <folder of Shutterstock originals> is required");
+  if (storage().name !== "local") throw new Error("organize-source requires local Studio storage.");
+  const dryRun = process.argv.includes("--dry-run");
+  const files = (await walk(dir)).filter((file) => /^shutterstock_\d+\.jpe?g$/i.test(path.basename(file))).sort();
+  const sources = new Map<string, string[]>();
+  for (const file of files) {
+    const id = /^shutterstock_(\d+)\./i.exec(path.basename(file))![1];
+    sources.set(id, [...(sources.get(id) ?? []), file]);
+  }
+  const assets = await prisma.studioAsset.findMany({ where: { kind: "image", tags: { contains: "shutterstock" } } });
+  const assetsById = new Map<string, typeof assets>();
+  for (const asset of assets) {
+    const id = /^shutterstock,\s*(\d+),/i.exec(asset.tags)?.[1];
+    if (id) assetsById.set(id, [...(assetsById.get(id) ?? []), asset]);
+  }
+  const admin = await prisma.user.findFirst({ where: { role: "admin" }, select: { id: true } });
+  let verified = 0;
+  let imported = 0;
+  let conflicts = 0;
+  let failed = 0;
+  for (const [id, copies] of sources) {
+    try {
+      const source = copies[0];
+      const reference = await phash(await sharp(source).rotate().resize(800, 800, { fit: "inside" }).jpeg().toBuffer());
+      let conflict = false;
+      for (const copy of copies.slice(1)) {
+        const hash = await phash(await sharp(copy).rotate().resize(800, 800, { fit: "inside" }).jpeg().toBuffer());
+        if (hamming(reference, hash) > 4) conflict = true;
+      }
+      if (conflict) {
+        conflicts += 1;
+        console.warn(`  ${id}: duplicate source files differ; skipped`);
+        continue;
+      }
+      let matchingAsset: (typeof assets)[number] | null = null;
+      for (const asset of assetsById.get(id) ?? []) {
+        const stored = await storage().get(asset.storageKey);
+        if (!stored) continue;
+        const hash = await phash(await sharp(stored).rotate().resize(800, 800, { fit: "inside" }).jpeg().toBuffer());
+        if (hamming(reference, hash) <= 4) { matchingAsset = asset; break; }
+      }
+      if (matchingAsset) {
+        verified += 1;
+        if (!dryRun && !matchingAsset.tags.includes(HIGH_QUALITY_SHUTTERSTOCK_TAG)) {
+          await prisma.studioAsset.update({ where: { id: matchingAsset.id }, data: { tags: `${matchingAsset.tags}, ${HIGH_QUALITY_SHUTTERSTOCK_TAG}` } });
+        }
+      } else {
+        imported += 1;
+        if (!dryRun) {
+          const bytes = await sharp(source).rotate().resize(2560, 2560, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+          const meta = await sharp(bytes).metadata();
+          const key = buildStorageKey("stock/shutterstock/library", `${id}.jpg`);
+          await storage().put(key, bytes, "image/jpeg");
+          await prisma.studioAsset.create({ data: { kind: "image", name: `Shutterstock ${id}`, storageKey: key, url: storage().publicUrl(key), mimeType: "image/jpeg", sizeBytes: bytes.length, width: meta.width ?? null, height: meta.height ?? null, tags: `shutterstock, ${id}, licensed, local, original, ${HIGH_QUALITY_SHUTTERSTOCK_TAG}`, uploadedById: admin?.id ?? null } });
+        }
+      }
+    } catch (error) {
+      failed += 1;
+      console.warn(`  ${id}: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  const folders = await listOriginalAssetFolders();
+  console.log(`organize-source${dryRun ? " (dry run)" : ""}: ${files.length} files, ${sources.size} unique IDs, ${verified} verified existing, ${imported} to import, ${conflicts} conflicting duplicates, ${failed} failed`);
+  console.log(`organize-source: ${folders.length} video folders, ${folders.reduce((sum, folder) => sum + folder.assetCount, 0)} photo placements`);
+  for (const folder of folders) console.log(`  ${folder.assetCount.toString().padStart(2)}  ${folder.title}`);
+}
+
 async function main() {
   const command = process.argv[2];
   if (command === "index") await buildIndex();
@@ -402,7 +474,8 @@ async function main() {
   else if (command === "match") await matchSegments();
   else if (command === "ingest") await ingestDownloads();
   else if (command === "clean-frames") await cleanFrames();
-  else throw new Error("usage: index | index-local | match | attach-local | clean-frames | ingest");
+  else if (command === "organize-source") await organizeSource();
+  else throw new Error("usage: index | index-local | match | attach-local | clean-frames | organize-source | ingest");
 }
 
 main()

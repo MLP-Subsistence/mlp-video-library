@@ -3,6 +3,7 @@ import { ok, readJson, requireStudioApiUser, StudioError, studioRoute } from "@/
 import { assetToDto } from "@/lib/studio/project-state";
 import { cleanOptional, cleanText } from "@/lib/sanitize";
 import { assetUsageMap } from "@/lib/studio/services/assets";
+import { originalAssetIdsForFolder, safeAssetTags } from "@/lib/studio/asset-folders";
 import { allowedMimeTypes, isSafeStorageKey, storage, storageObjectExists } from "@/lib/studio/storage";
 import type { AssetKind } from "@/lib/studio/types";
 
@@ -12,9 +13,13 @@ export const GET = studioRoute(async (request: Request) => {
   const kind = url.searchParams.get("kind");
   const q = (url.searchParams.get("q") || "").trim();
   const withUsage = url.searchParams.get("usage") === "1";
-  const take = Math.min(200, Math.max(1, Number(url.searchParams.get("take") || 120)));
+  const folderId = (url.searchParams.get("folder") || "").trim();
+  const requestedTake = Number(url.searchParams.get("take") || 120);
+  const take = Number.isFinite(requestedTake) ? Math.min(folderId ? 500 : 200, Math.max(1, requestedTake)) : 120;
+  const folderAssetIds = folderId ? await originalAssetIdsForFolder(folderId) : null;
   const assets = await prisma.studioAsset.findMany({
     where: {
+      ...(folderAssetIds ? { id: { in: folderAssetIds } } : {}),
       ...(kind === "image" || kind === "video" || kind === "audio" ? { kind } : {}),
       ...(q ? { OR: [{ name: { contains: q } }, { tags: { contains: q } }] } : {}),
       // Generated narration and renders are project files, not library media.
@@ -63,7 +68,7 @@ export const POST = studioRoute(async (request: Request) => {
       width: number(body.width) ? Math.round(number(body.width)!) : null,
       height: number(body.height) ? Math.round(number(body.height)!) : null,
       durationSec: number(body.durationSec),
-      tags: cleanOptional(body.tags)?.slice(0, 300) ?? "",
+      tags: safeAssetTags(cleanOptional(body.tags)),
       uploadedById: user.id
     }
   });

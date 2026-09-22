@@ -1,22 +1,34 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { FileAudio, Film, ImageIcon, Layers, Search, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FileAudio, Film, Folder, FolderOpen, ImageIcon, Layers, Search, Trash2, Upload } from "lucide-react";
 import { AssetThumb, useAssetList } from "@/components/studio/asset-library";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { InlineNotice, Spinner } from "@/components/studio/ui";
 import { api, formatBytes, kindForFile, uploadAsset } from "@/lib/studio/client";
 import { formatClock } from "@/lib/studio/timing";
-import type { AssetKind, StudioAssetDto } from "@/lib/studio/types";
+import type { AssetKind, StudioAssetDto, StudioAssetFolderDto } from "@/lib/studio/types";
 
 /** Asset Library management page (content managers): upload, rename, tag, safely delete. */
 export function AssetsPage() {
   const [kind, setKind] = useState<AssetKind>("image");
   const [query, setQuery] = useState("");
-  const { assets, error, reload, setAssets } = useAssetList(kind, query, true);
+  const [folderId, setFolderId] = useState<string | null>("originals");
+  const [folders, setFolders] = useState<StudioAssetFolderDto[] | null>(null);
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const { assets, error, reload, setAssets } = useAssetList(kind, query, true, kind === "image" ? folderId : null);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    void api<{ folders: StudioAssetFolderDto[] }>("/api/studio/assets/folders")
+      .then((result) => {
+        setFolders(result.folders);
+        setFolderError(null);
+      })
+      .catch((caught) => setFolderError((caught as Error).message));
+  }, []);
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;
@@ -30,6 +42,7 @@ export function AssetsPage() {
         setUploading({ name: file.name, progress: 0 });
         await uploadAsset(file, { kind: detected, onProgress: (fraction) => setUploading({ name: file.name, progress: fraction }) });
         setKind(detected);
+        setFolderId(null);
       } catch (caught) {
         setNotice((caught as Error).message);
       } finally {
@@ -94,7 +107,7 @@ export function AssetsPage() {
         }
       />
       <main className="px-3 py-5 sm:px-5 sm:py-7 lg:px-8">
-        {(notice || error) && <div className="mb-4"><InlineNotice tone="error" onDismiss={() => setNotice(null)}>{notice || error}</InlineNotice></div>}
+        {(notice || error || folderError) && <div className="mb-4"><InlineNotice tone="error" onDismiss={() => { setNotice(null); setFolderError(null); }}>{notice || error || folderError}</InlineNotice></div>}
         {uploading && (
           <div className="mb-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3]">
             <div className="mb-1 flex justify-between text-xs font-bold text-[#526579]"><span className="truncate">Uploading {uploading.name}</span><span>{Math.round(uploading.progress * 100)}%</span></div>
@@ -117,6 +130,32 @@ export function AssetsPage() {
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or tag…" className="mlp-input w-full pl-10" />
           </div>
         </div>
+        {kind === "image" && (
+          <section className="mt-5 rounded-xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3]" aria-label="Video asset folders">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="inline-flex items-center gap-2 text-sm font-extrabold text-[#243447]"><FolderOpen className="size-4 text-[#a64026]" /> Original photos by video</h2>
+                <p className="mt-0.5 text-xs text-[#6b7c8f]">Video folders show verified originals already used in each master lesson. Unassigned originals stay in All verified originals; screengrabs are excluded.</p>
+              </div>
+              <button type="button" onClick={() => setFolderId(null)} className={`rounded-md px-3 py-2 text-xs font-bold ${folderId === null ? "bg-[#243447] text-white" : "border border-[#d8dde5] text-[#526579]"}`}>All library images</button>
+            </div>
+            <div className="mt-3 grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <button type="button" onClick={() => setFolderId("originals")} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === "originals" ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f3e8e6] text-[#a64026]"><FolderOpen className="size-5" /></span>
+                <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-[#243447]">All verified originals</span><span className="block text-xs text-[#6b7c8f]">High Quality Shutterstock</span></span>
+              </button>
+              {folders?.map((folder) => (
+                <button key={folder.id} type="button" onClick={() => setFolderId(folder.id)} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === folder.id ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+                  <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f3e8e6] text-[#a64026]">
+                    {folder.thumbnailUrl ? <span className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(folder.thumbnailUrl)})` }} aria-hidden /> : <Folder className="size-5" />}
+                  </span>
+                  <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-[#243447]" title={folder.title}>{folder.title}</span><span className="block text-xs text-[#6b7c8f]">{folder.assetCount} original photo{folder.assetCount === 1 ? "" : "s"}</span></span>
+                </button>
+              ))}
+              {!folders && !folderError && <span className="col-span-full inline-flex items-center justify-center gap-2 p-4 text-sm text-[#6b7c8f]"><Spinner /> Loading video folders…</span>}
+            </div>
+          </section>
+        )}
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {assets?.map((asset) => (
             <article key={asset.id} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-[#edf0f3]">
