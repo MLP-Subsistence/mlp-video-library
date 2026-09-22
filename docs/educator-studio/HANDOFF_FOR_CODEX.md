@@ -204,3 +204,36 @@ npm run test:studio
 ```
 
 Manual smoke path: Master Templates → New (pick a library lesson) → Layout & visuals (upload an image) → Mark ready → Projects → New Localization → write/approve a translation → Record → watch the timeline update → Review & Generate → Generate Video (inline worker needs FFmpeg on PATH) → Approve → Publish.
+
+---
+
+## 10. Update 2026-09-22 (later): Playlist → Lesson → Segments pipeline
+
+Commits `8a711eb`, `85ecf21` (on top of the earlier seven, still unpushed). This also folded in Codex's uncommitted pacing work (`pauseBeforeSec`, visual duration controls, `STUDIO_MAX_UPLOAD_MB`, ElevenLabs `/v2/voices` pagination).
+
+**What the owner asked:** educators go to a *playlist*, pick a *video*, and get that video's *segments* (the script lines) with the original visuals, ready to translate and narrate. The master lessons are the "Marketplace Literacy - Global" image-diary videos.
+
+**Inputs on disk (owner-provided):**
+- Master MP4s: `C:\Users\uwish\Downloads\YouTube Workflow Test\Trump — Sep 14\02_Original_Media` (41 files, `1-Introduction…` … `20-3 -Personal…`; `10 5 …` has no script and is skipped).
+- Script (one line = one segment): `docs/educator-studio/scripts/marketplace-literacy-global-en.txt` (40 lessons; `7-1` repeats the value-chain text exactly as the owner supplied it).
+
+**How it works (`src/lib/studio/services/master-import.ts`, CLI `scripts/studio-import-master.ts`):**
+1. Parse the script into lessons (`3-1-Title` headings) and lines.
+2. Match each lesson to a media file by number prefix.
+3. `ffmpeg silencedetect` (−35 dB, ≥0.45 s) → speech chunks. The image-diary lessons are narrated one line at a time with pauses, so chunk count == line count in the normal case (Introduction: 13 = 13, exact). Otherwise boundaries are proportional to line length, snapped to the nearest pause, and the segment notes say "check the visual".
+4. Upload the master MP4 as a `StudioAsset`, extract a poster frame per segment (also assets), create/refresh the `StudioTemplate` (status `ready`, `masterAssetId`), one `StudioSegment` per line with `sourceStartSec/EndSec`, `pauseAfterSec` from the measured gap, and composition = full-screen master video **starting at that segment's offset** (`CompositionItem.startSec`, new).
+5. Library rows: ensures the playlist ("Marketplace Literacy - Global", English) and matches/creates the `Video` (matched by normalized title; new ones are `Draft`), sets its transcript.
+
+Idempotent; lessons whose template already has projects are skipped.
+
+**Run:**
+```bash
+npx tsx scripts/studio-import-master.ts --media "<folder>" [--only 1,2,3-1] [--playlist "Marketplace Literacy - Global"] [--format "Image Diaries"]
+```
+(needs `DATABASE_URL`, storage env, FFmpeg). Local run for lesson 1 verified end to end: template of 13 segments → New Localization (playlist → lesson → Kinyarwanda) → workspace shows per-segment master frames on the timeline and "Listen to the original (1.1 s)" → 720p render reproduces the original slides per segment (56.6 s, original pacing). A background run for all 40 lessons was started; check `/studio/templates` or re-run the CLI (idempotent).
+
+**UI changes:** New Localization modal is now Playlist → Lesson (Ready / Prepare) → Language, backed by `GET /api/studio/library/playlists`. Script panel plays the original narration for the segment. Timeline thumbnails use `video#t=offset` so each segment shows its own frame. Before narration exists, a segment's placeholder length is its original duration (not a flat 4 s).
+
+**Caveat to raise with the owner:** the master videos have burnt-in English subtitles, so a localized video keeps English captions under the new narration unless MLP supplies caption-free masters (or the segment visuals are replaced with the extracted poster frames/other assets, which the Layout Editor already allows).
+
+**Production note:** two more additive columns since the last note — `StudioTemplate.masterAssetId`, `StudioSegment.sourceStartSec/sourceEndSec` (plus Codex's `pauseBeforeSec`). Apply to Postgres before deploying.
