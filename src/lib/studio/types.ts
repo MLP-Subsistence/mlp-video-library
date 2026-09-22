@@ -27,6 +27,13 @@ export type Composition = {
   textOverlay?: TextOverlay;
 };
 
+export type TextFont = "Arial" | "Georgia" | "Verdana" | "Trebuchet MS" | "Tahoma" | "Times New Roman" | "Courier New" | "Impact" | "Comic Sans MS";
+
+/**
+ * Words drawn over a segment's picture — independent of the narration script.
+ * Sizes (fontSize, letterSpacing, radius, stroke, shadow) are in pixels of a
+ * 1920x1080 frame and are scaled for the preview and for 720p exports.
+ */
 export type TextOverlay = {
   text: string;
   /** Normalized to the 16:9 video frame, not the editor's pixel size. */
@@ -34,12 +41,38 @@ export type TextOverlay = {
   y: number;
   w: number;
   h: number;
-  fontFamily: "Arial" | "Georgia" | "Verdana" | "Trebuchet MS";
+  fontFamily: TextFont;
   fontSize: number;
   color: string;
+  opacity: number;
   align: "left" | "center" | "right";
+  verticalAlign: "top" | "middle" | "bottom";
   bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  uppercase: boolean;
+  letterSpacing: number;
+  lineHeight: number;
+  rotation: number;
   background: boolean;
+  backgroundColor: string;
+  backgroundOpacity: number;
+  backgroundRadius: number;
+  strokeWidth: number;
+  strokeColor: string;
+  shadow: boolean;
+  shadowColor: string;
+  shadowBlur: number;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowOpacity: number;
+};
+
+export type TextStylePreset = {
+  id: string;
+  label: string;
+  description: string;
+  style: Partial<TextOverlay>;
 };
 
 export type LayoutSlotRect = { x: number; y: number; w: number; h: number; shape?: "rect" | "circle" };

@@ -64,5 +64,5 @@ test("on-screen text survives saved layout normalization and visual changes", ()
   const hostile = normalizeComposition({ ...emptyComposition(), textOverlay: { ...DEFAULT_TEXT_OVERLAY, fontFamily: "made-up" as "Arial", color: "expression(alert())", fontSize: 10000 } });
   assert.equal(hostile.textOverlay?.fontFamily, "Arial");
   assert.equal(hostile.textOverlay?.color, "#ffffff");
-  assert.equal(hostile.textOverlay?.fontSize, 120);
+  assert.equal(hostile.textOverlay?.fontSize, 200, "font size is clamped to the largest the renderer supports");
 });

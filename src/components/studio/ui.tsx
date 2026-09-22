@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, Info, Loader2, X } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, X } from "lucide-react";
 
 /** Small presentational pieces shared across Educator Studio, styled with the MLP tokens. */
 
@@ -88,6 +88,55 @@ export function InlineNotice({ tone = "info", children, onDismiss }: { tone?: "i
       )}
     </div>
   );
+}
+
+/**
+ * A small "…more" menu for actions that would otherwise crowd a toolbar.
+ * `<details>` keeps it keyboard accessible without a popover library; it
+ * closes on outside click, on Escape and after any item is chosen.
+ */
+export function ActionMenu({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDetailsElement | null>(null);
+  useEffect(() => {
+    const close = (event: Event) => {
+      const element = ref.current;
+      if (!element?.open) return;
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      if (event.type === "pointerdown" && element.contains(event.target as Node)) return;
+      element.open = false;
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, []);
+  return (
+    <details ref={ref} className={`relative ${className}`}>
+      <summary className="mlp-btn-outline h-10 cursor-pointer list-none [&::-webkit-details-marker]:hidden" aria-label={label}>
+        {label} <ChevronDown className="size-4" />
+      </summary>
+      <div className="absolute right-0 z-40 mt-1 w-64 rounded-xl border border-[#e5e7eb] bg-white p-1 shadow-lg" onClick={() => { if (ref.current) ref.current.open = false; }}>
+        {children}
+      </div>
+    </details>
+  );
+}
+
+export function MenuItem({ icon: Icon, children, onClick, href, disabled, hint }: { icon?: typeof Info; children: ReactNode; onClick?: () => void; href?: string; disabled?: boolean; hint?: string }) {
+  const className = "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-[#243447] hover:bg-[#f7f8fa] disabled:opacity-40";
+  const body = (
+    <>
+      {Icon && <Icon className="mt-0.5 size-4 shrink-0 text-[#6b7c8f]" />}
+      <span className="min-w-0">
+        <span className="block">{children}</span>
+        {hint && <span className="block text-xs font-semibold text-[#6b7c8f]">{hint}</span>}
+      </span>
+    </>
+  );
+  if (href) return <a href={href} className={className}>{body}</a>;
+  return <button type="button" onClick={onClick} disabled={disabled} className={className}>{body}</button>;
 }
 
 export function StatusPill({ tone, children }: { tone: "ready" | "warning" | "muted" | "accent" | "error"; children: ReactNode }) {

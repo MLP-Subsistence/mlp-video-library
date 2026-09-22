@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
 import { getLayout } from "@/lib/studio/layouts";
-import { normalizeTextOverlay } from "@/lib/studio/text-overlay";
+import { normalizeTextOverlay, rgba } from "@/lib/studio/text-overlay";
 import type { Composition, StudioAssetDto, TextOverlay, TimelineBlock } from "@/lib/studio/types";
 
 /**
@@ -81,11 +81,12 @@ export function CompositionPreview({
 }
 
 function OnScreenText({ overlay, editable, onChange }: { overlay: TextOverlay; editable: boolean; onChange?: (overlay: TextOverlay) => void }) {
-  const [draft, setDraft] = useState(overlay);
+  // While dragging we show a local copy; otherwise the stored overlay is the truth.
+  const [dragDraft, setDragDraft] = useState<TextOverlay | null>(null);
+  const draft = dragDraft ?? overlay;
   const [frameHeight, setFrameHeight] = useState(540);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; y: number; start: TextOverlay; kind: "move" | "resize" } | null>(null);
-  useEffect(() => setDraft(overlay), [overlay]);
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -111,19 +112,48 @@ function OnScreenText({ overlay, editable, onChange }: { overlay: TextOverlay; e
     const next = state.kind === "move"
       ? { ...state.start, x: state.start.x + dx, y: state.start.y + dy }
       : { ...state.start, w: state.start.w + dx, h: state.start.h + dy };
-    setDraft(normalizeTextOverlay(next)!);
+    setDragDraft(normalizeTextOverlay(next)!);
   };
   const finish = () => {
     if (!drag.current) return;
     drag.current = null;
-    onChange?.(draft);
+    if (dragDraft) onChange?.(dragDraft);
+    setDragDraft(null);
   };
   const px = frameHeight / 1080;
+  const shadow = draft.shadow ? `${draft.shadowOffsetX * px}px ${draft.shadowOffsetY * px}px ${draft.shadowBlur * px}px ${rgba(draft.shadowColor, draft.shadowOpacity)}` : undefined;
+  const stroke = draft.strokeWidth > 0 ? `${draft.strokeWidth * px}px ${draft.strokeColor}` : undefined;
   return (
     <div ref={frameRef} className="pointer-events-none absolute inset-0 z-10" aria-label="Video text overlay">
       <div
-        className={`pointer-events-auto absolute whitespace-pre-wrap break-words ${editable ? "cursor-move touch-none outline outline-2 outline-[#e86943]" : ""}`}
-        style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%`, width: `${draft.w * 100}%`, height: `${draft.h * 100}%`, padding: `${Math.max(3, 12 * px)}px`, fontFamily: draft.fontFamily, fontSize: `${Math.max(8, draft.fontSize * px)}px`, lineHeight: 1.15, fontWeight: draft.bold ? 700 : 400, textAlign: draft.align, color: draft.color, backgroundColor: draft.background ? "rgba(0,0,0,.68)" : "transparent", borderRadius: `${8 * px}px`, overflow: "hidden", userSelect: "none" }}
+        className={`pointer-events-auto absolute flex flex-col whitespace-pre-wrap break-words ${editable ? "cursor-move touch-none outline outline-2 outline-[#e86943]" : ""}`}
+        style={{
+          left: `${draft.x * 100}%`,
+          top: `${draft.y * 100}%`,
+          width: `${draft.w * 100}%`,
+          height: `${draft.h * 100}%`,
+          padding: `${Math.max(3, 12 * px)}px`,
+          fontFamily: draft.fontFamily,
+          fontSize: `${Math.max(8, draft.fontSize * px)}px`,
+          lineHeight: draft.lineHeight,
+          letterSpacing: `${draft.letterSpacing * px}px`,
+          fontWeight: draft.bold ? 700 : 400,
+          fontStyle: draft.italic ? "italic" : "normal",
+          textDecoration: draft.underline ? "underline" : "none",
+          textTransform: draft.uppercase ? "uppercase" : "none",
+          textAlign: draft.align,
+          justifyContent: draft.verticalAlign === "top" ? "flex-start" : draft.verticalAlign === "bottom" ? "flex-end" : "center",
+          color: draft.color,
+          opacity: draft.opacity,
+          textShadow: shadow,
+          WebkitTextStroke: stroke,
+          paintOrder: "stroke fill",
+          transform: draft.rotation ? `rotate(${draft.rotation}deg)` : undefined,
+          backgroundColor: draft.background ? rgba(draft.backgroundColor, draft.backgroundOpacity) : "transparent",
+          borderRadius: `${draft.backgroundRadius * px}px`,
+          overflow: "hidden",
+          userSelect: "none"
+        }}
         onPointerDown={(event) => { if ((event.target as HTMLElement).dataset.resize) start(event, "resize"); else start(event, "move"); }}
         onPointerMove={move}
         onPointerUp={finish}

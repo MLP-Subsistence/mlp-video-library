@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Pencil, Play, Plus, Type, Undo2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Pencil, Play, Plus, Type } from "lucide-react";
 import { Waveform } from "@/components/studio/workspace/waveform";
 import { formatClock } from "@/lib/studio/timing";
 import type { ProjectDto, ProjectSegmentDto, TimelineBlock } from "@/lib/studio/types";
@@ -22,9 +22,6 @@ export function Timeline({
   onSeek,
   onPlayPause,
   onEditText,
-  onUndo,
-  canUndo,
-  undoLabel,
   collapsed,
   onToggleCollapsed,
   mobile = false,
@@ -41,9 +38,6 @@ export function Timeline({
   onSeek: (timeSec: number) => void;
   onPlayPause: () => void;
   onEditText?: (segmentId: string) => void;
-  onUndo?: () => void;
-  canUndo?: boolean;
-  undoLabel?: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   mobile?: boolean;
@@ -131,30 +125,27 @@ export function Timeline({
 
   return (
     <section className="border-t border-[#e5e7eb] bg-white" aria-label="Timeline">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-1.5 sm:px-4">
+        <div className="flex min-w-0 shrink items-center gap-2">
           <button type="button" onClick={onToggleCollapsed} className="inline-flex items-center gap-1 text-xs font-extrabold uppercase tracking-wide text-[#243447]">
             Timeline {collapsed ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
           </button>
           <button type="button" onClick={onPlayPause} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] text-[#243447]" aria-label={playing ? "Pause preview" : "Play preview"}>
             {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
           </button>
-          {onUndo && <button type="button" onClick={onUndo} disabled={!canUndo} className="inline-flex h-8 items-center gap-1 rounded-md border border-[#d8dde5] px-2 text-xs font-bold text-[#243447] disabled:opacity-40" aria-label="Undo last edit" title={canUndo ? `Undo ${undoLabel || "last edit"} (Ctrl+Z)` : "Nothing to undo"}><Undo2 className="size-4" /> Undo</button>}
-          {onEditText && activeSegmentId && <button type="button" onClick={() => onEditText(activeSegmentId)} className="inline-flex h-8 items-center gap-1 rounded-md border border-[#d8dde5] px-2 text-xs font-bold text-[#243447]" title="Edit the selected text-track segment"><Pencil className="size-3.5" /> Edit text</button>}
-          <span className="text-sm font-bold tabular-nums text-[#526579]">
+          <span className="whitespace-nowrap text-sm font-bold tabular-nums text-[#526579]">
             {formatClock(timeSec)} / {formatClock(timeline.totalSec)}
           </span>
-          <span className="hidden text-xs text-[#6b7c8f] sm:inline">Total Duration: {formatClock(timeline.totalSec)}</span>
         </div>
         {!collapsed && (
-          <div className="flex items-center gap-1">
-            <button type="button" onClick={() => setExpanded((value) => !value)} className="mr-2 hidden text-xs font-bold text-[#a64026] sm:inline" title="Show the visuals inside the selected segment">
+          <div className="flex shrink-0 items-center gap-1">
+            <button type="button" onClick={() => setExpanded((value) => !value)} className="mr-1 hidden text-xs font-bold text-[#a64026] xl:inline" title="Show the visuals inside the selected segment">
               {expanded ? "Compact" : "Detail"}
             </button>
             <button type="button" onClick={() => setZoom((value) => Math.max(1, value / 1.5))} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] text-[#243447]" aria-label="Zoom out"><Minus className="size-4" /></button>
             <span className="w-12 text-center text-xs font-bold tabular-nums text-[#526579]">{Math.round(zoom * 100)}%</span>
             <button type="button" onClick={() => setZoom((value) => Math.min(16, value * 1.5))} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] text-[#243447]" aria-label="Zoom in"><Plus className="size-4" /></button>
-            <button type="button" onClick={() => setZoom(1)} className="ml-1 inline-flex h-8 items-center gap-1 rounded-md border border-[#d8dde5] px-2 text-xs font-bold text-[#243447]" title="Fit Lesson"><Maximize2 className="size-3.5" /> Fit</button>
+            <button type="button" onClick={() => setZoom(1)} className="ml-1 grid size-8 place-items-center rounded-md border border-[#d8dde5] text-[#243447]" aria-label="Fit the whole lesson" title="Fit the whole lesson"><Maximize2 className="size-3.5" /></button>
           </div>
         )}
       </div>
@@ -190,12 +181,18 @@ export function Timeline({
                 const segment = segmentById.get(block.segmentId);
                 if (!segment) return null;
                 const isActive = block.segmentId === activeSegmentId;
-                const text = segment.composition.textOverlay?.text.trim() || "Add text";
+                const text = segment.composition.textOverlay?.text.trim() ?? "";
                 return (
                   <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} onDoubleClick={onEditText ? () => onEditText(block.segmentId) : undefined} warnings={[]} action={onEditText && isActive && block.durationSec * pxPerSec >= 90 ? <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onEditText(block.segmentId); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onEditText(block.segmentId); } }} className="absolute bottom-1 right-1 inline-flex h-6 items-center gap-1 rounded-md bg-[#a64026] px-1.5 text-[10px] font-extrabold text-white shadow" title="Edit on-screen text for this segment"><Pencil className="size-3" /> Edit text</span> : null}>
-                    <div className="flex h-full items-center gap-1.5 px-2" title={text}>
-                      <Type className="size-3 shrink-0 text-[#a64026]" />
-                      <span className="truncate text-[10px] font-bold text-[#243447]">{text}</span>
+                    <div className="flex h-full items-center gap-1.5 px-2" title={text || "No on-screen text"}>
+                      {text ? (
+                        <>
+                          <Type className="size-3 shrink-0 text-[#a64026]" />
+                          <span className="truncate text-[10px] font-bold text-[#243447]">{text}</span>
+                        </>
+                      ) : (
+                        isActive && <span className="truncate text-[10px] font-bold text-[#8b9bad]">Add text</span>
+                      )}
                     </div>
                   </Block>
                 );
@@ -257,7 +254,7 @@ export function Timeline({
                         {narration.url ? (
                           <Waveform url={narration.url} startSec={narration.startSec ?? 0} endSec={(narration.startSec ?? 0) + narration.durationSec} seed={segment.key} />
                         ) : (
-                          <div className="flex h-full items-center justify-center text-[10px] font-bold uppercase tracking-wide text-[#8b9bad]">No narration</div>
+                          <div className="flex h-full items-center justify-center text-[10px] font-bold uppercase tracking-wide text-[#8b9bad]">{isActive || block.durationSec * pxPerSec >= 150 ? "No narration" : ""}</div>
                         )}
                       </div>
                       {block.pauseSec > 0 && (
@@ -342,11 +339,14 @@ function Block({ block, pxPerSec, active, onClick, onDoubleClick, warnings, acti
       aria-pressed={active}
     >
       {children}
-      {warnings.length > 0 && (
-        <span className="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-amber-500 text-white" aria-label={warnings.map((warning) => warning.message).join(", ")}>
-          <AlertTriangle className="size-2.5" />
-        </span>
-      )}
+      {warnings.length > 0 &&
+        (active ? (
+          <span className="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-amber-500 text-white" aria-label={warnings.map((warning) => warning.message).join(", ")}>
+            <AlertTriangle className="size-2.5" />
+          </span>
+        ) : (
+          <span className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-400" aria-label={warnings.map((warning) => warning.message).join(", ")} />
+        ))}
       {action}
     </button>
   );

@@ -169,5 +169,7 @@ export function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: n
     if (timer) clearTimeout(timer);
     timer = null;
   };
+  /** True while a call is still waiting to run — used to flush edits on unmount. */
+  wrapped.pending = () => timer !== null;
   return wrapped;
 }
