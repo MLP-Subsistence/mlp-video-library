@@ -164,16 +164,22 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
             </div>
 
             {pieCount !== null && (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d8dde5] bg-[#f7f8fa] px-4 py-3">
-                <span>
-                  <span className="block text-sm font-extrabold text-[#243447]">Number of slices</span>
-                  <span className="block text-xs text-[#6b7c8f]">The circle is cut into equal slices; each slice holds its own image or video.</span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <button type="button" onClick={() => changePieCount(pieCount - 1)} disabled={pieCount <= PIE_MIN_SLICES} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] bg-white disabled:opacity-40" aria-label="Use fewer slices"><Minus className="size-4" /></button>
-                  <strong className="w-8 text-center text-lg text-[#243447]">{pieCount}</strong>
-                  <button type="button" onClick={() => changePieCount(pieCount + 1)} disabled={pieCount >= PIE_MAX_SLICES} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] bg-white disabled:opacity-40" aria-label="Use more slices"><Plus className="size-4" /></button>
-                </span>
+              <div className="mt-3 rounded-xl border border-[#d8dde5] bg-[#f7f8fa] px-4 py-3">
+                <span className="block text-sm font-extrabold text-[#243447]">How many slices make up the circle?</span>
+                <span className="block text-xs text-[#6b7c8f]">Each slice holds its own image or video, with a gap between them.</span>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {Array.from({ length: PIE_MAX_SLICES - PIE_MIN_SLICES + 1 }, (_, index) => index + PIE_MIN_SLICES).map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => changePieCount(count)}
+                      aria-pressed={pieCount === count}
+                      className={`size-9 rounded-lg border text-sm font-extrabold ${pieCount === count ? "border-[#a64026] bg-[#fbeaea] text-[#a64026]" : "border-[#d8dde5] bg-white text-[#526579] hover:border-[#c9d0da]"}`}
+                    >
+                      {count}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 

@@ -93,8 +93,13 @@ const standardLayouts: LayoutDefinition[] = [
  */
 const FRAME_ASPECT = 16 / 9;
 const PIE_RADIUS_Y = 0.47;
-/** A hairline gap so neighbouring slices read as separate pieces. */
-const PIE_GAP_RAD = 0.012;
+/**
+ * Half of the space left between two neighbouring slices, as a fraction of the
+ * radius. Each slice is inset by this much along both of its straight edges,
+ * which also trims its point — so the gap stays the same width from the rim to
+ * the middle and the slices never touch.
+ */
+const PIE_GAP = 0.03;
 
 export const PIE_MIN_SLICES = 2;
 export const PIE_MAX_SLICES = 8;
@@ -105,12 +110,19 @@ function wedgeSlot(index: number, count: number): LayoutSlotRect {
   const ry = PIE_RADIUS_Y;
   const rx = ry / FRAME_ASPECT;
   const sweep = (Math.PI * 2) / count;
-  const start = -Math.PI / 2 + index * sweep + PIE_GAP_RAD;
-  const end = -Math.PI / 2 + (index + 1) * sweep - PIE_GAP_RAD;
-  const steps = Math.max(6, Math.ceil((sweep / (Math.PI * 2)) * 96));
-  const points: Array<[number, number]> = [[cx, cy]];
+  const start = -Math.PI / 2 + index * sweep;
+  const half = sweep / 2;
+  const middle = start + half;
+  // Inset both straight edges by PIE_GAP: the arc starts a little later and the
+  // point is cut off where the two inset edges would cross.
+  const edgeInset = Math.min(Math.asin(Math.min(0.9, PIE_GAP)), half * 0.6);
+  const apexRadius = Math.min(0.9, PIE_GAP / Math.max(0.05, Math.sin(half)));
+  const arcStart = start + edgeInset;
+  const arcEnd = start + sweep - edgeInset;
+  const steps = Math.max(6, Math.ceil(((arcEnd - arcStart) / (Math.PI * 2)) * 96));
+  const points: Array<[number, number]> = [[cx + rx * apexRadius * Math.cos(middle), cy + ry * apexRadius * Math.sin(middle)]];
   for (let step = 0; step <= steps; step += 1) {
-    const angle = start + ((end - start) * step) / steps;
+    const angle = arcStart + ((arcEnd - arcStart) * step) / steps;
     points.push([cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)]);
   }
   const xs = points.map((point) => point[0]);
