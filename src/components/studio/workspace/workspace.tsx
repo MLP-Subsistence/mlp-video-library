@@ -11,6 +11,7 @@ import { FullNarrationModal } from "@/components/studio/workspace/full-narration
 import { ScriptPanel } from "@/components/studio/workspace/script-panel";
 import { SegmentList } from "@/components/studio/workspace/segment-list";
 import { Timeline } from "@/components/studio/workspace/timeline";
+import { TranslationSettingsModal } from "@/components/studio/workspace/translation-settings";
 import { usePreviewPlayer } from "@/components/studio/workspace/use-player";
 import { summarizeProject, useProject } from "@/components/studio/workspace/use-project";
 import { api } from "@/lib/studio/client";
@@ -23,10 +24,11 @@ import type { ProjectDto } from "@/lib/studio/types";
  */
 export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; initialSegmentId?: string | null }) {
   const controller = useProject(initial, initialSegmentId);
-  const { project, activeSegment, activeIndex, setActiveSegmentId, patchSegment } = controller;
+  const { project, activeSegment, activeIndex, setActiveSegmentId, patchSegment, patchProject } = controller;
   const player = usePreviewPlayer(project);
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [fullNarrationOpen, setFullNarrationOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const [mobileTimeline, setMobileTimeline] = useState(false);
   const [translating, setTranslating] = useState<{ done: number; remaining: number } | null>(null);
@@ -194,7 +196,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
               <Timeline {...timelineProps} collapsed={false} onToggleCollapsed={() => setMobileTimeline(false)} mobile />
             </div>
           )}
-          <ScriptPanel key={activeSegment?.id ?? "none"} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} />
+          <ScriptPanel key={activeSegment?.id ?? "none"} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} />
         </aside>
       </div>
 
@@ -216,6 +218,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
           }}
         />
       )}
+      <TranslationSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} project={project} onSave={patchProject} />
       <FullNarrationModal open={fullNarrationOpen} onClose={() => setFullNarrationOpen(false)} project={project} onProject={controller.setProject} />
     </div>
   );

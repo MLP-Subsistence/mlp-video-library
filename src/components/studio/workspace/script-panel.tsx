@@ -12,7 +12,7 @@ import type { ProjectDto, ProjectSegmentDto, StudioAssetDto } from "@/lib/studio
 type NarrationTab = "record" | "ai" | "upload";
 
 /** Right-hand panel: Original → Translation → Narration → Timing → Approve & Next. */
-export function ScriptPanel({ controller, onNext, onTranslateLesson, translating }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean }) {
+export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void }) {
   const { project, activeSegment, patchSegment, setLocalTranslation, saving, savedAt } = controller;
   const [tab, setTab] = useState<NarrationTab>(() => (activeSegment?.narration.source === "ai" ? "ai" : activeSegment?.narration.source === "upload" ? "upload" : "record"));
   const [busy, setBusy] = useState<string | null>(null);
@@ -118,7 +118,10 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
 
         <section className="border-t border-[#edf0f3] pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Translation — {project.targetLanguageName}</h3>
+            <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">
+              Translation — {project.targetLanguageName}{" "}
+              <button type="button" onClick={onOpenSettings} className="ml-1 font-bold normal-case tracking-normal text-[#a64026]" title="Region, dialect, audience, register and glossary">settings</button>
+            </h3>
             <div className="flex items-center gap-2">
               <StatusPill tone={translationTone}>{segment.translationStatus === "approved" ? "Approved" : segment.translationStatus === "draft" ? (segment.translationSource === "ai" ? "AI draft" : "Draft") : "Missing"}</StatusPill>
               <button type="button" onClick={regenerate} disabled={busy !== null || !segment.sourceScript.trim()} className="inline-flex items-center gap-1 text-xs font-bold text-[#a64026]" title="Regenerate this segment with AI">
