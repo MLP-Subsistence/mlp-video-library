@@ -233,7 +233,9 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
                 block={previewBlock}
                 timeSec={previewTime}
                 playing={player.playing}
-                editText={!player.playing && previewSegment.segmentId === activeSegment?.segmentId}
+                // The drag box and handle only appear while the text clip itself is selected;
+                // with the video or audio clip selected the preview shows the finished frame.
+                editText={!player.playing && selectedTrack === "text" && previewSegment.segmentId === activeSegment?.segmentId}
                 onTextMove={(overlay: TextOverlay) => {
                   const composition = { ...previewSegment.composition, textOverlay: overlay };
                   controller.setLocalComposition(previewSegment.id, composition);
