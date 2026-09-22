@@ -30,33 +30,63 @@ export function TemplatesPage({ initialTemplates }: { initialTemplates: Template
             Start from an existing library lesson (its transcript becomes the first draft of the segments) or from a blank template.
           </EmptyState>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {initialTemplates.map((template) => (
-              <article key={template.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#edf0f3]">
-                <div className="relative aspect-video bg-[#f2f4f7]">
-                  {template.thumbnailUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={template.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="grid h-full w-full place-items-center text-[#8b9bad]"><LayoutTemplate className="size-8" /></span>
-                  )}
-                  <span className="absolute left-3 top-3"><StatusPill tone={template.status === "ready" ? "ready" : "warning"}>{template.status === "ready" ? "Ready" : "Draft"}</StatusPill></span>
+          <div className="space-y-8">
+            {groupByPlaylist(initialTemplates).map((group) => (
+              <section key={group.key}>
+                <h2 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-[#6b7c8f]">
+                  {group.title} <span className="font-semibold normal-case tracking-normal">· {group.templates.length} lesson{group.templates.length === 1 ? "" : "s"}</span>
+                </h2>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {group.templates.map((template) => (
+                    <TemplateCard key={template.id} template={template} />
+                  ))}
                 </div>
-                <div className="flex flex-1 flex-col p-4">
-                  <h3 className="text-lg font-extrabold text-[#243447]">{template.title}</h3>
-                  <p className="mt-1 text-sm text-[#6b7c8f]">{template.moduleName ?? "Marketplace Literacy"} · {template.segmentCount} segment{template.segmentCount === 1 ? "" : "s"}</p>
-                  <p className="mt-1 text-xs text-[#6b7c8f]">{template.languages.length ? `Localized: ${template.languages.join(", ")}` : "No localizations yet"}</p>
-                  <div className="mt-auto pt-4">
-                    <Link href={`/studio/templates/${template.id}`} className="mlp-btn-dark min-h-11 w-full">Open template <ArrowRight className="size-4" /></Link>
-                  </div>
-                </div>
-              </article>
+              </section>
             ))}
           </div>
         )}
       </main>
       <NewTemplateModal open={creating} onClose={() => setCreating(false)} onCreated={(id) => router.push(`/studio/templates/${id}`)} />
     </>
+  );
+}
+
+/** Cards grouped by the playlist the lesson belongs to, in the order the server returned (main playlist first, lessons in script order). */
+function groupByPlaylist(templates: TemplateSummaryDto[]) {
+  const groups: Array<{ key: string; title: string; templates: TemplateSummaryDto[] }> = [];
+  for (const template of templates) {
+    const key = template.playlistId ?? "none";
+    let group = groups.find((entry) => entry.key === key);
+    if (!group) {
+      group = { key, title: template.playlistTitle ?? "Not in a playlist", templates: [] };
+      groups.push(group);
+    }
+    group.templates.push(template);
+  }
+  return groups;
+}
+
+function TemplateCard({ template }: { template: TemplateSummaryDto }) {
+  return (
+    <article className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#edf0f3]">
+      <div className="relative aspect-video bg-[#f2f4f7]">
+        {template.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={template.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="grid h-full w-full place-items-center text-[#8b9bad]"><LayoutTemplate className="size-8" /></span>
+        )}
+        <span className="absolute left-3 top-3"><StatusPill tone={template.status === "ready" ? "ready" : "warning"}>{template.status === "ready" ? "Ready" : "Draft"}</StatusPill></span>
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <h3 className="text-lg font-extrabold text-[#243447]">{template.title}</h3>
+        <p className="mt-1 text-sm text-[#6b7c8f]">{template.moduleName ?? "Marketplace Literacy"} · {template.segmentCount} segment{template.segmentCount === 1 ? "" : "s"}</p>
+        <p className="mt-1 text-xs text-[#6b7c8f]">{template.languages.length ? `Localized: ${template.languages.join(", ")}` : "No localizations yet"}</p>
+        <div className="mt-auto pt-4">
+          <Link href={`/studio/templates/${template.id}`} className="mlp-btn-dark min-h-11 w-full">Open template <ArrowRight className="size-4" /></Link>
+        </div>
+      </div>
+    </article>
   );
 }
 

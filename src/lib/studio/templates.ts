@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { compositionAssetIds, parseComposition } from "@/lib/studio/layouts";
+import { compareLessonTitles } from "@/lib/studio/lesson-order";
+import { getStudioSettings } from "@/lib/studio/settings";
 import { assetToDto } from "@/lib/studio/project-state";
 import type { Composition, StudioAssetDto, TemplateSummaryDto } from "@/lib/studio/types";
 
@@ -96,29 +98,53 @@ export async function loadTemplateDto(templateId: string): Promise<TemplateDto |
 }
 
 export async function listTemplateSummaries(options: { readyOnly?: boolean } = {}): Promise<TemplateSummaryDto[]> {
-  const templates = await prisma.studioTemplate.findMany({
-    where: options.readyOnly ? { status: "ready" } : {},
-    include: {
-      module: true,
-      sourceVideo: { select: { id: true, thumbnailUrl: true, uploadedThumbnailPath: true } },
-      _count: { select: { segments: true } },
-      projects: { select: { targetLanguageName: true } }
-    },
-    orderBy: { updatedAt: "desc" }
-  });
+  const [templates, settings] = await Promise.all([
+    prisma.studioTemplate.findMany({
+      where: options.readyOnly ? { status: "ready" } : {},
+      include: {
+        module: true,
+        sourceVideo: { select: { id: true, thumbnailUrl: true, uploadedThumbnailPath: true, playlists: { select: { sortOrder: true, playlist: { select: { id: true, title: true, _count: { select: { videos: true } } } } } } } },
+        _count: { select: { segments: true } },
+        projects: { select: { targetLanguageName: true } }
+      },
+      orderBy: { updatedAt: "desc" }
+    }),
+    getStudioSettings()
+  ]);
   const thumbIds = templates.map((template) => template.thumbnailAssetId).filter((id): id is string => Boolean(id));
   const thumbs = thumbIds.length ? await prisma.studioAsset.findMany({ where: { id: { in: thumbIds } } }) : [];
   const thumbById = new Map(thumbs.map((asset) => [asset.id, asset.thumbnailUrl || asset.url]));
-  return templates.map((template) => ({
-    id: template.id,
-    title: template.title,
-    moduleName: template.module?.name ?? null,
-    status: template.status,
-    segmentCount: template._count.segments,
-    thumbnailUrl: (template.thumbnailAssetId && thumbById.get(template.thumbnailAssetId)) || template.sourceVideo?.uploadedThumbnailPath || template.sourceVideo?.thumbnailUrl || null,
-    languages: [...new Set(template.projects.map((project) => project.targetLanguageName))],
-    sourceVideoId: template.sourceVideoId
-  }));
+  const summaries = templates.map((template) => {
+    // A lesson can sit in several playlists (a full course and a per-category one); the main playlist wins, then the largest.
+    const memberships = [...(template.sourceVideo?.playlists ?? [])].sort((a, b) => b.playlist._count.videos - a.playlist._count.videos);
+    const membership = memberships.find((entry) => entry.playlist.id === settings.defaultPlaylistId) ?? memberships[0] ?? null;
+    return {
+      id: template.id,
+      title: template.title,
+      moduleName: template.module?.name ?? null,
+      status: template.status,
+      segmentCount: template._count.segments,
+      thumbnailUrl: (template.thumbnailAssetId && thumbById.get(template.thumbnailAssetId)) || template.sourceVideo?.uploadedThumbnailPath || template.sourceVideo?.thumbnailUrl || null,
+      languages: [...new Set(template.projects.map((project) => project.targetLanguageName))],
+      sourceVideoId: template.sourceVideoId,
+      playlistId: membership?.playlist.id ?? null,
+      playlistTitle: membership?.playlist.title ?? null,
+      playlistOrder: membership?.sortOrder ?? null,
+      updatedAt: template.updatedAt.toISOString()
+    };
+  });
+  // Main playlist first, then the other playlists alphabetically, lessons in playlist / script order;
+  // templates that are not in any playlist come last, most recently edited first.
+  const playlistRank = (summary: (typeof summaries)[number]) => (summary.playlistId === settings.defaultPlaylistId ? 0 : summary.playlistId ? 1 : 2);
+  summaries.sort(
+    (a, b) =>
+      playlistRank(a) - playlistRank(b) ||
+      (a.playlistTitle ?? "").localeCompare(b.playlistTitle ?? "") ||
+      (a.playlistOrder ?? 0) - (b.playlistOrder ?? 0) ||
+      compareLessonTitles(a.title, b.title) ||
+      b.updatedAt.localeCompare(a.updatedAt)
+  );
+  return summaries;
 }
 
 /** Paragraphs first; long paragraphs are split into ~2-sentence groups suited to narration. */

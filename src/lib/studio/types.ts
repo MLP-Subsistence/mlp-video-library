@@ -227,6 +227,11 @@ export type TemplateSummaryDto = {
   thumbnailUrl: string | null;
   languages: string[];
   sourceVideoId: string | null;
+  /** Playlist the lesson belongs to (main playlist preferred) and its position there. */
+  playlistId: string | null;
+  playlistTitle: string | null;
+  playlistOrder: number | null;
+  updatedAt: string;
 };
 
 export type LibraryPlaylistDto = {

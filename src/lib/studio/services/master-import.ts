@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { serializeComposition } from "@/lib/studio/layouts";
+import { lessonDisplayTitle, stripLessonNumber } from "@/lib/studio/lesson-order";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
 import { cleanupWorkDir, makeWorkDir, probe, run } from "@/worker/ffmpeg";
 
@@ -217,8 +218,9 @@ function round(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 
+/** Case/punctuation-insensitive, ignoring the `3-1-` lesson number so renamed rows still match. */
 function normalizeTitle(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return stripLessonNumber(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 export type ImportResult = { lesson: ScriptLesson; templateId: string; videoId: string; segments: number; exact: boolean; skipped?: string };
@@ -253,14 +255,15 @@ export async function importMasterLesson(options: {
     log(`created playlist "${playlist.title}"`);
   }
   const wanted = normalizeTitle(lesson.title);
+  const displayTitle = lessonDisplayTitle(lesson.number, lesson.title);
   const candidates = await prisma.video.findMany({ where: { languageId: language.id }, select: { id: true, title: true, resourceTitle: true } });
   let video = candidates.find((entry) => normalizeTitle(entry.resourceTitle || entry.title) === wanted) ?? null;
   const transcript = lesson.lines.join("\n");
   if (!video) {
     video = await prisma.video.create({
       data: {
-        title: lesson.title,
-        resourceTitle: lesson.title,
+        title: displayTitle,
+        resourceTitle: displayTitle,
         description: `${categoryName} — Marketplace Literacy lesson ${lesson.number}.`,
         category: categoryName,
         resourceType: "Video",
@@ -275,9 +278,9 @@ export async function importMasterLesson(options: {
       },
       select: { id: true, title: true, resourceTitle: true }
     });
-    log(`created library resource "${lesson.title}" (draft)`);
+    log(`created library resource "${displayTitle}" (draft)`);
   } else {
-    await prisma.video.update({ where: { id: video.id }, data: { transcript } });
+    await prisma.video.update({ where: { id: video.id }, data: { transcript, title: displayTitle, resourceTitle: displayTitle, orderIndex: lesson.sequence } });
   }
   await prisma.playlistVideo.upsert({
     where: { playlistId_videoId: { playlistId: playlist.id, videoId: video.id } },
@@ -362,10 +365,10 @@ export async function importMasterLesson(options: {
       await prisma.studioSegment.deleteMany({ where: { templateId: existing.id } });
     }
     const template = existing
-      ? await prisma.studioTemplate.update({ where: { id: existing.id }, data: { title: lesson.title, moduleId: lessonModule?.id ?? null, masterAssetId: masterAsset.id, thumbnailAssetId: frameAssets[0] ?? null, status: "ready", frameWidth: 1920, frameHeight: 1080 } })
+      ? await prisma.studioTemplate.update({ where: { id: existing.id }, data: { title: displayTitle, moduleId: lessonModule?.id ?? null, masterAssetId: masterAsset.id, thumbnailAssetId: frameAssets[0] ?? null, status: "ready", frameWidth: 1920, frameHeight: 1080 } })
       : await prisma.studioTemplate.create({
           data: {
-            title: lesson.title,
+            title: displayTitle,
             description: `Master template for Marketplace Literacy lesson ${lesson.number}. Segments follow the original narration; visuals come from the original video.`,
             sourceVideoId: video.id,
             moduleId: lessonModule?.id ?? null,
