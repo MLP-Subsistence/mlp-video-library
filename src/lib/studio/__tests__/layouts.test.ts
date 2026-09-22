@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compositionAssetIds, compositionHasVisual, emptyComposition, getLayout, layouts, normalizeComposition, parseComposition } from "../layouts";
+import { compositionAssetIds, compositionHasVisual, emptyComposition, getLayout, layouts, normalizeComposition, parseComposition, replaceMainVisual } from "../layouts";
 
 test("every layout has slot rectangles inside the frame", () => {
   for (const layout of layouts) {
@@ -29,4 +29,15 @@ test("asset ids are collected across slots without duplicates", () => {
   assert.deepEqual(compositionAssetIds(composition).sort(), ["a", "b"]);
   assert.equal(compositionHasVisual(composition), true);
   assert.equal(compositionHasVisual(emptyComposition("grid6")), false);
+});
+
+test("replaceMainVisual swaps the first visual and keeps the layout", () => {
+  const split = normalizeComposition({ layout: "split2", slots: [{ id: "slot_1", fit: "cover", items: [{ assetId: "master", share: 1, startSec: 12.5 }] }, { id: "slot_2", fit: "contain", items: [{ assetId: "b", share: 1 }] }] });
+  const next = replaceMainVisual(split, "photo");
+  assert.equal(next.layout, "split2");
+  assert.deepEqual(next.slots[0].items, [{ assetId: "photo", share: 1 }]);
+  assert.equal(next.slots[1].items[0].assetId, "b");
+  assert.equal(next.slots[1].fit, "contain");
+  const empty = replaceMainVisual(emptyComposition("full"), "photo");
+  assert.equal(empty.slots[0].items[0].assetId, "photo");
 });

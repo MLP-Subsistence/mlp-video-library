@@ -136,6 +136,26 @@ export function balanceShares<T extends { assetId: string; share: number }>(item
   return items.map((item) => ({ ...item, share: item.share / total }));
 }
 
+/**
+ * Swap the segment's main visual for another asset, keeping the layout. The
+ * first visual of the first filled slot is replaced (a plain still or the
+ * master video); an empty composition becomes a full-screen visual. A
+ * `startSec` offset of the old visual is dropped because it belonged to that media.
+ */
+export function replaceMainVisual(composition: Composition, assetId: string): Composition {
+  const base = normalizeComposition(composition);
+  if (!compositionHasVisual(base)) {
+    const next = emptyComposition("full");
+    next.slots[0].items = [{ assetId, share: 1 }];
+    return next;
+  }
+  const slotIndex = base.slots.findIndex((slot) => slot.items.length > 0);
+  return {
+    ...base,
+    slots: base.slots.map((slot, index) => (index === slotIndex ? { ...slot, items: slot.items.map((item, i) => (i === 0 ? { assetId, share: item.share } : item)) } : slot))
+  };
+}
+
 export function compositionAssetIds(composition: Composition) {
   const ids = new Set<string>();
   for (const slot of composition.slots) for (const item of slot.items) ids.add(item.assetId);

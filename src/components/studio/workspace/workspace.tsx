@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, Grid2X2, ImagePlus, ListMusic, Pause, Play, PlayCircle, Wand2 } from "lucide-react";
+import { AssetLibrary } from "@/components/studio/asset-library";
 import { LayoutEditor } from "@/components/studio/layout-editor";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { InlineNotice, Spinner, StatusPill } from "@/components/studio/ui";
@@ -15,6 +16,7 @@ import { TranslationSettingsModal } from "@/components/studio/workspace/translat
 import { usePreviewPlayer } from "@/components/studio/workspace/use-player";
 import { summarizeProject, useProject } from "@/components/studio/workspace/use-project";
 import { api } from "@/lib/studio/client";
+import { replaceMainVisual } from "@/lib/studio/layouts";
 import type { ProjectDto } from "@/lib/studio/types";
 
 /**
@@ -27,6 +29,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const { project, activeSegment, activeIndex, setActiveSegmentId, patchSegment, patchProject } = controller;
   const player = usePreviewPlayer(project);
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const [visualPickerOpen, setVisualPickerOpen] = useState(false);
   const [fullNarrationOpen, setFullNarrationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
@@ -88,12 +91,24 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const previewSegment = previewBlock ? project.segments.find((entry) => entry.segmentId === previewBlock.segmentId) ?? activeSegment : activeSegment;
   const previewTime = player.playing ? player.timeSec : activeBlock ? Math.max(activeBlock.startSec, Math.min(player.timeSec, activeBlock.endSec - 0.01)) : player.timeSec;
 
+  // "Change visual" swaps the segment's main picture/video in place; "Layout" opens the full editor.
+  const changeVisual = (segmentId?: string) => {
+    if (segmentId && segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
+    setVisualPickerOpen(true);
+  };
+  const openLayout = (segmentId?: string) => {
+    if (segmentId && segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
+    setLayoutOpen(true);
+  };
+
   const timelineProps = {
     project,
     activeSegmentId: activeSegment?.segmentId ?? "",
     timeSec: player.timeSec,
     playing: player.playing,
     onSelect: selectSegment,
+    onChangeVisual: changeVisual,
+    onOpenLayout: openLayout,
     onSeek: player.seek,
     onPlayPause: () => (player.playing ? player.pause() : player.play())
   };
@@ -166,7 +181,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             )}
             <div className="mx-auto mt-4 flex max-w-4xl flex-wrap items-center justify-center gap-2">
               <button type="button" onClick={() => setLayoutOpen(true)} className="mlp-btn-outline h-10" disabled={!activeSegment}><Grid2X2 className="size-4" /> Layout</button>
-              <button type="button" onClick={() => setLayoutOpen(true)} className="mlp-btn-outline h-10" disabled={!activeSegment}><ImagePlus className="size-4" /> Change Visuals</button>
+              <button type="button" onClick={() => changeVisual()} className="mlp-btn-outline h-10" disabled={!activeSegment}><ImagePlus className="size-4" /> Change Visual</button>
               <button type="button" onClick={() => activeSegment && (player.playing ? player.pause() : player.playSegment(activeSegment.segmentId))} className="mlp-btn-dark h-10 min-h-10 rounded-lg px-4" disabled={!activeSegment}>
                 {player.playing && player.range && !player.range.label.startsWith("Around") ? <Pause className="size-4" /> : <Play className="size-4" />} Preview Segment
               </button>
@@ -196,7 +211,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
               <Timeline {...timelineProps} collapsed={false} onToggleCollapsed={() => setMobileTimeline(false)} mobile />
             </div>
           )}
-          <ScriptPanel key={activeSegment?.id ?? "none"} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} />
+          <ScriptPanel key={activeSegment?.id ?? "none"} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={() => changeVisual()} onOpenLayout={() => openLayout()} />
         </aside>
       </div>
 
@@ -215,6 +230,20 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
           onResetToTemplate={async () => {
             await patchSegment(activeSegment, { composition: null });
             setLayoutOpen(false);
+          }}
+        />
+      )}
+      {activeSegment && (
+        <AssetLibrary
+          open={visualPickerOpen}
+          onClose={() => setVisualPickerOpen(false)}
+          title="Change Visual"
+          description={`Pick the picture or video clip for segment ${String(activeIndex + 1).padStart(2, "0")} — ${activeSegment.title}. Upload your own or choose from the library.`}
+          selectedIds={activeSegment.composition.slots.flatMap((slot) => slot.items.map((item) => item.assetId))}
+          canManage
+          onSelect={(asset) => {
+            setVisualPickerOpen(false);
+            void patchSegment(activeSegment, { composition: replaceMainVisual(activeSegment.composition, asset.id) });
           }}
         />
       )}

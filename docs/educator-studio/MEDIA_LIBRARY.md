@@ -65,3 +65,10 @@ Why the first pass found nothing: the videos zoom and pan the photos ("Ken Burns
 Commands: `index-local --dir <folder>` (Shutterstock originals only, `--all` for every image), `match`, `attach-local` (stores a ≤ 2560 px copy as an asset and makes it the segment visual; 2/3-column collages become `split2` / `columns3` compositions — new layout).
 
 Result for the 397 Youth Africa segments: **229 attached with the clean original**, ~50 weaker candidates left for review in the template editor, the rest are title slides, collages whose photos are not all on disk, or photos not found in any local folder or in account 367425665's library. Verified visually (Introduction, Types of Customers): every attached photo is the right one.
+
+
+## 2026-09-22 — Youth Africa template is fully image-based
+
+- Reviewed the 43 remaining stock candidates on a contact sheet (`scripts/studio-e2e/candidate-sheet.mts`): 38 accepted with `attach-local --ids …`, 5 rejected with `--reject …` (blank-chalkboard matches for title slides, a laptop photo for the strength/weakness slide, a "tiny businessman" for the orange-shirt man).
+- `clean-frames --playlist "Marketplace Literacy Youth Africa"` replaced the other 185 segments' master-video clip with the caption-cropped poster frame (`masters/clean-frames/<template>/<seg>-clean.jpg`), so **all 430 segments of the 25 lessons are stills without burnt-in captions**: 245 licensed Shutterstock originals, 185 cropped frames (title slides and photos not found on disk — swap those for the real photo whenever it turns up, by re-running `match` + `attach-local` or from the segment's "Change visual").
+- Workspace: every segment now has a **Visual** section (next to Narration) with *Change visual* (asset picker: upload or choose an image/video, keeps the layout — `replaceMainVisual`), *Layout* (full editor) and *Use template visual*; the selected clip on the video track shows the same *Change / Layout* buttons and double-click opens the picker.

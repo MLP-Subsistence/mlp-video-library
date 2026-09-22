@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, AudioLines, Check, FileAudio, Mic, RefreshCw, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
+import { ArrowRight, AudioLines, Check, FileAudio, Grid2X2, ImagePlus, Mic, RefreshCw, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
+import { AssetThumb } from "@/components/studio/asset-library";
 import { SegmentRecorder } from "@/components/studio/workspace/recorder";
 import type { ProjectController } from "@/components/studio/workspace/use-project";
 import { InlineNotice, Spinner, StatusPill, textareaClass } from "@/components/studio/ui";
@@ -11,8 +12,8 @@ import type { ProjectDto, ProjectSegmentDto, StudioAssetDto } from "@/lib/studio
 
 type NarrationTab = "record" | "ai" | "upload";
 
-/** Right-hand panel: Original → Translation → Narration → Timing → Approve & Next. */
-export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void }) {
+/** Right-hand panel: Original → Translation → Narration → Visual → Timing → Approve & Next. */
+export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings, onChangeVisual, onOpenLayout }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void; onChangeVisual: () => void; onOpenLayout: () => void }) {
   const { project, activeSegment, patchSegment, setLocalTranslation, saving, savedAt } = controller;
   const [tab, setTab] = useState<NarrationTab>(() => (activeSegment?.narration.source === "ai" ? "ai" : activeSegment?.narration.source === "upload" ? "upload" : "record"));
   const [busy, setBusy] = useState<string | null>(null);
@@ -239,6 +240,8 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
           </div>
         </section>
 
+        <VisualSection segment={segment} assets={project.assets} disabled={busy !== null} onChangeVisual={onChangeVisual} onOpenLayout={onOpenLayout} onResetToTemplate={segment.compositionIsOverride ? () => void run("visual", () => patchSegment(segment, { composition: null }), "Back to the master template visual.") : undefined} />
+
         <section className="space-y-3 border-t border-[#edf0f3] pt-4">
           <div>
             <h3 className="text-sm font-extrabold text-[#243447]">Pacing</h3>
@@ -319,6 +322,37 @@ function AlignmentCorrection({ segment, busy, onSave, onConfirm }: { segment: Pr
         )}
       </div>
     </div>
+  );
+}
+
+/** What is on the video track for this segment, with the same "swap it" affordance the narration has. */
+function VisualSection({ segment, assets, disabled, onChangeVisual, onOpenLayout, onResetToTemplate }: { segment: ProjectSegmentDto; assets: ProjectDto["assets"]; disabled: boolean; onChangeVisual: () => void; onOpenLayout: () => void; onResetToTemplate?: () => void }) {
+  const items = segment.composition.slots.flatMap((slot) => slot.items.map((item) => assets[item.assetId]).filter((asset): asset is StudioAssetDto => Boolean(asset)));
+  const first = items[0] ?? null;
+  const summary = !first ? "No visual yet" : items.length > 1 ? `${items.length} visuals · ${segment.composition.layout === "full" ? "in sequence" : "split screen"}` : first.kind === "video" ? "Video clip" : "Picture";
+  return (
+    <section className="border-t border-[#edf0f3] pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Visual</h3>
+        <StatusPill tone={first ? (segment.compositionIsOverride ? "warning" : "ready") : "muted"}>{first ? (segment.compositionIsOverride ? "Changed" : "From template") : "Missing"}</StatusPill>
+      </div>
+      <div className="mt-3 flex items-center gap-3 rounded-lg border border-[#d8dde5] bg-white p-2">
+        <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[#e5e7eb]">
+          {first ? <AssetThumb asset={first} /> : <span className="grid h-full w-full place-items-center text-[#8b9bad]"><ImagePlus className="size-4" /></span>}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-extrabold text-[#243447]">{first?.name ?? "Choose a picture or video"}</span>
+          <span className="block text-xs text-[#6b7c8f]">{summary}</span>
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={onChangeVisual} disabled={disabled} className="mlp-btn-primary h-10"><ImagePlus className="size-4" /> Change visual</button>
+        <button type="button" onClick={onOpenLayout} disabled={disabled} className="mlp-btn-outline h-10"><Grid2X2 className="size-4" /> Layout</button>
+        {onResetToTemplate && (
+          <button type="button" onClick={onResetToTemplate} disabled={disabled} className="inline-flex items-center gap-1 text-xs font-bold text-[#a64026]"><RefreshCw className="size-3.5" /> Use template visual</button>
+        )}
+      </div>
+    </section>
   );
 }
 

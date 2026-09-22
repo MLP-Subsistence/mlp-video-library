@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, Maximize2, Minus, Music2, Pause, Play, Plus } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Play, Plus } from "lucide-react";
 import { Waveform } from "@/components/studio/workspace/waveform";
 import { formatClock } from "@/lib/studio/timing";
 import type { ProjectDto, ProjectSegmentDto, TimelineBlock } from "@/lib/studio/types";
@@ -17,6 +17,8 @@ export function Timeline({
   timeSec,
   playing,
   onSelect,
+  onChangeVisual,
+  onOpenLayout,
   onSeek,
   onPlayPause,
   collapsed,
@@ -28,6 +30,9 @@ export function Timeline({
   timeSec: number;
   playing: boolean;
   onSelect: (segmentId: string) => void;
+  /** Swap the main picture/video of a segment (video-track "Change" button, double-click). */
+  onChangeVisual?: (segmentId: string) => void;
+  onOpenLayout?: (segmentId: string) => void;
   onSeek: (timeSec: number) => void;
   onPlayPause: () => void;
   collapsed: boolean;
@@ -174,7 +179,16 @@ export function Timeline({
                 const isActive = block.segmentId === activeSegmentId;
                 const showItems = expanded && isActive && block.items.length > 1;
                 return (
-                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} warnings={segment.warnings.filter((warning) => warning.code === "visual_missing" || warning.code === "video_timing")}>
+                  <Block
+                    key={block.segmentId}
+                    block={block}
+                    pxPerSec={pxPerSec}
+                    active={isActive}
+                    onClick={() => onSelect(block.segmentId)}
+                    onDoubleClick={onChangeVisual ? () => onChangeVisual(block.segmentId) : undefined}
+                    warnings={segment.warnings.filter((warning) => warning.code === "visual_missing" || warning.code === "video_timing")}
+                    action={onChangeVisual && isActive && block.durationSec * pxPerSec >= 110 ? <BlockActions onChangeVisual={() => onChangeVisual(block.segmentId)} onOpenLayout={onOpenLayout ? () => onOpenLayout(block.segmentId) : undefined} /> : null}
+                  >
                     {showItems ? (
                       <div className="flex h-full w-full">
                         {block.items.map((item, index) => {
@@ -256,12 +270,41 @@ function Track({ label, icon: Icon, labelWidth, children }: { label: string; ico
   );
 }
 
-function Block({ block, pxPerSec, active, onClick, warnings, children }: { block: TimelineBlock; pxPerSec: number; active: boolean; onClick: () => void; warnings: ProjectSegmentDto["warnings"]; children: React.ReactNode }) {
+/** "Change" / "Layout" on the selected video clip — the visual counterpart of the narration controls. Spans, not buttons, because the clip itself is a button. */
+function BlockActions({ onChangeVisual, onOpenLayout }: { onChangeVisual: () => void; onOpenLayout?: () => void }) {
+  const press = (handler: () => void) => ({
+    onClick: (event: React.MouseEvent) => {
+      event.stopPropagation();
+      handler();
+    },
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      handler();
+    }
+  });
+  return (
+    <span className="absolute bottom-1 right-1 flex gap-1">
+      <span role="button" tabIndex={0} {...press(onChangeVisual)} className="inline-flex h-6 items-center gap-1 rounded-md bg-[#a64026] px-1.5 text-[10px] font-extrabold text-white shadow" title="Change the picture or video for this segment">
+        <ImagePlus className="size-3" /> Change
+      </span>
+      {onOpenLayout && (
+        <span role="button" tabIndex={0} {...press(onOpenLayout)} className="inline-flex h-6 items-center rounded-md bg-white/90 px-1.5 text-[10px] font-extrabold text-[#243447] shadow ring-1 ring-[#d8dde5]" title="Layout: several visuals or a split screen">
+          Layout
+        </span>
+      )}
+    </span>
+  );
+}
+
+function Block({ block, pxPerSec, active, onClick, onDoubleClick, warnings, action, children }: { block: TimelineBlock; pxPerSec: number; active: boolean; onClick: () => void; onDoubleClick?: () => void; warnings: ProjectSegmentDto["warnings"]; action?: React.ReactNode; children: React.ReactNode }) {
   const width = Math.max(6, block.durationSec * pxPerSec - 2);
   return (
     <button
       type="button"
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={`absolute inset-y-1 overflow-hidden rounded-md border text-left transition ${active ? "border-[#a64026] bg-[#fbeaea] ring-2 ring-[#a64026]/25" : block.index % 2 === 0 ? "border-[#d8dde5] bg-[#f7f8fa] hover:border-[#c9d0da]" : "border-[#d8dde5] bg-[#f2f4f7] hover:border-[#c9d0da]"}`}
       style={{ left: block.startSec * pxPerSec, width }}
       title={`${block.title} · ${block.durationSec.toFixed(1)} s${warnings.length ? ` · ${warnings.map((warning) => warning.message).join("; ")}` : ""}`}
@@ -273,6 +316,7 @@ function Block({ block, pxPerSec, active, onClick, warnings, children }: { block
           <AlertTriangle className="size-2.5" />
         </span>
       )}
+      {action}
     </button>
   );
 }

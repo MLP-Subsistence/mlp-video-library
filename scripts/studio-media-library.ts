@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
-import { applyMediaMatch } from "@/lib/studio/services/media-matches";
+import { applyCleanFrame, applyMediaMatch } from "@/lib/studio/services/media-matches";
 import { bestDistance, frameHashes, minDistance, phash, windowHashes } from "@/lib/studio/services/phash";
 import { serializeComposition } from "@/lib/studio/layouts";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
@@ -21,6 +21,11 @@ import { buildStorageKey, storage } from "@/lib/studio/storage";
  *             full-size file is kept as the source for attaching.
  *   attach-local — after `match`, attach every strong best match whose
  *             original exists locally (stores the file as an asset).
+ *             `--ids a,b` attaches exactly those reviewed matches (any
+ *             distance); `--reject a,b` marks reviewed matches as rejected.
+ *   clean-frames — for every segment of a playlist's templates that still
+ *             shows the master video, use its caption-cropped poster frame as
+ *             a still image, so no burnt-in captions remain in the template.
  *   ingest  — pick up files re-downloaded from Shutterstock
  *             (Downloads/shutterstock_<id>.jpg), store them as assets and
  *             attach each to the segments whose chosen/best match is that id.
@@ -28,6 +33,7 @@ import { buildStorageKey, storage } from "@/lib/studio/storage";
  *   npx tsx scripts/studio-media-library.ts index  --json "C:/Users/<you>/Downloads/shutterstock-library-367425665.json"
  *   npx tsx scripts/studio-media-library.ts match  [--max-distance 14] [--auto 8]
  *   npx tsx scripts/studio-media-library.ts ingest --downloads "C:/Users/<you>/Downloads"
+ *   npx tsx scripts/studio-media-library.ts clean-frames --playlist "Marketplace Literacy Youth Africa" [--dry-run]
  */
 const INDEX_DIR = path.join(process.cwd(), "storage", "studio", "shutterstock-index");
 const INDEX_FILE = path.join(INDEX_DIR, "index.json");
@@ -207,14 +213,23 @@ async function attachLocal() {
   const admin = await prisma.user.findFirst({ where: { role: "admin" }, select: { id: true } });
   const collages = await attachCollages(index, admin?.id ?? null);
   console.log(`attach-local: ${collages} collage segments rebuilt as split layouts`);
-  const best = await prisma.studioMediaMatch.findMany({ where: { rank: 0, status: "candidate", NOT: { description: { startsWith: "panel " } } }, include: { segment: { select: { key: true, template: { select: { title: true } } } } } });
+  const reviewedIds = (arg("ids") ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  const rejectIds = (arg("reject") ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  if (rejectIds.length) {
+    const rejected = await prisma.studioMediaMatch.updateMany({ where: { id: { in: rejectIds }, status: "candidate" }, data: { status: "rejected" } });
+    console.log(`attach-local: ${rejected.count} candidates rejected after review`);
+  }
+  const best = await prisma.studioMediaMatch.findMany({
+    where: reviewedIds.length ? { id: { in: reviewedIds } } : { rank: 0, status: "candidate", NOT: { description: { startsWith: "panel " } } },
+    include: { segment: { select: { key: true, template: { select: { title: true } } } } }
+  });
   let attached = 0;
   let skipped = 0;
   for (const match of best) {
     const pct = Number(/^(\d+)% match/.exec(match.description)?.[1] ?? 0);
     const distance = Math.round((1 - pct / 100) * 32);
     const entry = index[match.externalId];
-    if (distance > auto || !entry?.localFile) {
+    if ((distance > auto && !reviewedIds.length) || !entry?.localFile) {
       skipped += 1;
       continue;
     }
@@ -234,6 +249,39 @@ async function attachLocal() {
     console.log(`  ✓ ${match.segment.template.title} / ${match.segment.key} ← ${match.externalId} (${pct}%)`);
   }
   console.log(`attach-local: ${attached} attached, ${skipped} left for review`);
+}
+
+/** Segments of a playlist's templates that still show the master video get their caption-cropped poster frame instead. */
+async function cleanFrames() {
+  const playlistTitle = arg("playlist");
+  const dryRun = process.argv.includes("--dry-run");
+  if (!playlistTitle) throw new Error("--playlist <title> is required");
+  const playlist = await prisma.playlist.findFirst({ where: { title: playlistTitle }, include: { videos: { orderBy: { sortOrder: "asc" }, select: { videoId: true } } } });
+  if (!playlist) throw new Error(`playlist "${playlistTitle}" not found`);
+  const admin = await prisma.user.findFirst({ where: { role: "admin" }, select: { id: true } });
+  const templates = await prisma.studioTemplate.findMany({ where: { sourceVideoId: { in: playlist.videos.map((entry) => entry.videoId) } }, include: { segments: { orderBy: { orderIndex: "asc" } } } });
+  let replaced = 0;
+  let failed = 0;
+  for (const template of templates) {
+    if (!template.masterAssetId) continue;
+    for (const segment of template.segments) {
+      const composition = JSON.parse(segment.composition || "{}") as { slots?: Array<{ items: Array<{ assetId: string }> }> };
+      const usesMaster = (composition.slots ?? []).some((slot) => slot.items.some((item) => item.assetId === template.masterAssetId));
+      if (!usesMaster) continue;
+      if (dryRun) {
+        replaced += 1;
+        continue;
+      }
+      try {
+        await applyCleanFrame(segment.id, admin?.id ?? null);
+        replaced += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn(`  ✗ ${template.title} / ${segment.key}: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+  }
+  console.log(`clean-frames: ${dryRun ? "would replace" : "replaced"} ${replaced} master-video segments with caption-free stills${failed ? `, ${failed} failed` : ""}`);
 }
 
 async function matchSegments() {
@@ -353,7 +401,8 @@ async function main() {
   else if (command === "attach-local") await attachLocal();
   else if (command === "match") await matchSegments();
   else if (command === "ingest") await ingestDownloads();
-  else throw new Error("usage: index | index-local | match | attach-local | ingest");
+  else if (command === "clean-frames") await cleanFrames();
+  else throw new Error("usage: index | index-local | match | attach-local | clean-frames | ingest");
 }
 
 main()
