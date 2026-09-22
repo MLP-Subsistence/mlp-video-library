@@ -104,7 +104,7 @@ export function matchChunksToLines(chunks: SpeechChunk[], lines: string[], durat
   const n = lines.length;
   if (n === 0) return { timings: [], exact: true };
   const pad = 0.15;
-  const finish = (ranges: Array<{ start: number; end: number }>, exact: boolean) => {
+  const finish = (ranges: Array<{ start: number; end: number }>, exact: boolean, confidence: number) => {
     const timings: LineTiming[] = ranges.map((range, index) => {
       const next = ranges[index + 1];
       const gap = next ? Math.max(0, next.start - range.end) : Math.max(0, durationSec - range.end);
@@ -112,32 +112,105 @@ export function matchChunksToLines(chunks: SpeechChunk[], lines: string[], durat
       const start = Math.max(previousEnd, range.start - Math.min(pad, Math.max(0, (range.start - previousEnd) / 2)));
       const end = Math.min(next ? next.start : durationSec, range.end + Math.min(pad, gap / 2));
       const pauseAfter = Math.min(2.5, Math.max(0.3, Math.round((gap - 2 * Math.min(pad, gap / 2)) * 10) / 10));
-      return { start: round(start), end: round(end), pauseAfter: next ? pauseAfter : 1, confidence: exact ? 0.95 : 0.5 };
+      return { start: round(start), end: round(end), pauseAfter: next ? pauseAfter : 1, confidence };
     });
     return { timings, exact };
   };
-  if (chunks.length === n) return finish(chunks, true);
-
-  const speechStart = chunks[0]?.start ?? 0;
-  const speechEnd = chunks[chunks.length - 1]?.end ?? durationSec;
-  const weights = lines.map((line) => Math.max(1, line.replace(/[^\p{L}\p{N}]/gu, "").length));
-  const total = weights.reduce((sum, w) => sum + w, 0);
-  const gaps: number[] = [];
-  for (let i = 1; i < chunks.length; i++) gaps.push((chunks[i - 1].end + chunks[i].start) / 2);
-  const boundaries: number[] = [speechStart];
-  let cursor = speechStart;
-  for (let i = 0; i < n - 1; i++) {
-    const expected = ((speechEnd - speechStart) * weights[i]) / total;
-    let target = cursor + expected;
-    const tolerance = expected * 0.4;
-    const candidates = gaps.filter((gap) => gap > boundaries[boundaries.length - 1] + 0.2 && Math.abs(gap - target) <= tolerance);
-    if (candidates.length) target = candidates.reduce((best, gap) => (Math.abs(gap - target) < Math.abs(best - target) ? gap : best), candidates[0]);
-    boundaries.push(target);
-    cursor = target;
+  if (chunks.length === 0) {
+    // No detectable pauses at all: split the whole file by line length.
+    const weights = lineWeights(lines);
+    const total = weights.reduce((sum, w) => sum + w, 0);
+    let cursor = 0;
+    const ranges = weights.map((w) => {
+      const start = cursor;
+      cursor += (durationSec * w) / total;
+      return { start, end: cursor };
+    });
+    return finish(ranges, false, 0.2);
   }
-  boundaries.push(speechEnd);
-  const ranges = lines.map((_, i) => ({ start: boundaries[i], end: boundaries[i + 1] }));
-  return finish(ranges, false);
+  if (chunks.length === n) return finish(chunks, true, 0.95);
+
+  const weights = lineWeights(lines);
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  const speechTotal = chunks.reduce((sum, chunk) => sum + (chunk.end - chunk.start), 0);
+  const expected = weights.map((w) => (speechTotal * w) / totalWeight);
+  const m = chunks.length;
+
+  if (m > n) {
+    // More pauses than lines (breaths mid-sentence): group consecutive chunks into n runs
+    // whose lengths best match the lines' expected lengths. Real pauses stay boundaries.
+    const prefix = [0];
+    for (const chunk of chunks) prefix.push(prefix[prefix.length - 1] + (chunk.end - chunk.start));
+    const cost = Array.from({ length: n + 1 }, () => new Float64Array(m + 1).fill(Number.POSITIVE_INFINITY));
+    const back = Array.from({ length: n + 1 }, () => new Int32Array(m + 1).fill(-1));
+    cost[0][0] = 0;
+    for (let i = 1; i <= n; i++) {
+      for (let j = i; j <= m - (n - i); j++) {
+        for (let k = i - 1; k < j; k++) {
+          if (!Number.isFinite(cost[i - 1][k])) continue;
+          const groupDuration = prefix[j] - prefix[k];
+          const candidate = cost[i - 1][k] + Math.abs(groupDuration - expected[i - 1]);
+          if (candidate < cost[i][j]) {
+            cost[i][j] = candidate;
+            back[i][j] = k;
+          }
+        }
+      }
+    }
+    const ranges: Array<{ start: number; end: number }> = [];
+    let j = m;
+    for (let i = n; i >= 1; i--) {
+      const k = back[i][j];
+      ranges.unshift({ start: chunks[k].start, end: chunks[j - 1].end });
+      j = k;
+    }
+    const deviation = cost[n][m] / Math.max(1, speechTotal);
+    return finish(ranges, false, Math.max(0.35, Math.min(0.9, 1 - deviation * 2)));
+  }
+
+  // Fewer pauses than lines (lines run together): assign consecutive lines to each chunk,
+  // then split that chunk's time between its lines by length.
+  const cost = Array.from({ length: m + 1 }, () => new Float64Array(n + 1).fill(Number.POSITIVE_INFINITY));
+  const back = Array.from({ length: m + 1 }, () => new Int32Array(n + 1).fill(-1));
+  cost[0][0] = 0;
+  const expectedPrefix = [0];
+  for (const value of expected) expectedPrefix.push(expectedPrefix[expectedPrefix.length - 1] + value);
+  for (let j = 1; j <= m; j++) {
+    const chunkDuration = chunks[j - 1].end - chunks[j - 1].start;
+    for (let i = j; i <= n - (m - j); i++) {
+      for (let k = j - 1; k < i; k++) {
+        if (!Number.isFinite(cost[j - 1][k])) continue;
+        const candidate = cost[j - 1][k] + Math.abs(chunkDuration - (expectedPrefix[i] - expectedPrefix[k]));
+        if (candidate < cost[j][i]) {
+          cost[j][i] = candidate;
+          back[j][i] = k;
+        }
+      }
+    }
+  }
+  const ranges: Array<{ start: number; end: number }> = [];
+  let i = n;
+  for (let j = m; j >= 1; j--) {
+    const k = back[j][i];
+    const chunk = chunks[j - 1];
+    const span = chunk.end - chunk.start;
+    const groupWeight = weights.slice(k, i).reduce((sum, w) => sum + w, 0);
+    let cursor = chunk.start;
+    const pieces = [] as Array<{ start: number; end: number }>;
+    for (let line = k; line < i; line++) {
+      const piece = (span * weights[line]) / groupWeight;
+      pieces.push({ start: cursor, end: cursor + piece });
+      cursor += piece;
+    }
+    ranges.unshift(...pieces);
+    i = k;
+  }
+  const deviation = cost[m][n] / Math.max(1, speechTotal);
+  return finish(ranges, false, Math.max(0.3, Math.min(0.8, 1 - deviation * 2)));
+}
+
+function lineWeights(lines: string[]) {
+  return lines.map((line) => Math.max(1, line.replace(/[^\p{L}\p{N}]/gu, "").length));
 }
 
 function round(value: number) {
@@ -312,7 +385,7 @@ export async function importMasterLesson(options: {
           pauseAfterSec: timing.pauseAfter,
           sourceStartSec: timing.start,
           sourceEndSec: timing.end,
-          notes: exact ? null : "Boundaries were estimated from pauses in the original audio — check the visual matches this line.",
+          notes: exact || timing.confidence >= 0.8 ? null : "Boundaries were estimated from pauses in the original audio — check the visual matches this line.",
           composition: serializeComposition({
             layout: "full",
             slots: [{ id: "slot_1", fit: "cover", items: [{ assetId: masterAsset.id, share: 1, startSec: timing.start }] }]
