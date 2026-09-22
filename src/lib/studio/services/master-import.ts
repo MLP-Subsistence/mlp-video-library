@@ -167,7 +167,7 @@ export async function importMasterLesson(options: {
   const language = await prisma.language.findFirst({ where: { code: languageCode } });
   if (!language) throw new Error(`Language ${languageCode} is not in the library`);
   const categoryName = categoryForLesson(lesson.number);
-  const lessonModule = (await prisma.lessonModule.findFirst({ where: { name: categoryName } })) ?? (await prisma.lessonModule.findFirst({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }));
+  const lessonModule = (await prisma.module.findFirst({ where: { name: categoryName } })) ?? (await prisma.module.findFirst({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }));
 
   // --- Library rows: playlist + video --------------------------------------
   let playlist = await prisma.playlist.findFirst({ where: { title: options.playlistTitle, languageId: language.id } });
