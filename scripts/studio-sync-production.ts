@@ -39,6 +39,13 @@ type Bundle = {
   assets: Array<Record<string, unknown> & { id: string; storageKey: string; thumbnailKey: string | null; uploadedByEmail: string | null }>;
 };
 
+type OriginalAssetsBundle = {
+  exportedAt: string;
+  assets: Bundle["assets"];
+};
+
+const VERIFIED_ORIGINAL_TAG = "source:high-quality-shutterstock";
+
 const LOCAL_FILE_ROUTE = "/api/studio/files/";
 
 function arg(name: string, fallback?: string) {
@@ -123,6 +130,40 @@ async function exportBundle() {
   }
   await writeFile(path.join(out, "bundle.json"), JSON.stringify(bundle, null, 1));
   console.log(`exported "${playlist.title}": ${bundle.videos.length} videos, ${bundle.templates.length} templates, ${bundle.segments.length} segments, ${bundle.assets.length} assets (${(bytes / 1e6).toFixed(0)} MB) → ${out}`);
+  await prisma.$disconnect();
+}
+
+/** Copy only verified originals; never modify live lessons or educator projects. */
+async function exportOriginals() {
+  const out = arg("out");
+  if (!out) throw new Error("--out <folder> is required");
+  const { prisma } = await import("@/lib/prisma");
+  const { storage } = await import("@/lib/studio/storage");
+  if (storage().name !== "local") throw new Error("export-originals needs local Studio storage");
+  const assets = await prisma.studioAsset.findMany({
+    where: { kind: "image", tags: { contains: VERIFIED_ORIGINAL_TAG } },
+    include: { uploadedBy: true },
+    orderBy: { name: "asc" }
+  });
+  const bundle: OriginalAssetsBundle = { exportedAt: new Date().toISOString(), assets: [] };
+  const filesDir = path.join(out, "files");
+  await mkdir(filesDir, { recursive: true });
+  let bytes = 0;
+  for (const asset of assets) {
+    const thumbnailKey = keyFromLocalUrl(asset.thumbnailUrl);
+    bundle.assets.push({ ...strip(asset, ["uploadedById"]), thumbnailKey, uploadedByEmail: asset.uploadedBy?.email ?? null } as Bundle["assets"][number]);
+    for (const key of [asset.storageKey, thumbnailKey]) {
+      if (!key) continue;
+      const source = storage().localPath(key);
+      if (!source) throw new Error(`missing local file for ${asset.name}: ${key}`);
+      const target = path.join(filesDir, key);
+      await mkdir(path.dirname(target), { recursive: true });
+      await copyFile(source, target);
+      bytes += (await readFile(target)).length;
+    }
+  }
+  await writeFile(path.join(out, "original-assets.json"), JSON.stringify(bundle, null, 1));
+  console.log(`exported ${assets.length} verified originals (${(bytes / 1e6).toFixed(1)} MB) → ${out}`);
   await prisma.$disconnect();
 }
 
@@ -237,8 +278,89 @@ async function importBundle() {
   await prisma.$disconnect();
 }
 
+async function importOriginals() {
+  const dir = arg("bundle");
+  if (!dir) throw new Error("--bundle <folder> is required");
+  const dryRun = process.argv.includes("--dry-run");
+  if (!/^postgres(ql)?:\/\//.test(process.env.DATABASE_URL ?? "")) throw new Error("import-originals needs production DATABASE_URL");
+  if (!dryRun && process.env.STUDIO_STORAGE_DRIVER !== "s3") throw new Error("import-originals needs production S3 storage settings");
+  const bundle = JSON.parse(await readFile(path.join(dir, "original-assets.json"), "utf8")) as OriginalAssetsBundle;
+  if (!Array.isArray(bundle.assets) || bundle.assets.some((asset) => asset.kind !== "image" || !String(asset.tags).includes(VERIFIED_ORIGINAL_TAG))) throw new Error("bundle contains a non-original image");
+  const prisma = await postgresClient();
+  try {
+    const ids = bundle.assets.map((asset) => asset.id);
+    const existingRows = await prisma.studioAsset.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    const existingIds = new Set(existingRows.map((row) => row.id));
+    console.log(`production has ${existingIds.size}/${ids.length} verified-original asset IDs`);
+    if (process.argv.includes("--missing-out")) {
+      await writeFile(path.join(dir, "missing-originals.json"), JSON.stringify(bundle.assets.filter((asset) => !existingIds.has(asset.id)).map((asset) => ({ id: asset.id, name: asset.name })), null, 2));
+      console.log(`wrote ${ids.length - existingIds.size} missing IDs to the bundle folder`);
+    }
+    if (process.argv.includes("--tag-existing")) {
+      if (dryRun) return;
+      let tagged = 0;
+      for (const asset of bundle.assets) {
+        if (!existingIds.has(asset.id)) continue;
+        await prisma.studioAsset.update({ where: { id: asset.id }, data: { tags: String(asset.tags) } });
+        tagged += 1;
+      }
+      console.log(`tagged ${tagged} existing originals; no files or lesson rows changed`);
+      return;
+    }
+    if (process.argv.includes("--tag-browser-uploads")) {
+      let tagged = 0;
+      let missing = 0;
+      let mismatched = 0;
+      for (const asset of bundle.assets) {
+        if (existingIds.has(asset.id)) continue;
+        const id = /^Shutterstock (\d+)$/.exec(String(asset.name))?.[1];
+        if (!id) throw new Error(`unexpected source name: ${asset.name}`);
+        const browserRows = await prisma.studioAsset.findMany({ where: { name: `shutterstock_${id}.jpg`, kind: "image" } });
+        const row = browserRows.find((candidate) => candidate.sizeBytes === asset.sizeBytes && candidate.storageKey.startsWith("library/image/"));
+        if (!row) {
+          if (browserRows.length) mismatched += 1;
+          else missing += 1;
+          continue;
+        }
+        if (!dryRun && !row.tags.includes(VERIFIED_ORIGINAL_TAG)) {
+          await prisma.studioAsset.update({ where: { id: row.id }, data: { name: String(asset.name), tags: String(asset.tags) } });
+        }
+        tagged += 1;
+      }
+      console.log(`browser originals: ${tagged} verified, ${missing} not uploaded, ${mismatched} unmatched size`);
+      return;
+    }
+    if (dryRun) return;
+    const { storage } = await import("@/lib/studio/storage");
+    const users = new Map((await prisma.user.findMany({ select: { id: true, email: true } })).map((user) => [user.email, user.id]));
+    let uploaded = 0;
+    let skipped = 0;
+    for (const [index, asset] of bundle.assets.entries()) {
+      for (const key of [asset.storageKey, asset.thumbnailKey]) {
+        if (!key) continue;
+        const bytes = await readFile(path.join(dir, "files", key));
+        const already = await storage().get(key).catch(() => null);
+        if (already && already.length === bytes.length) { skipped += 1; continue; }
+        await storage().put(key, bytes, key === asset.storageKey ? String(asset.mimeType) : "image/jpeg");
+        uploaded += 1;
+      }
+      const data = {
+        ...strip(asset, ["id", "thumbnailKey", "uploadedByEmail", "url", "thumbnailUrl", "createdAt"]),
+        url: storage().publicUrl(asset.storageKey),
+        thumbnailUrl: asset.thumbnailKey ? storage().publicUrl(asset.thumbnailKey) : null,
+        uploadedById: asset.uploadedByEmail ? users.get(asset.uploadedByEmail) ?? null : null
+      };
+      await prisma.studioAsset.upsert({ where: { id: asset.id }, create: { id: asset.id, ...(data as object) } as never, update: data as never });
+      if ((index + 1) % 25 === 0) console.log(`  originals ${index + 1}/${ids.length} (${uploaded} uploaded, ${skipped} already stored)`);
+    }
+    console.log(`synced ${ids.length} verified originals: ${uploaded} uploaded, ${skipped} already stored`);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 const command = process.argv[2];
-(command === "export" ? exportBundle() : command === "import" ? importBundle() : Promise.reject(new Error("usage: export --playlist <title> --out <folder> | import --bundle <folder> [--dry-run] [--set-main]"))).catch((error) => {
+(command === "export" ? exportBundle() : command === "import" ? importBundle() : command === "export-originals" ? exportOriginals() : command === "import-originals" ? importOriginals() : Promise.reject(new Error("usage: export | import | export-originals | import-originals"))).catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
