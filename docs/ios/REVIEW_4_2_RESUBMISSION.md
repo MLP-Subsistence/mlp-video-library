@@ -4,13 +4,13 @@ Status: implementation prepared locally; do not submit this wording until the ne
 
 ## App Review reply
 
-Thank you for reviewing Marketplace Literacy App. We rebuilt the public iOS experience as a native learning library. Users can browse and search published lessons by language and resource format, open native lesson detail screens, save lessons, mark lessons complete, and keep private notes on their device. The published catalog and available transcripts remain readable after a successful sync when the device is offline. Video playback still requires a network connection. The app no longer presents the website as its main interface; YouTube embeds are used only inside individual lesson screens for video playback.
+Thank you for reviewing Marketplace Literacy App. We rebuilt the public iOS experience as a native learning library. Users can browse and search published lessons by language and resource format, open native lesson detail screens, save lessons, mark lessons complete, and keep private notes on their device. Lesson details and personal notes remain readable after a successful sync when the device is offline. Video playback still requires a network connection. The app no longer presents the website as its main interface; YouTube embeds are used only inside individual lesson screens for video playback.
 
 To inspect the changes: open Discover, select a language and format, search for a lesson, and open it. Tap Save lesson and Mark complete, then visit Saved and Progress. Enter a note on the lesson screen. After a successful catalog load, switch the device offline to inspect saved lesson details and notes. Reconnect before testing video playback.
 
 ## App Store What's New
 
-Explore the Marketplace Literacy library in a native iPhone experience. Search lessons by language and format, save favorites, track completed lessons, and keep private notes. Previously loaded lesson details and available transcripts can be read offline.
+Explore the Marketplace Literacy library in a native iPhone experience. Search lessons by language and format, save favorites, track completed lessons, and keep private notes. Previously loaded lesson details can be read offline.
 
 ## Release checks
 
