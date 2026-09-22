@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { circleCountForLayout, compositionAssetIds, compositionHasVisual, emptyComposition, getLayout, layouts, normalizeComposition, parseComposition, replaceMainVisual } from "../layouts";
+import { DEFAULT_TEXT_OVERLAY } from "../text-overlay";
 
 test("every layout has slot rectangles inside the frame", () => {
   for (const layout of layouts) {
@@ -51,4 +52,17 @@ test("replaceMainVisual swaps the first visual and keeps the layout", () => {
   assert.equal(next.slots[1].fit, "contain");
   const empty = replaceMainVisual(emptyComposition("full"), "photo");
   assert.equal(empty.slots[0].items[0].assetId, "photo");
+});
+
+test("on-screen text survives saved layout normalization and visual changes", () => {
+  const composition = normalizeComposition({ ...emptyComposition(), textOverlay: { ...DEFAULT_TEXT_OVERLAY, text: "Murakaza neza", x: .95, y: .96, w: .4, h: .15 } });
+  assert.equal(composition.textOverlay?.text, "Murakaza neza");
+  assert.ok((composition.textOverlay!.x + composition.textOverlay!.w) <= 1);
+  assert.ok((composition.textOverlay!.y + composition.textOverlay!.h) <= 1);
+  const saved = parseComposition(JSON.stringify(composition));
+  assert.equal(replaceMainVisual(saved, "photo").textOverlay?.text, "Murakaza neza");
+  const hostile = normalizeComposition({ ...emptyComposition(), textOverlay: { ...DEFAULT_TEXT_OVERLAY, fontFamily: "made-up" as "Arial", color: "expression(alert())", fontSize: 10000 } });
+  assert.equal(hostile.textOverlay?.fontFamily, "Arial");
+  assert.equal(hostile.textOverlay?.color, "#ffffff");
+  assert.equal(hostile.textOverlay?.fontSize, 120);
 });

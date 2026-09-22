@@ -51,6 +51,7 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
     const next = emptyComposition(layoutId);
     // Keep already chosen visuals in the same slot positions where possible.
     next.slots = next.slots.map((emptySlot, index) => composition.slots[index] ? { ...emptySlot, fit: composition.slots[index].fit, items: composition.slots[index].items } : emptySlot);
+    next.textOverlay = composition.textOverlay;
     // Extra visuals from removed slots flow into the last slot rather than vanishing.
     const overflow = composition.slots.slice(next.slots.length).flatMap((entry) => entry.items);
     if (overflow.length) next.slots[next.slots.length - 1].items = balanceShares([...next.slots[next.slots.length - 1].items, ...overflow]);

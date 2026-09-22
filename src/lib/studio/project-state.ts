@@ -96,6 +96,7 @@ export async function loadProjectDto(projectId: string, user: { id: string; role
       pauseIsOverride: row.pauseAfterSecOverride !== null,
       source: row.segment.sourceStartSec !== null && row.segment.sourceEndSec !== null ? { startSec: row.segment.sourceStartSec, endSec: row.segment.sourceEndSec } : null,
       composition,
+      templateComposition: baseComposition,
       compositionIsOverride: Boolean(row.compositionOverride),
       voiceIdOverride: row.voiceIdOverride,
       reviewNote: row.reviewNote,

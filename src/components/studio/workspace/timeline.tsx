@@ -184,16 +184,15 @@ export function Timeline({
               ))}
             </div>
 
-            {/* Text track: the translation already edited in the Script panel. */}
+            {/* Text track: optional on-screen words; narration translation stays separate. */}
             <Track label="Text" icon={Type} labelWidth={LABEL_WIDTH} compact>
               {timeline.blocks.map((block) => {
                 const segment = segmentById.get(block.segmentId);
                 if (!segment) return null;
                 const isActive = block.segmentId === activeSegmentId;
-                const text = segment.translation.trim() || segment.sourceScript.trim() || segment.title;
-                const textWarnings = segment.warnings.filter((warning) => warning.code.startsWith("translation"));
+                const text = segment.composition.textOverlay?.text.trim() || "Add text";
                 return (
-                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} onDoubleClick={onEditText ? () => onEditText(block.segmentId) : undefined} warnings={textWarnings} action={onEditText && isActive && block.durationSec * pxPerSec >= 90 ? <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onEditText(block.segmentId); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onEditText(block.segmentId); } }} className="absolute bottom-1 right-1 inline-flex h-6 items-center gap-1 rounded-md bg-[#a64026] px-1.5 text-[10px] font-extrabold text-white shadow" title="Edit text for this segment"><Pencil className="size-3" /> Edit text</span> : null}>
+                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} onDoubleClick={onEditText ? () => onEditText(block.segmentId) : undefined} warnings={[]} action={onEditText && isActive && block.durationSec * pxPerSec >= 90 ? <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onEditText(block.segmentId); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onEditText(block.segmentId); } }} className="absolute bottom-1 right-1 inline-flex h-6 items-center gap-1 rounded-md bg-[#a64026] px-1.5 text-[10px] font-extrabold text-white shadow" title="Edit on-screen text for this segment"><Pencil className="size-3" /> Edit text</span> : null}>
                     <div className="flex h-full items-center gap-1.5 px-2" title={text}>
                       <Type className="size-3 shrink-0 text-[#a64026]" />
                       <span className="truncate text-[10px] font-bold text-[#243447]">{text}</span>

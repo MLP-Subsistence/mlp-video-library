@@ -4,21 +4,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, AudioLines, Check, FileAudio, Grid2X2, ImagePlus, Mic, RefreshCw, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
 import { AssetThumb } from "@/components/studio/asset-library";
 import { SegmentRecorder } from "@/components/studio/workspace/recorder";
+import { TextControls } from "@/components/studio/workspace/text-controls";
 import type { ProjectController } from "@/components/studio/workspace/use-project";
 import { InlineNotice, Spinner, StatusPill, textareaClass } from "@/components/studio/ui";
 import { api, debounce, kindForFile, uploadAsset } from "@/lib/studio/client";
 import { formatSeconds } from "@/lib/studio/timing";
-import type { ProjectDto, ProjectSegmentDto, StudioAssetDto } from "@/lib/studio/types";
+import type { Composition, ProjectDto, ProjectSegmentDto, StudioAssetDto, TextOverlay } from "@/lib/studio/types";
 
 type NarrationTab = "record" | "ai" | "upload";
 
 /** Right-hand panel: Original → Translation → Narration → Visual → Timing → Approve & Next. */
 export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings, onChangeVisual, onOpenLayout }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void; onChangeVisual: () => void; onOpenLayout: () => void }) {
-  const { project, activeSegment, patchSegment, setLocalTranslation, saving, savedAt } = controller;
+  const { project, activeSegment, patchSegment, setLocalTranslation, setLocalComposition, saving, savedAt } = controller;
   const [tab, setTab] = useState<NarrationTab>(() => (activeSegment?.narration.source === "ai" ? "ai" : activeSegment?.narration.source === "upload" ? "upload" : "record"));
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "info" | "success" | "warning" | "error"; text: string } | null>(null);
   const [draft, setDraft] = useState(activeSegment?.translation ?? "");
+  const pendingText = useRef<{ segment: ProjectSegmentDto; composition: Composition } | null>(null);
 
   const save = useMemo(
     () =>
@@ -30,11 +32,20 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
 
   useEffect(() => () => save.cancel(), [save]);
 
+  const saveText = useMemo(() => debounce((segment: ProjectSegmentDto, composition: Composition) => {
+    pendingText.current = null;
+    void patchSegment(segment, { composition }).catch(() => undefined);
+  }, 650), [patchSegment]);
+  useEffect(() => () => {
+    if (pendingText.current) saveText.flush(pendingText.current.segment, pendingText.current.composition);
+    else saveText.cancel();
+  }, [saveText]);
+
   useEffect(() => {
-    const cancelPendingSave = () => save.cancel();
+    const cancelPendingSave = () => { save.cancel(); saveText.cancel(); pendingText.current = null; };
     window.addEventListener("studio-before-undo", cancelPendingSave);
     return () => window.removeEventListener("studio-before-undo", cancelPendingSave);
-  }, [save]);
+  }, [save, saveText]);
 
   if (!activeSegment) return null;
   const segment = activeSegment;
@@ -43,6 +54,17 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
     setDraft(value);
     setLocalTranslation(segment.id, value);
     save(segment, value);
+  };
+
+  const onTextOverlayChange = (overlay: TextOverlay | undefined, immediate = false) => {
+    const composition = { ...segment.composition, textOverlay: overlay };
+    setLocalComposition(segment.id, composition);
+    pendingText.current = { segment, composition };
+    if (immediate) saveText.flush(segment, composition);
+    else saveText(segment, composition);
+  };
+  const flushText = () => {
+    if (pendingText.current) saveText.flush(pendingText.current.segment, pendingText.current.composition);
   };
 
   const run = async (label: string, action: () => Promise<unknown>, success?: string) => {
@@ -246,7 +268,9 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
           </div>
         </section>
 
-        <VisualSection segment={segment} assets={project.assets} disabled={busy !== null} onChangeVisual={onChangeVisual} onOpenLayout={onOpenLayout} onResetToTemplate={segment.compositionIsOverride ? () => void run("visual", () => patchSegment(segment, { composition: null }), "Back to the master template visual.") : undefined} />
+        <VisualSection segment={segment} assets={project.assets} disabled={busy !== null} onChangeVisual={onChangeVisual} onOpenLayout={onOpenLayout} onResetToTemplate={segment.compositionIsOverride ? () => void run("visual", () => patchSegment(segment, { composition: segment.composition.textOverlay ? { ...segment.templateComposition, textOverlay: segment.composition.textOverlay } : null }), "Back to the master template visual; your on-screen text was kept.") : undefined}>
+          <TextControls segment={segment} disabled={busy !== null} onChange={onTextOverlayChange} onFlush={flushText} />
+        </VisualSection>
 
         <section className="space-y-3 border-t border-[#edf0f3] pt-4">
           <div>
@@ -332,7 +356,7 @@ function AlignmentCorrection({ segment, busy, onSave, onConfirm }: { segment: Pr
 }
 
 /** What is on the video track for this segment, with the same "swap it" affordance the narration has. */
-function VisualSection({ segment, assets, disabled, onChangeVisual, onOpenLayout, onResetToTemplate }: { segment: ProjectSegmentDto; assets: ProjectDto["assets"]; disabled: boolean; onChangeVisual: () => void; onOpenLayout: () => void; onResetToTemplate?: () => void }) {
+function VisualSection({ segment, assets, disabled, onChangeVisual, onOpenLayout, onResetToTemplate, children }: { segment: ProjectSegmentDto; assets: ProjectDto["assets"]; disabled: boolean; onChangeVisual: () => void; onOpenLayout: () => void; onResetToTemplate?: () => void; children?: React.ReactNode }) {
   const items = segment.composition.slots.flatMap((slot) => slot.items.map((item) => assets[item.assetId]).filter((asset): asset is StudioAssetDto => Boolean(asset)));
   const first = items[0] ?? null;
   const summary = !first ? "No visual yet" : items.length > 1 ? `${items.length} visuals · ${segment.composition.layout === "full" ? "in sequence" : "split screen"}` : first.kind === "video" ? "Video clip" : "Picture";
@@ -358,6 +382,7 @@ function VisualSection({ segment, assets, disabled, onChangeVisual, onOpenLayout
           <button type="button" onClick={onResetToTemplate} disabled={disabled} className="inline-flex items-center gap-1 text-xs font-bold text-[#a64026]"><RefreshCw className="size-3.5" /> Use template visual</button>
         )}
       </div>
+      {children}
     </section>
   );
 }

@@ -12,13 +12,13 @@ import { FullNarrationModal } from "@/components/studio/workspace/full-narration
 import { ScriptPanel } from "@/components/studio/workspace/script-panel";
 import { SegmentList } from "@/components/studio/workspace/segment-list";
 import { Timeline } from "@/components/studio/workspace/timeline";
-import { TimelineTextEditor } from "@/components/studio/workspace/timeline-text-editor";
 import { TranslationSettingsModal } from "@/components/studio/workspace/translation-settings";
 import { usePreviewPlayer } from "@/components/studio/workspace/use-player";
 import { summarizeProject, useProject } from "@/components/studio/workspace/use-project";
 import { api } from "@/lib/studio/client";
 import { replaceMainVisual } from "@/lib/studio/layouts";
-import type { ProjectDto } from "@/lib/studio/types";
+import type { ProjectDto, TextOverlay } from "@/lib/studio/types";
+import { DEFAULT_TEXT_OVERLAY } from "@/lib/studio/text-overlay";
 
 /** Desktop column widths for each combination of open/folded side panels (Tailwind needs the literals). */
 const GRID_COLUMNS: Record<string, string> = {
@@ -51,8 +51,6 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const player = usePreviewPlayer(project);
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [visualPickerOpen, setVisualPickerOpen] = useState(false);
-  const [textEditorSegmentId, setTextEditorSegmentId] = useState<string | null>(null);
-  const [textEditorVersion, setTextEditorVersion] = useState(0);
   const [fullNarrationOpen, setFullNarrationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
@@ -141,9 +139,13 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   };
   const openTextEditor = (segmentId: string) => {
     if (segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
-    setTextEditorSegmentId(segmentId);
+    setPanels((current) => ({ ...current, script: true, preview: true }));
+    const segment = project.segments.find((entry) => entry.segmentId === segmentId);
+    if (segment && !segment.composition.textOverlay) {
+      void patchSegment(segment, { composition: { ...segment.composition, textOverlay: { ...DEFAULT_TEXT_OVERLAY, text: segment.translation || "Your text" } } });
+    }
+    window.setTimeout(() => document.getElementById("studio-text-controls")?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
   };
-  const textEditorSegment = textEditorSegmentId ? project.segments.find((segment) => segment.segmentId === textEditorSegmentId) ?? null : null;
 
   const timelineProps = {
     project,
@@ -241,7 +243,12 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
                 block={previewBlock}
                 timeSec={previewTime}
                 playing={player.playing}
-                caption={`Segment ${String((previewBlock?.index ?? activeIndex) + 1).padStart(2, "0")}: ${previewSegment.title}`}
+                editText={!player.playing && previewSegment.segmentId === activeSegment?.segmentId}
+                onTextMove={(overlay: TextOverlay) => {
+                  const composition = { ...previewSegment.composition, textOverlay: overlay };
+                  controller.setLocalComposition(previewSegment.id, composition);
+                  void patchSegment(previewSegment, { composition });
+                }}
                 className="mx-auto max-w-4xl shadow-md"
               />
             )}
@@ -288,7 +295,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </div>
           )}
           <div className={`flex min-h-0 flex-1 flex-col ${panels.script ? "" : "lg:hidden"}`}>
-          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}:${textEditorVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={() => changeVisual()} onOpenLayout={() => openLayout()} />
+          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={() => changeVisual()} onOpenLayout={() => openLayout()} />
           </div>
         </aside>
       </div>
@@ -327,7 +334,6 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
           }}
         />
       )}
-      {textEditorSegment && <TimelineTextEditor key={textEditorSegment.id} segment={textEditorSegment} onClose={() => setTextEditorSegmentId(null)} onSave={async (text) => { await patchSegment(textEditorSegment, { translation: text }); setTextEditorVersion((version) => version + 1); }} />}
       <TranslationSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} project={project} onSave={patchProject} />
       <FullNarrationModal open={fullNarrationOpen} onClose={() => setFullNarrationOpen(false)} project={project} onProject={controller.setProject} />
     </div>

@@ -24,6 +24,22 @@ export type CompositionSlot = {
 export type Composition = {
   layout: string;
   slots: CompositionSlot[];
+  textOverlay?: TextOverlay;
+};
+
+export type TextOverlay = {
+  text: string;
+  /** Normalized to the 16:9 video frame, not the editor's pixel size. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fontFamily: "Arial" | "Georgia" | "Verdana" | "Trebuchet MS";
+  fontSize: number;
+  color: string;
+  align: "left" | "center" | "right";
+  bold: boolean;
+  background: boolean;
 };
 
 export type LayoutSlotRect = { x: number; y: number; w: number; h: number; shape?: "rect" | "circle" };
@@ -103,6 +119,8 @@ export type ProjectSegmentDto = {
   /** Where this segment sits inside the original master video, when known. */
   source: { startSec: number; endSec: number } | null;
   composition: Composition;
+  /** Master visual before this localization's changes. */
+  templateComposition: Composition;
   compositionIsOverride: boolean;
   voiceIdOverride: string | null;
   reviewNote: string | null;

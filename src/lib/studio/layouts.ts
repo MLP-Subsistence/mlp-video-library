@@ -1,4 +1,5 @@
 import type { Composition, CompositionSlot, LayoutDefinition, LayoutSlotRect } from "@/lib/studio/types";
+import { normalizeTextOverlay } from "@/lib/studio/text-overlay";
 
 /**
  * Visual layouts are data. Slot rectangles are expressed in 0..1 frame units
@@ -177,7 +178,8 @@ export function normalizeComposition(input: Partial<Composition> | null | undefi
       items: balanceShares(items)
     };
   });
-  return { layout: layout.id, slots };
+  const textOverlay = normalizeTextOverlay(input?.textOverlay);
+  return { layout: layout.id, slots, ...(textOverlay ? { textOverlay } : {}) };
 }
 
 function clampShare(value: unknown) {
@@ -203,7 +205,7 @@ export function replaceMainVisual(composition: Composition, assetId: string): Co
   if (!compositionHasVisual(base)) {
     const next = emptyComposition("full");
     next.slots[0].items = [{ assetId, share: 1 }];
-    return next;
+    return { ...next, ...(base.textOverlay ? { textOverlay: base.textOverlay } : {}) };
   }
   const slotIndex = base.slots.findIndex((slot) => slot.items.length > 0);
   return {

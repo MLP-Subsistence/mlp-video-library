@@ -178,6 +178,13 @@ export function useProject(initial: ProjectDto, initialSegmentId?: string | null
     }));
   }, []);
 
+  const setLocalComposition = useCallback((segmentId: string, composition: Composition) => {
+    setProject((current) => ({
+      ...current,
+      segments: current.segments.map((segment) => segment.id === segmentId ? { ...segment, composition } : segment)
+    }));
+  }, []);
+
   useEffect(() => {
     if (!error) return;
     const timer = setTimeout(() => setError(null), 8000);
@@ -192,6 +199,7 @@ export function useProject(initial: ProjectDto, initialSegmentId?: string | null
     activeSegmentId: activeSegment?.segmentId ?? "",
     setActiveSegmentId,
     patchSegment,
+    setLocalComposition,
     patchProject,
     undo,
     canUndo: undoCount > 0 && saving === 0 && !undoing,

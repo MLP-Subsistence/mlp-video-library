@@ -7,6 +7,7 @@ import { loadProjectDto } from "@/lib/studio/project-state";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
 import type { ProjectDto, ProjectSegmentDto, TimelineBlock } from "@/lib/studio/types";
 import { cleanupWorkDir, makeWorkDir, materializeAsset, parseProgressSeconds, probe, run } from "@/worker/ffmpeg";
+import { writeTextOverlay } from "@/worker/text-overlay";
 
 /**
  * Render pipeline. One FFmpeg invocation per segment builds the visual
@@ -196,6 +197,15 @@ async function renderSegment(options: {
     current = next;
     slotCounter += 1;
   });
+  const onScreenText = segment.composition.textOverlay;
+  if (onScreenText?.text.trim()) {
+    const overlayFile = path.join(path.dirname(options.output), `${segment.id}-text.png`);
+    await writeTextOverlay(onScreenText, width, height, overlayFile);
+    args.push("-loop", "1", "-framerate", String(fps), "-t", duration.toFixed(3), "-i", overlayFile);
+    filters.push(`[${current}][${inputIndex}:v]overlay=0:0:format=auto:shortest=1[texted]`);
+    current = "texted";
+    inputIndex += 1;
+  }
   filters.push(`[${current}]format=yuv420p,trim=0:${duration.toFixed(3)}[vout]`);
 
   const narrationAsset = segment.narration.assetId ? assetsById.get(segment.narration.assetId) : null;
