@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { compositionAssetIds, parseComposition } from "@/lib/studio/layouts";
 import { getStudioSettings } from "@/lib/studio/settings";
 import type { StudioAssetFolderDto } from "@/lib/studio/types";
+import verifiedOriginalVideoMap from "./verified-original-video-map.json";
 
 /** Assets carrying this tag were verified against the owner's high-quality Shutterstock originals folder. */
 export const HIGH_QUALITY_SHUTTERSTOCK_TAG = "source:high-quality-shutterstock";
@@ -40,22 +41,31 @@ function compositionIds(segments: Array<{ composition: string }>) {
   return ids;
 }
 
-/** One folder per Studio source video. Folder contents stay in sync with confirmed master visuals. */
+/** Source-video matches are audited by image features, not by theme or filename. */
+export function sourceOriginalIdsForVideo(title: string): ReadonlySet<string> {
+  return new Set((verifiedOriginalVideoMap as Record<string, string[]>)[videoAssetFolderTitle(title)] ?? []);
+}
+
+function originalShutterstockId(tags: string) {
+  return /(?:^|,\s*)shutterstock,\s*(\d+)(?:,|$)/i.exec(tags)?.[1] ?? null;
+}
+
+function folderOriginals<T extends { id: string; tags: string }>(title: string, selectedIds: Set<string>, originals: T[]) {
+  const sourceIds = sourceOriginalIdsForVideo(title);
+  return originals.filter((asset) => selectedIds.has(asset.id) || sourceIds.has(originalShutterstockId(asset.tags) ?? ""));
+}
+
+/** One folder per Studio source video, including verified photos visible in its reference frames. */
 export async function listOriginalAssetFolders(): Promise<StudioAssetFolderDto[]> {
   const templates = await defaultLessonTemplates();
-  const usedIds = new Set<string>();
   const idsByTemplate = new Map<string, Set<string>>();
   for (const template of templates) {
     const ids = compositionIds(template.segments);
     idsByTemplate.set(template.id, ids);
-    for (const id of ids) usedIds.add(id);
   }
-  const originals = usedIds.size
-    ? await prisma.studioAsset.findMany({ where: { id: { in: [...usedIds] }, kind: "image", tags: { contains: HIGH_QUALITY_SHUTTERSTOCK_TAG } }, select: { id: true, url: true, thumbnailUrl: true } })
-    : [];
-  const originalById = new Map(originals.map((asset) => [asset.id, asset]));
+  const originals = await prisma.studioAsset.findMany({ where: { kind: "image", tags: { contains: HIGH_QUALITY_SHUTTERSTOCK_TAG } }, select: { id: true, tags: true, url: true, thumbnailUrl: true } });
   return templates.map((template) => {
-    const assets = [...(idsByTemplate.get(template.id) ?? [])].map((id) => originalById.get(id)).filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
+    const assets = folderOriginals(template.folderTitle, idsByTemplate.get(template.id) ?? new Set(), originals);
     return { id: template.id, title: template.folderTitle, assetCount: assets.length, thumbnailUrl: assets[0]?.thumbnailUrl || assets[0]?.url || null };
   }).filter((folder) => folder.assetCount > 0);
 }
@@ -67,8 +77,6 @@ export async function originalAssetIdsForFolder(folderId: string) {
   }
   const template = (await defaultLessonTemplates()).find((entry) => entry.id === folderId);
   if (!template) return [];
-  const ids = [...compositionIds(template.segments)];
-  if (!ids.length) return [];
-  const originals = await prisma.studioAsset.findMany({ where: { id: { in: ids }, kind: "image", tags: { contains: HIGH_QUALITY_SHUTTERSTOCK_TAG } }, select: { id: true } });
-  return originals.map((asset) => asset.id);
+  const originals = await prisma.studioAsset.findMany({ where: { kind: "image", tags: { contains: HIGH_QUALITY_SHUTTERSTOCK_TAG } }, select: { id: true, tags: true } });
+  return folderOriginals(template.folderTitle, compositionIds(template.segments), originals).map((asset) => asset.id);
 }
