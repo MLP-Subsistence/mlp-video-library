@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, Grid2X2, ImagePlus, ListMusic, Pause, Play, PlayCircle, Wand2 } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Grid2X2, ImagePlus, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Wand2 } from "lucide-react";
 import { AssetLibrary } from "@/components/studio/asset-library";
 import { LayoutEditor } from "@/components/studio/layout-editor";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
@@ -19,6 +19,25 @@ import { api } from "@/lib/studio/client";
 import { replaceMainVisual } from "@/lib/studio/layouts";
 import type { ProjectDto } from "@/lib/studio/types";
 
+/** Desktop column widths for each combination of open/folded side panels (Tailwind needs the literals). */
+const GRID_COLUMNS: Record<string, string> = {
+  "true:true": "lg:grid-cols-[260px_minmax(0,1fr)_400px] xl:grid-cols-[280px_minmax(0,1fr)_440px]",
+  "true:false": "lg:grid-cols-[260px_minmax(0,1fr)_44px] xl:grid-cols-[280px_minmax(0,1fr)_44px]",
+  "false:true": "lg:grid-cols-[44px_minmax(0,1fr)_400px] xl:grid-cols-[44px_minmax(0,1fr)_440px]",
+  "false:false": "lg:grid-cols-[44px_minmax(0,1fr)_44px]"
+};
+
+/** A folded side column: one tall button that reopens it, with the panel name written vertically. */
+function CollapsedRail({ label, badge, icon: Icon, onExpand, className = "" }: { label: string; badge?: string; icon: typeof PanelLeftOpen; onExpand: () => void; className?: string }) {
+  return (
+    <button type="button" onClick={onExpand} className={`h-full w-11 flex-col items-center gap-3 bg-white py-3 text-[#6b7c8f] hover:bg-[#f7f8fa] hover:text-[#243447] ${className || "flex"}`} aria-label={`Show ${label}`} title={`Show ${label}`}>
+      <Icon className="size-4 shrink-0" />
+      <span className="text-[11px] font-extrabold uppercase tracking-wide [writing-mode:vertical-rl]">{label}</span>
+      {badge && <span className="text-[11px] font-extrabold text-[#a64026] [writing-mode:vertical-rl]">{badge}</span>}
+    </button>
+  );
+}
+
 /**
  * Localization Workspace: Segments | Visual Preview | Script/Narration, with
  * the synchronized timeline along the bottom. One `activeSegmentId` drives
@@ -33,6 +52,9 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const [fullNarrationOpen, setFullNarrationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
+  // Desktop columns fold away so the timeline can take the width (and, without the preview, the height).
+  const [panels, setPanels] = useState({ segments: true, script: true, preview: true });
+  const togglePanel = (panel: keyof typeof panels) => setPanels((current) => ({ ...current, [panel]: !current[panel] }));
   const [mobileTimeline, setMobileTimeline] = useState(false);
   const [translating, setTranslating] = useState<{ done: number; remaining: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -150,10 +172,14 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
         </div>
       )}
 
-      <div className="flex flex-1 flex-col lg:grid lg:min-h-0 lg:grid-cols-[260px_minmax(0,1fr)_400px] lg:overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)_440px]">
+      <div className={`flex flex-1 flex-col lg:grid lg:min-h-0 lg:overflow-hidden ${GRID_COLUMNS[`${panels.segments}:${panels.script}`]}`}>
         {/* Segments */}
         <aside className="hidden border-r border-[#e5e7eb] bg-white lg:block lg:min-h-0">
-          <SegmentList project={project} activeSegmentId={activeSegment?.segmentId ?? ""} onSelect={selectSegment} />
+          {panels.segments ? (
+            <SegmentList project={project} activeSegmentId={activeSegment?.segmentId ?? ""} onSelect={selectSegment} onCollapse={() => togglePanel("segments")} />
+          ) : (
+            <CollapsedRail label="Segments" badge={`${summary.narrationReady}/${summary.total}`} icon={PanelLeftOpen} onExpand={() => togglePanel("segments")} />
+          )}
         </aside>
 
         {/* Preview */}
@@ -167,7 +193,20 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </select>
             <button type="button" onClick={() => goTo(activeIndex + 1)} disabled={activeIndex >= project.segments.length - 1} className="mlp-btn-outline h-9 px-2"><ChevronRight className="size-4" /></button>
           </div>
-          <div className="p-3 sm:p-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+          {!panels.preview && (
+            <div className="hidden items-center justify-between gap-2 border-b border-[#e5e7eb] bg-white px-3 py-2 lg:flex">
+              <span className="truncate text-sm font-extrabold text-[#243447]">
+                {activeSegment ? `Segment ${String(activeIndex + 1).padStart(2, "0")} — ${activeSegment.title}` : "Preview hidden"}
+              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={() => activeSegment && (player.playing ? player.pause() : player.playSegment(activeSegment.segmentId))} className="mlp-btn-outline h-9" disabled={!activeSegment}>
+                  {player.playing && player.range && !player.range.label.startsWith("Around") ? <Pause className="size-4" /> : <Play className="size-4" />} Preview Segment
+                </button>
+                <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline h-9"><ChevronDown className="size-4" /> Show preview</button>
+              </div>
+            </div>
+          )}
+          <div className={`p-3 sm:p-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto ${panels.preview ? "" : "lg:hidden"}`}>
             {previewSegment && (
               <CompositionPreview
                 composition={previewSegment.composition}
@@ -188,6 +227,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
               <button type="button" onClick={() => activeSegment && player.playAround(activeSegment.segmentId)} className="mlp-btn-outline h-10" disabled={!activeSegment || project.segments.length < 2}>
                 Preview Around
               </button>
+              <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline hidden h-10 lg:inline-flex" title="Fold the preview away so the timeline gets the height"><ChevronUp className="size-4" /> Hide preview</button>
             </div>
             {activeSegment && activeSegment.warnings.length > 0 && (
               <div className="mx-auto mt-4 max-w-4xl">
@@ -195,8 +235,8 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
               </div>
             )}
           </div>
-          <div className="hidden shrink-0 lg:block">
-            <Timeline {...timelineProps} collapsed={timelineCollapsed} onToggleCollapsed={() => setTimelineCollapsed((value) => !value)} />
+          <div className={`hidden shrink-0 lg:block ${panels.preview ? "" : "lg:min-h-0 lg:overflow-y-auto"}`}>
+            <Timeline {...timelineProps} collapsed={timelineCollapsed} onToggleCollapsed={() => setTimelineCollapsed((value) => !value)} large={!panels.preview} />
           </div>
         </section>
 
@@ -206,12 +246,23 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             <span className="text-xs font-extrabold uppercase tracking-wide text-[#243447]">Script &amp; Narration</span>
             <button type="button" onClick={() => setMobileTimeline((value) => !value)} className="text-xs font-bold text-[#a64026]">{mobileTimeline ? "Hide Timeline" : "View Timeline"}</button>
           </div>
+          {!panels.script && <CollapsedRail label="Script & Narration" icon={PanelRightOpen} onExpand={() => togglePanel("script")} className="hidden lg:flex" />}
+          {panels.script && (
+            <div className="hidden items-center justify-between border-b border-[#edf0f3] px-4 py-2 lg:flex">
+              <span className="text-xs font-extrabold uppercase tracking-wide text-[#243447]">Script &amp; Narration</span>
+              <button type="button" onClick={() => togglePanel("script")} className="grid size-7 place-items-center rounded-md text-[#6b7c8f] hover:bg-[#f2f4f7] hover:text-[#243447]" aria-label="Hide the script panel" title="Hide script & narration (more room for the timeline)">
+                <PanelRightClose className="size-4" />
+              </button>
+            </div>
+          )}
           {mobileTimeline && (
             <div className="lg:hidden">
               <Timeline {...timelineProps} collapsed={false} onToggleCollapsed={() => setMobileTimeline(false)} mobile />
             </div>
           )}
+          <div className={`flex min-h-0 flex-1 flex-col ${panels.script ? "" : "lg:hidden"}`}>
           <ScriptPanel key={activeSegment?.id ?? "none"} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={() => changeVisual()} onOpenLayout={() => openLayout()} />
+          </div>
         </aside>
       </div>
 

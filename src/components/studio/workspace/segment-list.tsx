@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertCircle, CheckCircle2, Circle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Circle, PanelLeftClose } from "lucide-react";
 import { formatClock } from "@/lib/studio/timing";
 import type { ProjectDto } from "@/lib/studio/types";
 
 /** Left column: the segment navigator. Same active state as the timeline and panels. */
-export function SegmentList({ project, activeSegmentId, onSelect }: { project: ProjectDto; activeSegmentId: string; onSelect: (segmentId: string) => void }) {
+export function SegmentList({ project, activeSegmentId, onSelect, onCollapse }: { project: ProjectDto; activeSegmentId: string; onSelect: (segmentId: string) => void; onCollapse?: () => void }) {
   const ready = project.segments.filter((segment) => segment.narration.status === "ready").length;
   const pct = project.segments.length ? Math.round((ready / project.segments.length) * 100) : 0;
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -26,7 +26,14 @@ export function SegmentList({ project, activeSegmentId, onSelect }: { project: P
       <div className="border-b border-[#edf0f3] px-4 py-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-extrabold uppercase tracking-wide text-[#243447]">Segments</span>
-          <span className="text-xs font-extrabold text-[#a64026]">{ready}/{project.segments.length}</span>
+          <span className="flex items-center gap-2">
+            <span className="text-xs font-extrabold text-[#a64026]">{ready}/{project.segments.length}</span>
+            {onCollapse && (
+              <button type="button" onClick={onCollapse} className="grid size-7 place-items-center rounded-md text-[#6b7c8f] hover:bg-[#f2f4f7] hover:text-[#243447]" aria-label="Hide the segment list" title="Hide segments (more room for the timeline)">
+                <PanelLeftClose className="size-4" />
+              </button>
+            )}
+          </span>
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f2f4f7]">
           <div className="h-full rounded-full bg-[#a64026]" style={{ width: `${pct}%` }} />

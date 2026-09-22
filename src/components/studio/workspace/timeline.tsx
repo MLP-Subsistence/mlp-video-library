@@ -23,7 +23,8 @@ export function Timeline({
   onPlayPause,
   collapsed,
   onToggleCollapsed,
-  mobile = false
+  mobile = false,
+  large = false
 }: {
   project: ProjectDto;
   activeSegmentId: string;
@@ -38,6 +39,8 @@ export function Timeline({
   collapsed: boolean;
   onToggleCollapsed: () => void;
   mobile?: boolean;
+  /** Taller tracks when the preview is folded away and the timeline has the room. */
+  large?: boolean;
 }) {
   const { timeline, segments, assets } = project;
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -172,7 +175,7 @@ export function Timeline({
             </div>
 
             {/* Video track */}
-            <Track label="Video" icon={Film} labelWidth={LABEL_WIDTH}>
+            <Track label="Video" icon={Film} labelWidth={LABEL_WIDTH} large={large}>
               {timeline.blocks.map((block) => {
                 const segment = segmentById.get(block.segmentId);
                 if (!segment) return null;
@@ -201,7 +204,7 @@ export function Timeline({
                         })}
                       </div>
                     ) : (
-                      <BlockFace segment={segment} block={block} assets={assets} />
+                      <BlockFace segment={segment} block={block} assets={assets} large={large} />
                     )}
                   </Block>
                 );
@@ -209,7 +212,7 @@ export function Timeline({
             </Track>
 
             {/* Audio track */}
-            <Track label="Audio" icon={Music2} labelWidth={LABEL_WIDTH}>
+            <Track label="Audio" icon={Music2} labelWidth={LABEL_WIDTH} large={large}>
               {timeline.blocks.map((block) => {
                 const segment = segmentById.get(block.segmentId);
                 if (!segment) return null;
@@ -259,9 +262,9 @@ export function Timeline({
   );
 }
 
-function Track({ label, icon: Icon, labelWidth, children }: { label: string; icon: typeof Film; labelWidth: number; children: React.ReactNode }) {
+function Track({ label, icon: Icon, labelWidth, large, children }: { label: string; icon: typeof Film; labelWidth: number; large?: boolean; children: React.ReactNode }) {
   return (
-    <div className="relative flex h-14 items-stretch border-b border-[#edf0f3] last:border-b-0">
+    <div className={`relative flex items-stretch border-b border-[#edf0f3] last:border-b-0 ${large ? "h-28" : "h-14"}`}>
       <div className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-white pl-3 text-[10px] font-extrabold uppercase tracking-wide text-[#6b7c8f]" style={{ width: labelWidth }}>
         <Icon className="size-3.5" /> {label}
       </div>
@@ -321,12 +324,12 @@ function Block({ block, pxPerSec, active, onClick, onDoubleClick, warnings, acti
   );
 }
 
-function BlockFace({ segment, block, assets }: { segment: ProjectSegmentDto; block: TimelineBlock; assets: Record<string, import("@/lib/studio/types").StudioAssetDto> }) {
+function BlockFace({ segment, block, assets, large }: { segment: ProjectSegmentDto; block: TimelineBlock; assets: Record<string, import("@/lib/studio/types").StudioAssetDto>; large?: boolean }) {
   const first = block.items[0] ? assets[block.items[0].assetId] : null;
   const mixed = block.items.length > 1;
   return (
     <div className="flex h-full w-full items-center gap-2 pl-1 pr-5">
-      <span className="relative h-full w-12 shrink-0 overflow-hidden rounded-sm bg-[#e5e7eb]">
+      <span className={`relative h-full shrink-0 overflow-hidden rounded-sm bg-[#e5e7eb] ${large ? "w-36" : "w-12"}`}>
         {first ? <Thumb asset={first} atSec={block.items[0]?.sourceStartSec ?? 0} /> : <span className="grid h-full w-full place-items-center text-[#8b9bad]"><ImageIcon className="size-3.5" /></span>}
       </span>
       <span className="min-w-0">
