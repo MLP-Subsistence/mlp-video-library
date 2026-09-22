@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Grid2X2, ImagePlus, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Wand2 } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Grid2X2, ImagePlus, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Undo2, Wand2 } from "lucide-react";
 import { AssetLibrary } from "@/components/studio/asset-library";
 import { LayoutEditor } from "@/components/studio/layout-editor";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
@@ -12,6 +12,7 @@ import { FullNarrationModal } from "@/components/studio/workspace/full-narration
 import { ScriptPanel } from "@/components/studio/workspace/script-panel";
 import { SegmentList } from "@/components/studio/workspace/segment-list";
 import { Timeline } from "@/components/studio/workspace/timeline";
+import { TimelineTextEditor } from "@/components/studio/workspace/timeline-text-editor";
 import { TranslationSettingsModal } from "@/components/studio/workspace/translation-settings";
 import { usePreviewPlayer } from "@/components/studio/workspace/use-player";
 import { summarizeProject, useProject } from "@/components/studio/workspace/use-project";
@@ -46,9 +47,12 @@ function CollapsedRail({ label, badge, icon: Icon, onExpand, className = "" }: {
 export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; initialSegmentId?: string | null }) {
   const controller = useProject(initial, initialSegmentId);
   const { project, activeSegment, activeIndex, setActiveSegmentId, patchSegment, patchProject } = controller;
+  const { canUndo, undo } = controller;
   const player = usePreviewPlayer(project);
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [visualPickerOpen, setVisualPickerOpen] = useState(false);
+  const [textEditorSegmentId, setTextEditorSegmentId] = useState<string | null>(null);
+  const [textEditorVersion, setTextEditorVersion] = useState(0);
   const [fullNarrationOpen, setFullNarrationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
@@ -80,6 +84,19 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
     const collapse = () => setTimelineCollapsed(window.innerWidth < 1024);
     collapse();
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "z") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']") || document.querySelector("[role='dialog']")) return;
+      if (!canUndo) return;
+      event.preventDefault();
+      void undo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canUndo, undo]);
 
   const goTo = (index: number) => {
     const segment = project.segments[index];
@@ -122,6 +139,11 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
     if (segmentId && segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
     setLayoutOpen(true);
   };
+  const openTextEditor = (segmentId: string) => {
+    if (segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
+    setTextEditorSegmentId(segmentId);
+  };
+  const textEditorSegment = textEditorSegmentId ? project.segments.find((segment) => segment.segmentId === textEditorSegmentId) ?? null : null;
 
   const timelineProps = {
     project,
@@ -131,6 +153,10 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
     onSelect: selectSegment,
     onChangeVisual: changeVisual,
     onOpenLayout: openLayout,
+    onEditText: openTextEditor,
+    onUndo: () => void controller.undo(),
+    canUndo: controller.canUndo,
+    undoLabel: controller.undoLabel,
     onSeek: player.seek,
     onPlayPause: () => (player.playing ? player.pause() : player.play())
   };
@@ -148,6 +174,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
         }
         actions={
           <>
+            <button type="button" onClick={() => void controller.undo()} disabled={!controller.canUndo} className="mlp-btn-outline h-10" title={controller.canUndo ? `Undo ${controller.undoLabel || "last edit"} (Ctrl+Z)` : "Nothing to undo"}><Undo2 className="size-4" /> Undo</button>
             <button type="button" onClick={translateLesson} disabled={Boolean(translating)} className="mlp-btn-outline h-10">
               {translating ? <Spinner /> : <Wand2 className="size-4" />} <span className="hidden sm:inline">Translate Entire Lesson</span><span className="sm:hidden">Translate</span>
             </button>
@@ -261,7 +288,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </div>
           )}
           <div className={`flex min-h-0 flex-1 flex-col ${panels.script ? "" : "lg:hidden"}`}>
-          <ScriptPanel key={activeSegment?.id ?? "none"} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={() => changeVisual()} onOpenLayout={() => openLayout()} />
+          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}:${textEditorVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={() => changeVisual()} onOpenLayout={() => openLayout()} />
           </div>
         </aside>
       </div>
@@ -275,6 +302,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
           segmentLabel={`Segment ${String(activeIndex + 1).padStart(2, "0")} — ${activeSegment.title}`}
           segmentDurationSec={activeBlock?.durationSec ?? 4}
           isOverride={activeSegment.compositionIsOverride}
+          preferredFolderId={project.template.id}
           onApply={async (composition) => {
             await patchSegment(activeSegment, { composition });
           }}
@@ -292,12 +320,14 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
           description={`Pick the picture or video clip for segment ${String(activeIndex + 1).padStart(2, "0")} — ${activeSegment.title}. Upload your own or choose from the library.`}
           selectedIds={activeSegment.composition.slots.flatMap((slot) => slot.items.map((item) => item.assetId))}
           canManage
+          preferredFolderId={project.template.id}
           onSelect={(asset) => {
             setVisualPickerOpen(false);
             void patchSegment(activeSegment, { composition: replaceMainVisual(activeSegment.composition, asset.id) });
           }}
         />
       )}
+      {textEditorSegment && <TimelineTextEditor key={textEditorSegment.id} segment={textEditorSegment} onClose={() => setTextEditorSegmentId(null)} onSave={async (text) => { await patchSegment(textEditorSegment, { translation: text }); setTextEditorVersion((version) => version + 1); }} />}
       <TranslationSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} project={project} onSave={patchProject} />
       <FullNarrationModal open={fullNarrationOpen} onClose={() => setFullNarrationOpen(false)} project={project} onProject={controller.setProject} />
     </div>

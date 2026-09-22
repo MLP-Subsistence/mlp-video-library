@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Play, Plus, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Pencil, Play, Plus, Type, Undo2 } from "lucide-react";
 import { Waveform } from "@/components/studio/workspace/waveform";
 import { formatClock } from "@/lib/studio/timing";
 import type { ProjectDto, ProjectSegmentDto, TimelineBlock } from "@/lib/studio/types";
@@ -21,6 +21,10 @@ export function Timeline({
   onOpenLayout,
   onSeek,
   onPlayPause,
+  onEditText,
+  onUndo,
+  canUndo,
+  undoLabel,
   collapsed,
   onToggleCollapsed,
   mobile = false,
@@ -36,6 +40,10 @@ export function Timeline({
   onOpenLayout?: (segmentId: string) => void;
   onSeek: (timeSec: number) => void;
   onPlayPause: () => void;
+  onEditText?: (segmentId: string) => void;
+  onUndo?: () => void;
+  canUndo?: boolean;
+  undoLabel?: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   mobile?: boolean;
@@ -131,6 +139,8 @@ export function Timeline({
           <button type="button" onClick={onPlayPause} className="grid size-8 place-items-center rounded-md border border-[#d8dde5] text-[#243447]" aria-label={playing ? "Pause preview" : "Play preview"}>
             {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
           </button>
+          {onUndo && <button type="button" onClick={onUndo} disabled={!canUndo} className="inline-flex h-8 items-center gap-1 rounded-md border border-[#d8dde5] px-2 text-xs font-bold text-[#243447] disabled:opacity-40" aria-label="Undo last edit" title={canUndo ? `Undo ${undoLabel || "last edit"} (Ctrl+Z)` : "Nothing to undo"}><Undo2 className="size-4" /> Undo</button>}
+          {onEditText && activeSegmentId && <button type="button" onClick={() => onEditText(activeSegmentId)} className="inline-flex h-8 items-center gap-1 rounded-md border border-[#d8dde5] px-2 text-xs font-bold text-[#243447]" title="Edit the selected text-track segment"><Pencil className="size-3.5" /> Edit text</button>}
           <span className="text-sm font-bold tabular-nums text-[#526579]">
             {formatClock(timeSec)} / {formatClock(timeline.totalSec)}
           </span>
@@ -183,7 +193,7 @@ export function Timeline({
                 const text = segment.translation.trim() || segment.sourceScript.trim() || segment.title;
                 const textWarnings = segment.warnings.filter((warning) => warning.code.startsWith("translation"));
                 return (
-                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} warnings={textWarnings}>
+                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} onDoubleClick={onEditText ? () => onEditText(block.segmentId) : undefined} warnings={textWarnings} action={onEditText && isActive && block.durationSec * pxPerSec >= 90 ? <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onEditText(block.segmentId); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onEditText(block.segmentId); } }} className="absolute bottom-1 right-1 inline-flex h-6 items-center gap-1 rounded-md bg-[#a64026] px-1.5 text-[10px] font-extrabold text-white shadow" title="Edit text for this segment"><Pencil className="size-3" /> Edit text</span> : null}>
                     <div className="flex h-full items-center gap-1.5 px-2" title={text}>
                       <Type className="size-3 shrink-0 text-[#a64026]" />
                       <span className="truncate text-[10px] font-bold text-[#243447]">{text}</span>

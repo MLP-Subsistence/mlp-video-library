@@ -5,6 +5,7 @@ import { cleanOptional } from "@/lib/sanitize";
 import { normalizeComposition, serializeComposition } from "@/lib/studio/layouts";
 import { loadProjectDto } from "@/lib/studio/project-state";
 import { scriptHash } from "@/lib/studio/services/credits";
+import { issueUndoToken, segmentSnapshot, snapshotsEqual } from "@/lib/studio/undo";
 import type { Composition, NarrationSource } from "@/lib/studio/types";
 
 type Params = { params: Promise<{ id: string; segmentId: string }> };
@@ -160,11 +161,15 @@ export const PATCH = studioRoute(async (request: Request, { params }: Params) =>
     }
   }
 
+  let undoToken: string | null = null;
   if (Object.keys(data).length) {
-    await prisma.studioProjectSegment.update({ where: { id: row.id }, data });
+    const before = segmentSnapshot(row);
+    const updated = await prisma.studioProjectSegment.update({ where: { id: row.id }, data });
+    const after = segmentSnapshot(updated);
+    if (!snapshotsEqual(before, after)) undoToken = issueUndoToken({ scope: "segment", projectId: id, recordId: row.id, userId: user.id, before, after });
     await prisma.studioProject.update({ where: { id }, data: { updatedAt: now, ...(await shouldReopen(id) ? { status: "in_progress" } : {}) } });
   }
-  return ok({ project: await loadProjectDto(id, user) });
+  return ok({ project: await loadProjectDto(id, user), undoToken });
 });
 
 /** Any edit after a render invalidates "ready" so the review page asks for a new video. */

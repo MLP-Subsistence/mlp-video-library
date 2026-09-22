@@ -212,6 +212,7 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
           assets={template.assets}
           segmentLabel={`${active.key} — ${active.title}`}
           segmentDurationSec={8}
+          preferredFolderId={template.id}
           onApply={async (composition: Composition) => {
             await run("layout", () => patchSegment(active.id, { composition }));
           }}

@@ -3,6 +3,7 @@ import { ok, readJson, requireProjectAccess, requireStudioApiUser, StudioError, 
 import { cleanOptional, cleanText } from "@/lib/sanitize";
 import { loadProjectDto } from "@/lib/studio/project-state";
 import { parseVoiceSettings } from "@/lib/studio/services/credits";
+import { issueUndoToken, projectSnapshot, snapshotsEqual } from "@/lib/studio/undo";
 import type { VoiceSettings } from "@/lib/studio/types";
 
 type Params = { params: Promise<{ id: string }> };
@@ -20,7 +21,7 @@ export const GET = studioRoute(async (_request: Request, { params }: Params) => 
 export const PATCH = studioRoute(async (request: Request, { params }: Params) => {
   const user = await requireStudioApiUser();
   const { id } = await params;
-  await requireProjectAccess(user, id);
+  const existing = await requireProjectAccess(user, id);
   const body = await readJson<{
     region?: string | null;
     variety?: string | null;
@@ -44,8 +45,11 @@ export const PATCH = studioRoute(async (request: Request, { params }: Params) =>
   }
   if (body.voiceSettings !== undefined) data.voiceSettings = JSON.stringify(parseVoiceSettings(JSON.stringify(body.voiceSettings)));
   if (body.renderQuality !== undefined) data.renderQuality = cleanText(body.renderQuality) === "720p" ? "720p" : "1080p";
-  await prisma.studioProject.update({ where: { id }, data });
-  return ok({ project: await loadProjectDto(id, user) });
+  const before = projectSnapshot(existing);
+  const updated = await prisma.studioProject.update({ where: { id }, data });
+  const after = projectSnapshot(updated);
+  const undoToken = snapshotsEqual(before, after) ? null : issueUndoToken({ scope: "project", projectId: id, recordId: id, userId: user.id, before, after });
+  return ok({ project: await loadProjectDto(id, user), undoToken });
 });
 
 export const DELETE = studioRoute(async (_request: Request, { params }: Params) => {

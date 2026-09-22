@@ -30,6 +30,12 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
 
   useEffect(() => () => save.cancel(), [save]);
 
+  useEffect(() => {
+    const cancelPendingSave = () => save.cancel();
+    window.addEventListener("studio-before-undo", cancelPendingSave);
+    return () => window.removeEventListener("studio-before-undo", cancelPendingSave);
+  }, [save]);
+
   if (!activeSegment) return null;
   const segment = activeSegment;
 

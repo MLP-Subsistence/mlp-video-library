@@ -22,6 +22,7 @@ type LayoutEditorProps = {
   segmentDurationSec: number;
   isOverride?: boolean;
   onResetToTemplate?: () => Promise<void> | void;
+  preferredFolderId?: string;
 };
 
 /** Mounted only while open so every opening starts from the segment's current composition. */
@@ -30,7 +31,7 @@ export function LayoutEditor(props: LayoutEditorProps) {
   return <LayoutEditorDialog {...props} />;
 }
 
-function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLabel, segmentDurationSec, isOverride, onResetToTemplate }: LayoutEditorProps) {
+function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLabel, segmentDurationSec, isOverride, onResetToTemplate, preferredFolderId }: LayoutEditorProps) {
   const [composition, setComposition] = useState<Composition>(() => normalizeComposition(initial));
   const [activeSlot, setActiveSlot] = useState(0);
   const [localAssets, setLocalAssets] = useState(assets);
@@ -249,7 +250,7 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
           </aside>
         </div>
       </Modal>
-      <AssetLibrary open={Boolean(picking)} onClose={() => setPicking(null)} onSelect={selectAsset} kinds={["image", "video"]} description={`Select an image or video for ${segmentLabel}`} selectedIds={slotItems.map((item) => item.assetId)} />
+      <AssetLibrary open={Boolean(picking)} onClose={() => setPicking(null)} onSelect={selectAsset} kinds={["image", "video"]} description={`Select an image or video for ${segmentLabel}`} selectedIds={slotItems.map((item) => item.assetId)} preferredFolderId={preferredFolderId} />
     </>
   );
 }

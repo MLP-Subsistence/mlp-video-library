@@ -5,7 +5,7 @@ import { Check, FileAudio, Film, ImageIcon, Layers, Search, Trash2, Upload } fro
 import { Drawer, InlineNotice, Spinner } from "@/components/studio/ui";
 import { api, formatBytes, kindForFile, uploadAsset } from "@/lib/studio/client";
 import { formatClock } from "@/lib/studio/timing";
-import type { AssetKind, StudioAssetDto } from "@/lib/studio/types";
+import type { AssetKind, StudioAssetDto, StudioAssetFolderDto } from "@/lib/studio/types";
 
 const tabs: Array<{ kind: AssetKind; label: string; icon: typeof ImageIcon }> = [
   { kind: "image", label: "Images", icon: ImageIcon },
@@ -50,7 +50,8 @@ export function AssetLibrary({
   title = "Asset Library",
   description,
   selectedIds = [],
-  canManage = false
+  canManage = false,
+  preferredFolderId
 }: {
   open: boolean;
   onClose: () => void;
@@ -60,13 +61,35 @@ export function AssetLibrary({
   description?: string;
   selectedIds?: string[];
   canManage?: boolean;
+  preferredFolderId?: string;
 }) {
   const [kind, setKind] = useState<AssetKind>(kinds[0]);
   const [query, setQuery] = useState("");
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [folders, setFolders] = useState<StudioAssetFolderDto[] | null>(null);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const { assets, error, reload, setAssets } = useAssetList(kind, query, open);
+  const { assets, error, reload, setAssets } = useAssetList(kind, query, open && (kind !== "image" || folders !== null), kind === "image" ? folderId : null);
   const fileInput = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open || !kinds.includes("image")) return;
+    let current = true;
+    void api<{ folders: StudioAssetFolderDto[] }>("/api/studio/assets/folders")
+      .then((result) => {
+        if (!current) return;
+        setFolders(result.folders);
+        setFolderId(result.folders.find((folder) => folder.id === preferredFolderId)?.id ?? (preferredFolderId ? "originals" : result.folders[0]?.id ?? null));
+      })
+      .catch((caught) => {
+        if (!current) return;
+        setFolders([]);
+        setNotice((caught as Error).message);
+      });
+    return () => { current = false; };
+    // The available image kinds are fixed for each mounted picker.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, preferredFolderId]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -81,6 +104,7 @@ export function AssetLibrary({
         setUploading({ name: file.name, progress: 0 });
         const asset = await uploadAsset(file, { kind: detected, onProgress: (fraction) => setUploading({ name: file.name, progress: fraction }) });
         setKind(detected);
+        setFolderId(null);
         setAssets((list) => [asset, ...(list ?? [])]);
       } catch (caught) {
         setNotice((caught as Error).message);
@@ -121,8 +145,18 @@ export function AssetLibrary({
             })}
         </div>
       )}
+      {kind === "image" && folders && (
+        <label className="mt-4 block text-xs font-extrabold text-[#526579]">
+          Video folder
+          <select value={folderId ?? "all"} onChange={(event) => setFolderId(event.target.value === "all" ? null : event.target.value)} className="mlp-input mt-1 w-full text-sm font-semibold text-[#243447]">
+            {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.title} ({folder.assetCount})</option>)}
+            <option value="originals">All verified Shutterstock originals</option>
+            <option value="all">All library images and uploads</option>
+          </select>
+        </label>
+      )}
       <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-sm font-bold text-[#526579]">{assets ? `${assets.length} item${assets.length === 1 ? "" : "s"} in ${tabs.find((tab) => tab.kind === kind)?.label}` : "Loading…"}</span>
+        <span className="text-sm font-bold text-[#526579]">{assets ? `${assets.length} item${assets.length === 1 ? "" : "s"} in ${kind === "image" && folderId ? "this folder" : tabs.find((tab) => tab.kind === kind)?.label}` : "Loading…"}</span>
         <button type="button" onClick={() => fileInput.current?.click()} disabled={Boolean(uploading)} className="mlp-btn-outline h-10">
           {uploading ? <Spinner /> : <Upload className="size-4" />} Upload New
         </button>
