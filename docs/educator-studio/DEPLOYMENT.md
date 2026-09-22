@@ -32,6 +32,7 @@ Create a bucket (Supabase Storage with the S3 protocol enabled, Cloudflare R2, o
 | `STUDIO_S3_BUCKET` | `educator-studio` |
 | `STUDIO_S3_ACCESS_KEY_ID` / `STUDIO_S3_SECRET_ACCESS_KEY` | bucket credentials |
 | `STUDIO_S3_PUBLIC_URL` | public base URL of the bucket (Supabase: `https://<project>.supabase.co/storage/v1/object/public/educator-studio`) |
+| `STUDIO_MAX_UPLOAD_MB` | Optional per-file cap; set to `50` when the Supabase bucket is limited to 50 MB. The Studio will show a clear error before upload. |
 
 CORS on the bucket must allow `PUT` from `https://marketplaceliteracyapp.org` (browsers upload directly). If `STUDIO_S3_PUBLIC_URL` is omitted the app proxies files through `/api/studio/files/...`, which works but is slower.
 
