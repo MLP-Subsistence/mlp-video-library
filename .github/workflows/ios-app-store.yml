@@ -67,7 +67,9 @@ jobs:
           test -n "$DEVICE_ID"
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
-          xcrun simctl install "$DEVICE_ID" "$RUNNER_TEMP/MLPDerivedData/Build/Products/Debug-iphonesimulator/MarketplaceLiteracyApp.app"
+          APP_PATH="$(find "$RUNNER_TEMP/MLPDerivedData/Build/Products" -maxdepth 2 -type d -path '*-iphonesimulator/*.app' -print -quit)"
+          test -n "$APP_PATH"
+          xcrun simctl install "$DEVICE_ID" "$APP_PATH"
           xcrun simctl launch "$DEVICE_ID" org.marketplaceliteracy.app
           sleep 20
           mkdir -p "$RUNNER_TEMP/ios-screenshots"
