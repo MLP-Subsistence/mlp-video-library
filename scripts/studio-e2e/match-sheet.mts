@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { PrismaClient } from "@prisma/client";
 
@@ -16,7 +17,7 @@ for (const segment of template.segments.slice(0, 10)) {
   const match = segment.mediaMatches[0];
   let candidate = await sharp({ create: { width: 320, height: 200, channels: 3, background: "#333" } }).jpeg().toBuffer();
   if (match) {
-    const file = path.join("storage/studio/shutterstock-index", `${match.externalId}.jpg`);
+    const idx = JSON.parse(readFileSync("storage/studio/shutterstock-index/index.json", "utf8")); const file = idx[match.externalId]?.localFile || path.join("storage/studio/shutterstock-index", `${match.externalId}.jpg`);
     try {
       candidate = await sharp(file).resize(320, 200, { fit: "cover" }).toBuffer();
     } catch {

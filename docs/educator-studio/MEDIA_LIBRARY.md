@@ -55,3 +55,13 @@ What that means:
 The owner's main template set is now **"Marketplace Literacy Youth Africa"** — 25 lessons (1 … 15) imported from `D:\From Downloadssss\MLP PLAYLISTS\MLP AFRICA\New folder (2)` with `--title-suffix "— Youth Africa" --region Africa` (same English script; 7 lessons matched pause-for-line exactly, the rest via the DP matcher, 4-1 and 7-1 need a look). An administrator picks the **Main lesson playlist** under `/admin/studio → Providers & Glossary`; it is listed first and preselected in New Localization (`StudioSettings.defaultPlaylistId`).
 
 Matching the 397 Youth Africa segment frames against account 367425665's 1,687 licensed images also found **no real matches** (top candidates are unrelated at distance 12–16), even though the library holds ~300 African photos. The Ghana/West-Africa photos in these videos (orange-shirt vendor, "OPEN" sign, kente market scenes) were therefore licensed on another account or came from another source — the video producer should say which.
+
+## Local originals: Youth Africa results (2026-09-22)
+
+The clean photos turned out to be on disk already: `C:\Users\uwish\Documents\MLP AFRICA PROJECTS\MLP AFRICA ASSETS\High Quality Shutterstock` (271 originals), `…\Downloads from Tz` (103), `D:\DO NOT DELETE\From Downloads 010425` (92 `shutterstock_*`), `D:\Interviews Madhu` (17). Also `…\MLP AFRICA ASSETS\Shutterstock snippets` — 289 small screenshots of the images used, grouped per lesson (identification only, not usable as visuals).
+
+Why the first pass found nothing: the videos zoom and pan the photos ("Ken Burns"), so a whole-image hash never lines up. `windowHashes()` now hashes many 16:9 windows (zoom 45–100 %, 3×3 anchors, top 80 % to match a caption-cropped frame) and portrait ~3:4 windows (columns of 2/3-photo collages) of every original; matching takes the minimum distance. Identical/zoomed photos now score 0–6.
+
+Commands: `index-local --dir <folder>` (Shutterstock originals only, `--all` for every image), `match`, `attach-local` (stores a ≤ 2560 px copy as an asset and makes it the segment visual; 2/3-column collages become `split2` / `columns3` compositions — new layout).
+
+Result for the 397 Youth Africa segments: **229 attached with the clean original**, ~50 weaker candidates left for review in the template editor, the rest are title slides, collages whose photos are not all on disk, or photos not found in any local folder or in account 367425665's library. Verified visually (Introduction, Types of Customers): every attached photo is the right one.

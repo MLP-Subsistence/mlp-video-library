@@ -83,3 +83,58 @@ export async function frameHashes(input: Buffer) {
 export function bestDistance(frame: bigint[], candidate: bigint) {
   return Math.min(...frame.map((hash) => hamming(hash, candidate)));
 }
+
+/**
+ * The lesson videos "Ken Burns" the photos: a 16:9 window, often zoomed to
+ * 45–100 % of the original and panned. To find the original behind a frame we
+ * hash many 16:9 windows of the original (zoom levels × 3×3 anchors), each
+ * reduced to its top `keep` share so it lines up with a caption-cropped frame.
+ */
+export async function windowHashes(input: Buffer, keep = 0.8) {
+  const base = sharp(input).rotate();
+  const meta = await base.metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (!width || !height) return [] as bigint[];
+  const hashes: bigint[] = [];
+  const seen = new Set<string>();
+  // Landscape 16:9 windows (single-photo segments, caption band removed) and
+  // portrait ~3:4 windows (one column of a 2- or 3-photo collage).
+  const shapes: Array<{ ratio: number; keepShare: number }> = [
+    { ratio: 16 / 9, keepShare: keep },
+    { ratio: 0.74, keepShare: 1 }
+  ];
+  for (const shape of shapes) {
+    const fullWindowWidth = Math.min(width, Math.floor(height * shape.ratio));
+    const zooms = shape.ratio > 1 ? [1, 0.85, 0.7, 0.55, 0.45] : [1, 0.9, 0.8, 0.7, 0.55];
+    for (const zoom of zooms) {
+      const w = Math.max(16, Math.floor(fullWindowWidth * zoom));
+      const h = Math.max(9, Math.floor(w / shape.ratio));
+      if (h > height) continue;
+      const xAnchors = zoom === 1 && shape.ratio > 1 ? [0.5] : [0.15, 0.5, 0.85];
+      // Collage columns are usually cut from the top of a full-height strip, so include the edges vertically.
+      const yAnchors = shape.ratio > 1 ? (zoom === 1 ? [0.5] : [0.15, 0.5, 0.85]) : [0, 0.25, 0.5, 0.75, 1];
+      for (const ax of xAnchors) {
+        for (const ay of yAnchors) {
+          const left = Math.round((width - w) * ax);
+          const top = Math.round((height - h) * ay);
+          const region = { left, top, width: w, height: Math.max(8, Math.floor(h * shape.keepShare)) };
+        const key = `${region.left}:${region.top}:${region.width}:${region.height}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          hashes.push(await phash(input, region));
+        }
+      }
+    }
+  }
+  return hashes;
+}
+
+export function minDistance(frameHash: bigint, candidateHashes: bigint[]) {
+  let best = 64;
+  for (const hash of candidateHashes) {
+    const distance = hamming(frameHash, hash);
+    if (distance < best) best = distance;
+  }
+  return best;
+}

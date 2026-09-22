@@ -22,6 +22,16 @@ export const layouts: LayoutDefinition[] = [
     ]
   },
   {
+    id: "columns3",
+    label: "3 Columns",
+    description: "Three visuals side by side.",
+    slots: [
+      { x: 0, y: 0, w: 1 / 3, h: 1 },
+      { x: 1 / 3, y: 0, w: 1 / 3, h: 1 },
+      { x: 2 / 3, y: 0, w: 1 / 3, h: 1 }
+    ]
+  },
+  {
     id: "panel3",
     label: "3 Panel",
     description: "One large visual with two stacked beside it.",

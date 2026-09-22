@@ -1,0 +1,14 @@
+import { readFileSync } from "node:fs";
+import sharp from "sharp";
+import * as mod from "../../src/lib/studio/services/phash.ts";
+const ph: any = (mod as any).default ?? mod;
+const [file, out] = [process.argv[2], process.argv[3] ?? "diag-file.png"];
+const small = await sharp(file).resize(600, 600, { fit: "inside" }).jpeg().toBuffer();
+const hashes = await ph.frameHashes(small);
+const index = JSON.parse(readFileSync("storage/studio/shutterstock-index/index.json", "utf8"));
+const locals = Object.values(index).filter((e: any) => e.localFile) as any[];
+const scored = locals.map((e) => ({ e, d: ph.bestDistance(hashes, BigInt("0x" + e.hash)) })).sort((a, b) => a.d - b.d).slice(0, 5);
+console.log(scored.map((s) => `${s.e.id} d=${s.d}`).join("  "));
+const tiles = [await sharp(small).resize(320, 200, { fit: "cover" }).toBuffer()];
+for (const s of scored) tiles.push(await sharp(s.e.localFile).rotate().resize(320, 200, { fit: "cover" }).toBuffer());
+await sharp({ create: { width: 320 * tiles.length, height: 200, channels: 3, background: "#000" } }).composite(tiles.map((t, i) => ({ input: t, left: i * 320, top: 0 }))).png().toFile(out);

@@ -3,7 +3,8 @@ import path from "path";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { applyMediaMatch } from "@/lib/studio/services/media-matches";
-import { bestDistance, frameHashes, phash } from "@/lib/studio/services/phash";
+import { bestDistance, frameHashes, minDistance, phash, windowHashes } from "@/lib/studio/services/phash";
+import { serializeComposition } from "@/lib/studio/layouts";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
 
 /**
@@ -15,6 +16,11 @@ import { buildStorageKey, storage } from "@/lib/studio/storage";
  *   match   — for every master segment frame (caption band cropped), find the
  *             closest licensed images by perceptual hash and store them as
  *             StudioMediaMatch candidates (best first). Prints a summary.
+ *   index-local — hash a folder of already-downloaded Shutterstock originals
+ *             (shutterstock_<id>.jpg, recursive) into the same index; the
+ *             full-size file is kept as the source for attaching.
+ *   attach-local — after `match`, attach every strong best match whose
+ *             original exists locally (stores the file as an asset).
  *   ingest  — pick up files re-downloaded from Shutterstock
  *             (Downloads/shutterstock_<id>.jpg), store them as assets and
  *             attach each to the segments whose chosen/best match is that id.
@@ -27,7 +33,7 @@ const INDEX_DIR = path.join(process.cwd(), "storage", "studio", "shutterstock-in
 const INDEX_FILE = path.join(INDEX_DIR, "index.json");
 
 type LibraryEntry = { id: string; thumb: string | null; src: string; desc: string; aspect: number | null; gen: boolean; editorial: boolean; licensedAt: string | null };
-type IndexEntry = LibraryEntry & { hash: string | null; file: string | null };
+type IndexEntry = LibraryEntry & { hash: string | null; file: string | null; localFile?: string | null; windows?: string[] };
 
 function arg(name: string, fallback?: string) {
   const index = process.argv.indexOf(`--${name}`);
@@ -87,11 +93,154 @@ async function buildIndex() {
   console.log(`index: ${done} hashed, ${failed} failed → ${INDEX_FILE}`);
 }
 
+async function walk(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...(await walk(full)));
+    else if (/\.(jpe?g|png|webp)$/i.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+async function indexLocal() {
+  const dir = arg("dir");
+  if (!dir) throw new Error("--dir <folder of shutterstock_<id>.jpg files> is required");
+  await mkdir(INDEX_DIR, { recursive: true });
+  const existing: Record<string, IndexEntry> = (await exists(INDEX_FILE)) ? JSON.parse(await readFile(INDEX_FILE, "utf8")) : {};
+  const includeAll = process.argv.includes("--all");
+  // Only Shutterstock originals by default (shutterstock_<id>.jpg); --all hashes every image in the folder.
+  const files = (await walk(dir)).filter((file) => includeAll || /shutterstock_\d+/i.test(path.basename(file)));
+  let done = 0;
+  for (const file of files) {
+    const id = /shutterstock_(\d+)/i.exec(path.basename(file))?.[1] ?? path.basename(file).replace(/\.[^.]+$/, "");
+    if (existing[id]?.localFile === file && existing[id]?.hash && existing[id]?.windows?.length) continue;
+    try {
+      // Downscale first: the originals are 30+ megapixel files.
+      const small = await sharp(file).rotate().resize(800, 800, { fit: "inside" }).jpeg().toBuffer();
+      const hash = await phash(small);
+      const windows = (await windowHashes(small)).map((value) => value.toString(16));
+      existing[id] = { ...(existing[id] ?? { id, thumb: null, src: "", desc: path.basename(file), aspect: null, gen: false, editorial: false, licensedAt: null }), hash: hash.toString(16), file: existing[id]?.file ?? null, localFile: file, windows };
+      done += 1;
+      if (done % 50 === 0) console.log(`  hashed ${done}/${files.length}`);
+    } catch (error) {
+      console.warn(`  ${file}: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  await writeFile(INDEX_FILE, JSON.stringify(existing));
+  console.log(`index-local: ${done} files hashed from ${dir}`);
+}
+
+type LibraryHashed = IndexEntry & { hashValue: bigint; windowValues: bigint[] };
+
+/** Split the frame into 2 or 3 equal columns and match each column on its own. */
+async function matchCollage(cleaned: Buffer, library: LibraryHashed[], auto: number) {
+  const meta = await sharp(cleaned).metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  for (const columns of [3, 2]) {
+    const panels: Array<{ entry: LibraryHashed; distance: number }> = [];
+    for (let i = 0; i < columns; i++) {
+      const left = Math.round((width * i) / columns);
+      const panelWidth = Math.round(width / columns);
+      const panel = await sharp(cleaned).extract({ left, top: 0, width: Math.min(panelWidth, width - left), height }).jpeg().toBuffer();
+      const hashes = await frameHashes(panel);
+      const panelHash = await phash(panel);
+      let best: { entry: LibraryHashed; distance: number } | null = null;
+      for (const entry of library) {
+        const distance = Math.min(bestDistance(hashes, entry.hashValue), entry.windowValues.length ? minDistance(panelHash, entry.windowValues) : 64);
+        if (!best || distance < best.distance) best = { entry, distance };
+      }
+      if (!best || best.distance > auto) break;
+      panels.push(best);
+    }
+    if (panels.length === columns) return { panels };
+  }
+  return null;
+}
+
+async function storeOriginal(index: Record<string, IndexEntry>, externalId: string, userId: string | null) {
+  const entry = index[externalId];
+  if (!entry?.localFile) return null;
+  const existing = await prisma.studioAsset.findFirst({ where: { tags: { contains: `shutterstock, ${externalId},` } } });
+  if (existing) return existing;
+  // Store a web-friendly copy (max 2560 px) rather than the 30 MP original.
+  const bytes = await sharp(entry.localFile).rotate().resize(2560, 2560, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+  const meta = await sharp(bytes).metadata();
+  const key = buildStorageKey("stock/shutterstock/library", `${externalId}.jpg`);
+  await storage().put(key, bytes, "image/jpeg");
+  return prisma.studioAsset.create({
+    data: { kind: "image", name: `Shutterstock ${externalId}`, storageKey: key, url: storage().publicUrl(key), mimeType: "image/jpeg", sizeBytes: bytes.length, width: meta.width ?? null, height: meta.height ?? null, tags: `shutterstock, ${externalId}, licensed, local`, uploadedById: userId }
+  });
+}
+
+async function attachCollages(index: Record<string, IndexEntry>, userId: string | null) {
+  const panelMatches = await prisma.studioMediaMatch.findMany({ where: { status: "candidate", description: { startsWith: "panel " } }, orderBy: [{ segmentId: "asc" }, { rank: "asc" }] });
+  const bySegment = new Map<string, typeof panelMatches>();
+  for (const match of panelMatches) bySegment.set(match.segmentId, [...(bySegment.get(match.segmentId) ?? []), match]);
+  let attached = 0;
+  for (const [segmentId, matches] of bySegment) {
+    const total = Number(/panel \d+\/(\d+)/.exec(matches[0].description)?.[1] ?? 0);
+    if (matches.length !== total || (total !== 2 && total !== 3)) continue;
+    const assets = [];
+    for (const match of matches) {
+      const asset = await storeOriginal(index, match.externalId, userId);
+      if (!asset) break;
+      assets.push(asset);
+    }
+    if (assets.length !== total) continue;
+    const layout = total === 2 ? "split2" : "columns3";
+    await prisma.studioSegment.update({
+      where: { id: segmentId },
+      data: { composition: serializeComposition({ layout, slots: assets.map((asset, i) => ({ id: `slot_${i + 1}`, fit: "cover", items: [{ assetId: asset.id, share: 1 }] })) }) }
+    });
+    await prisma.studioMediaMatch.updateMany({ where: { id: { in: matches.map((match) => match.id) } }, data: { status: "chosen" } });
+    for (const [i, match] of matches.entries()) await prisma.studioMediaMatch.update({ where: { id: match.id }, data: { assetId: assets[i].id } });
+    attached += 1;
+  }
+  return attached;
+}
+
+async function attachLocal() {
+  const auto = Number(arg("auto", "8"));
+  const index = JSON.parse(await readFile(INDEX_FILE, "utf8")) as Record<string, IndexEntry>;
+  const admin = await prisma.user.findFirst({ where: { role: "admin" }, select: { id: true } });
+  const collages = await attachCollages(index, admin?.id ?? null);
+  console.log(`attach-local: ${collages} collage segments rebuilt as split layouts`);
+  const best = await prisma.studioMediaMatch.findMany({ where: { rank: 0, status: "candidate", NOT: { description: { startsWith: "panel " } } }, include: { segment: { select: { key: true, template: { select: { title: true } } } } } });
+  let attached = 0;
+  let skipped = 0;
+  for (const match of best) {
+    const pct = Number(/^(\d+)% match/.exec(match.description)?.[1] ?? 0);
+    const distance = Math.round((1 - pct / 100) * 32);
+    const entry = index[match.externalId];
+    if (distance > auto || !entry?.localFile) {
+      skipped += 1;
+      continue;
+    }
+    let asset = await prisma.studioAsset.findFirst({ where: { tags: { contains: `shutterstock, ${match.externalId},` } } });
+    if (!asset) {
+      // Store a web-friendly copy (max 2560 px) rather than the 30 MP original.
+      const bytes = await sharp(entry.localFile).rotate().resize(2560, 2560, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+      const meta = await sharp(bytes).metadata();
+      const key = buildStorageKey("stock/shutterstock/library", `${match.externalId}.jpg`);
+      await storage().put(key, bytes, "image/jpeg");
+      asset = await prisma.studioAsset.create({
+        data: { kind: "image", name: `Shutterstock ${match.externalId}`, storageKey: key, url: storage().publicUrl(key), mimeType: "image/jpeg", sizeBytes: bytes.length, width: meta.width ?? null, height: meta.height ?? null, tags: `shutterstock, ${match.externalId}, licensed, local`, uploadedById: admin?.id ?? null }
+      });
+    }
+    await applyMediaMatch(match.id, { uploadedAssetId: asset.id, userId: admin?.id ?? null });
+    attached += 1;
+    console.log(`  ✓ ${match.segment.template.title} / ${match.segment.key} ← ${match.externalId} (${pct}%)`);
+  }
+  console.log(`attach-local: ${attached} attached, ${skipped} left for review`);
+}
+
 async function matchSegments() {
   const maxDistance = Number(arg("max-distance", "10"));
   const auto = Number(arg("auto", "8"));
   const index = JSON.parse(await readFile(INDEX_FILE, "utf8")) as Record<string, IndexEntry>;
-  const library = Object.values(index).filter((entry) => entry.hash).map((entry) => ({ ...entry, hashValue: BigInt(`0x${entry.hash}`) }));
+  const library = Object.values(index).filter((entry) => entry.hash).map((entry) => ({ ...entry, hashValue: BigInt(`0x${entry.hash}`), windowValues: (entry.windows ?? []).map((value) => BigInt(`0x${value}`)) }));
   console.log(`${library.length} licensed images in the index`);
   // Link poster frames imported before frameAssetId existed (matched by asset name).
   const unlinked = await prisma.studioSegment.findMany({ where: { frameAssetId: null }, include: { template: { select: { title: true } } } });
@@ -113,8 +262,9 @@ async function matchSegments() {
     const height = meta.height ?? 720;
     const cleaned = await sharp(bytes).extract({ left: 0, top: 0, width, height: Math.round(height * (1 - crop)) }).jpeg().toBuffer();
     const hashes = await frameHashes(cleaned);
+    const cleanedHash = await phash(cleaned);
     const scored = library
-      .map((entry) => ({ entry, distance: bestDistance(hashes, entry.hashValue) }))
+      .map((entry) => ({ entry, distance: Math.min(bestDistance(hashes, entry.hashValue), entry.windowValues.length ? minDistance(cleanedHash, entry.windowValues) : 64) }))
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 5);
     const stats = perTemplate.get(segment.template.title) ?? { total: 0, matched: 0, strong: 0 };
@@ -130,6 +280,25 @@ async function matchSegments() {
     }
     perTemplate.set(segment.template.title, stats);
     await prisma.studioMediaMatch.deleteMany({ where: { segmentId: segment.id, status: "candidate" } });
+    // No single photo behind this frame? Try 2- and 3-photo side-by-side collages.
+    if (good.length === 0 || good[0].distance > auto) {
+      const collage = await matchCollage(cleaned, library, auto);
+      if (collage) {
+        stats.matched += good.length ? 0 : 1;
+        stats.strong += 1;
+        if (!good.length) matched += 1;
+        strong += 1;
+        for (const [panel, hit] of collage.panels.entries()) {
+          const similarity = Math.max(0, Math.round((1 - hit.distance / 32) * 100));
+          await prisma.studioMediaMatch.upsert({
+            where: { segmentId_provider_externalId: { segmentId: segment.id, provider: "shutterstock", externalId: hit.entry.id } },
+            update: { rank: panel, description: `panel ${panel + 1}/${collage.panels.length} · ${similarity}% match · ${hit.entry.desc}`, previewUrl: hit.entry.thumb || hit.entry.src, pageUrl: `https://www.shutterstock.com/image-photo/-${hit.entry.id}` },
+            create: { segmentId: segment.id, provider: "shutterstock", externalId: hit.entry.id, rank: panel, description: `panel ${panel + 1}/${collage.panels.length} · ${similarity}% match · ${hit.entry.desc}`, previewUrl: hit.entry.thumb || hit.entry.src, pageUrl: `https://www.shutterstock.com/image-photo/-${hit.entry.id}` }
+          });
+        }
+        continue;
+      }
+    }
     for (const [rank, candidate] of good.entries()) {
       const similarity = Math.max(0, Math.round((1 - candidate.distance / 32) * 100));
       await prisma.studioMediaMatch.upsert({
@@ -180,9 +349,11 @@ async function ingestDownloads() {
 async function main() {
   const command = process.argv[2];
   if (command === "index") await buildIndex();
+  else if (command === "index-local") await indexLocal();
+  else if (command === "attach-local") await attachLocal();
   else if (command === "match") await matchSegments();
   else if (command === "ingest") await ingestDownloads();
-  else throw new Error("usage: index | match | ingest");
+  else throw new Error("usage: index | index-local | match | attach-local | ingest");
 }
 
 main()
