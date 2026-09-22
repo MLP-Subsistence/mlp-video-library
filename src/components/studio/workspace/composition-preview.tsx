@@ -149,8 +149,6 @@ function OnScreenText({ overlay, editable, onChange }: { overlay: TextOverlay; e
           WebkitTextStroke: stroke,
           paintOrder: "stroke fill",
           transform: draft.rotation ? `rotate(${draft.rotation}deg)` : undefined,
-          backgroundColor: draft.background ? rgba(draft.backgroundColor, draft.backgroundOpacity) : "transparent",
-          borderRadius: `${draft.backgroundRadius * px}px`,
           overflow: "hidden",
           userSelect: "none"
         }}
@@ -160,7 +158,20 @@ function OnScreenText({ overlay, editable, onChange }: { overlay: TextOverlay; e
         onPointerCancel={finish}
         title={editable ? "Drag to move. Drag the bottom-right corner to resize." : undefined}
       >
-        {draft.text}
+        <span className="w-full">
+          {/* The plate hugs the words (and each wrapped line), like a subtitle strip. */}
+          <span
+            style={{
+              backgroundColor: draft.background ? rgba(draft.backgroundColor, draft.backgroundOpacity) : "transparent",
+              borderRadius: `${draft.backgroundRadius * px}px`,
+              padding: draft.background ? `${0.16 * Math.max(8, draft.fontSize * px)}px ${0.36 * Math.max(8, draft.fontSize * px)}px` : undefined,
+              boxDecorationBreak: "clone",
+              WebkitBoxDecorationBreak: "clone"
+            }}
+          >
+            {draft.text}
+          </span>
+        </span>
         {editable && <span data-resize="true" className="absolute bottom-0 right-0 grid size-5 cursor-nwse-resize place-items-center rounded-tl bg-[#e86943] text-xs font-bold text-white" aria-label="Resize text box">↘</span>}
       </div>
     </div>

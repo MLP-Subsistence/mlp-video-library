@@ -1,27 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, ImagePlus, Maximize2, Minus, Music2, Pause, Pencil, Play, Plus, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Film, ImageIcon, Maximize2, Minus, Music2, Pause, Play, Plus, Type } from "lucide-react";
 import { Waveform } from "@/components/studio/workspace/waveform";
 import { formatClock } from "@/lib/studio/timing";
 import type { ProjectDto, ProjectSegmentDto, TimelineBlock } from "@/lib/studio/types";
 
 /**
  * Interactive, synchronized timeline. It visualizes the timing computed on
- * the server (audio-led); it never edits durations itself. Clicking a block
- * selects the segment everywhere; clicking the ruler seeks the preview.
+ * the server (audio-led); it never edits durations itself. The text, video
+ * and audio clip of a segment are selected separately — the right panel opens
+ * that clip's settings — but they always share the segment's duration.
+ * Clicking the ruler seeks the preview.
  */
+export type TimelineTrack = "text" | "video" | "audio";
+
 export function Timeline({
   project,
   activeSegmentId,
   timeSec,
   playing,
-  onSelect,
-  onChangeVisual,
-  onOpenLayout,
+  onSelectClip,
+  selectedTrack,
   onSeek,
   onPlayPause,
-  onEditText,
   collapsed,
   onToggleCollapsed,
   mobile = false,
@@ -31,13 +33,11 @@ export function Timeline({
   activeSegmentId: string;
   timeSec: number;
   playing: boolean;
-  onSelect: (segmentId: string) => void;
-  /** Swap the main picture/video of a segment (video-track "Change" button, double-click). */
-  onChangeVisual?: (segmentId: string) => void;
-  onOpenLayout?: (segmentId: string) => void;
+  /** Selecting a clip picks both the segment and which track's settings to show. */
+  onSelectClip: (segmentId: string, track: TimelineTrack) => void;
+  selectedTrack: TimelineTrack;
   onSeek: (timeSec: number) => void;
   onPlayPause: () => void;
-  onEditText?: (segmentId: string) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   mobile?: boolean;
@@ -183,7 +183,7 @@ export function Timeline({
                 const isActive = block.segmentId === activeSegmentId;
                 const text = segment.composition.textOverlay?.text.trim() ?? "";
                 return (
-                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} onDoubleClick={onEditText ? () => onEditText(block.segmentId) : undefined} warnings={[]} action={onEditText && isActive && block.durationSec * pxPerSec >= 90 ? <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onEditText(block.segmentId); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onEditText(block.segmentId); } }} className="absolute bottom-1 right-1 inline-flex h-6 items-center gap-1 rounded-md bg-[#a64026] px-1.5 text-[10px] font-extrabold text-white shadow" title="Edit on-screen text for this segment"><Pencil className="size-3" /> Edit text</span> : null}>
+                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} selected={isActive && selectedTrack === "text"} onClick={() => onSelectClip(block.segmentId, "text")} warnings={[]}>
                     <div className="flex h-full items-center gap-1.5 px-2" title={text || "No on-screen text"}>
                       {text ? (
                         <>
@@ -212,10 +212,9 @@ export function Timeline({
                     block={block}
                     pxPerSec={pxPerSec}
                     active={isActive}
-                    onClick={() => onSelect(block.segmentId)}
-                    onDoubleClick={onChangeVisual ? () => onChangeVisual(block.segmentId) : undefined}
+                    selected={isActive && selectedTrack === "video"}
+                    onClick={() => onSelectClip(block.segmentId, "video")}
                     warnings={segment.warnings.filter((warning) => warning.code === "visual_missing" || warning.code === "video_timing")}
-                    action={onChangeVisual && isActive && block.durationSec * pxPerSec >= 110 ? <BlockActions onChangeVisual={() => onChangeVisual(block.segmentId)} onOpenLayout={onOpenLayout ? () => onOpenLayout(block.segmentId) : undefined} /> : null}
                   >
                     {showItems ? (
                       <div className="flex h-full w-full">
@@ -245,7 +244,7 @@ export function Timeline({
                 const narration = segment.narration;
                 const audioWarnings = segment.warnings.filter((warning) => warning.code.startsWith("narration"));
                 return (
-                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} onClick={() => onSelect(block.segmentId)} warnings={audioWarnings}>
+                  <Block key={block.segmentId} block={block} pxPerSec={pxPerSec} active={isActive} selected={isActive && selectedTrack === "audio"} onClick={() => onSelectClip(block.segmentId, "audio")} warnings={audioWarnings}>
                     <div className="flex h-full w-full items-stretch">
                       {block.pauseBeforeSec > 0 && (
                         <div className="h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgba(36,52,71,0.08)_3px,rgba(36,52,71,0.08)_6px)]" style={{ width: `${(block.pauseBeforeSec / block.durationSec) * 100}%` }} title={`Quiet before voice ${block.pauseBeforeSec.toFixed(1)} sec`} />
@@ -298,56 +297,34 @@ function Track({ label, icon: Icon, labelWidth, large, compact, children }: { la
   );
 }
 
-/** "Change" / "Layout" on the selected video clip — the visual counterpart of the narration controls. Spans, not buttons, because the clip itself is a button. */
-function BlockActions({ onChangeVisual, onOpenLayout }: { onChangeVisual: () => void; onOpenLayout?: () => void }) {
-  const press = (handler: () => void) => ({
-    onClick: (event: React.MouseEvent) => {
-      event.stopPropagation();
-      handler();
-    },
-    onKeyDown: (event: React.KeyboardEvent) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      event.stopPropagation();
-      handler();
-    }
-  });
-  return (
-    <span className="absolute bottom-1 right-1 flex gap-1">
-      <span role="button" tabIndex={0} {...press(onChangeVisual)} className="inline-flex h-6 items-center gap-1 rounded-md bg-[#a64026] px-1.5 text-[10px] font-extrabold text-white shadow" title="Change the picture or video for this segment">
-        <ImagePlus className="size-3" /> Change
-      </span>
-      {onOpenLayout && (
-        <span role="button" tabIndex={0} {...press(onOpenLayout)} className="inline-flex h-6 items-center rounded-md bg-white/90 px-1.5 text-[10px] font-extrabold text-[#243447] shadow ring-1 ring-[#d8dde5]" title="Layout: several visuals or a split screen">
-          Layout
-        </span>
-      )}
-    </span>
-  );
-}
-
-function Block({ block, pxPerSec, active, onClick, onDoubleClick, warnings, action, children }: { block: TimelineBlock; pxPerSec: number; active: boolean; onClick: () => void; onDoubleClick?: () => void; warnings: ProjectSegmentDto["warnings"]; action?: React.ReactNode; children: React.ReactNode }) {
+function Block({ block, pxPerSec, active, selected, onClick, warnings, children }: { block: TimelineBlock; pxPerSec: number; active: boolean; selected?: boolean; onClick: () => void; warnings: ProjectSegmentDto["warnings"]; children: React.ReactNode }) {
   const width = Math.max(6, block.durationSec * pxPerSec - 2);
+  // The chosen clip is outlined; the other tracks of the same segment stay tinted so the segment is still obvious.
+  const tone = selected
+    ? "border-[#a64026] bg-[#fbeaea] ring-2 ring-[#a64026]"
+    : active
+      ? "border-[#e0b9ae] bg-[#fdf4f2]"
+      : block.index % 2 === 0
+        ? "border-[#d8dde5] bg-[#f7f8fa] hover:border-[#c9d0da]"
+        : "border-[#d8dde5] bg-[#f2f4f7] hover:border-[#c9d0da]";
   return (
     <button
       type="button"
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      className={`absolute inset-y-1 overflow-hidden rounded-md border text-left transition ${active ? "border-[#a64026] bg-[#fbeaea] ring-2 ring-[#a64026]/25" : block.index % 2 === 0 ? "border-[#d8dde5] bg-[#f7f8fa] hover:border-[#c9d0da]" : "border-[#d8dde5] bg-[#f2f4f7] hover:border-[#c9d0da]"}`}
+      className={`absolute inset-y-1 overflow-hidden rounded-md border text-left transition ${tone}`}
       style={{ left: block.startSec * pxPerSec, width }}
       title={`${block.title} · ${block.durationSec.toFixed(1)} s${warnings.length ? ` · ${warnings.map((warning) => warning.message).join("; ")}` : ""}`}
-      aria-pressed={active}
+      aria-pressed={Boolean(selected)}
     >
       {children}
       {warnings.length > 0 &&
-        (active ? (
+        (selected ? (
           <span className="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-amber-500 text-white" aria-label={warnings.map((warning) => warning.message).join(", ")}>
             <AlertTriangle className="size-2.5" />
           </span>
         ) : (
           <span className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-400" aria-label={warnings.map((warning) => warning.message).join(", ")} />
         ))}
-      {action}
     </button>
   );
 }

@@ -64,10 +64,24 @@ export async function writeTextOverlay(overlay: TextOverlay, width: number, heig
     .filter(Boolean)
     .join(" ");
 
+  // The plate hugs each line of text rather than filling the whole box.
+  const platePadX = fontSize * 0.36;
+  const platePadY = fontSize * 0.16;
+  const plates = overlay.background
+    ? visible
+        .map((line, index) => {
+          if (!line.trim()) return "";
+          const lineWidth = Math.min(boxWidth, line.length * perChar) + 2 * platePadX;
+          const left = overlay.align === "left" ? textX - platePadX : overlay.align === "right" ? textX - lineWidth + platePadX : textX - lineWidth / 2;
+          const top = firstBaseline + index * lineHeight - fontSize * 0.82 - platePadY;
+          return `<rect x="${left}" y="${top}" width="${lineWidth}" height="${fontSize * 1.16 + 2 * platePadY}" rx="${overlay.backgroundRadius * scale}" fill="${overlay.backgroundColor}" fill-opacity="${overlay.backgroundOpacity}"/>`;
+        })
+        .join("")
+    : "";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>${filter}</defs>
     <g${rotate} opacity="${overlay.opacity}">
-      ${overlay.background ? `<rect x="${x}" y="${y}" width="${boxWidth}" height="${boxHeight}" rx="${overlay.backgroundRadius * scale}" fill="${overlay.backgroundColor}" fill-opacity="${overlay.backgroundOpacity}"/>` : ""}
+      ${plates}
       <g ${textAttributes}>
         ${visible.map((line, index) => `<text x="${textX}" y="${firstBaseline + index * lineHeight}">${escapeXml(line)}</text>`).join("")}
       </g>

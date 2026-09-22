@@ -19,7 +19,7 @@ export type PanelTab = "script" | "voice" | "visuals" | "timing";
  * Voice, Visuals, Timing — instead of one long scrolling form, with
  * Approve & Next always visible at the bottom.
  */
-export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings, onChangeVisual, onOpenLayout, tab: panelTab, onTabChange }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void; onChangeVisual: () => void; onOpenLayout: () => void; tab: PanelTab; onTabChange: (tab: PanelTab) => void }) {
+export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings, onChangeVisual, onOpenLayout, tab: panelTab, onTabChange, focusTrack }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void; onChangeVisual: () => void; onOpenLayout: () => void; tab: PanelTab; onTabChange: (tab: PanelTab) => void; focusTrack: "text" | "video" | "audio" }) {
   const { project, activeSegment, patchSegment, setLocalTranslation, setLocalComposition, saving, savedAt } = controller;
   const [tab, setTab] = useState<NarrationTab>(() => (activeSegment?.narration.source === "ai" ? "ai" : activeSegment?.narration.source === "upload" ? "upload" : "record"));
   const [busy, setBusy] = useState<string | null>(null);
@@ -231,7 +231,7 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
         )}
 
         {panelTab === "voice" && (
-          <section>
+          <section className={focusTrack === "audio" ? "rounded-xl p-2 ring-2 ring-[#a64026]/40" : ""}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Narration</h3>
               <div className="flex items-center gap-2">
@@ -308,8 +308,8 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
         )}
 
         {panelTab === "visuals" && (
-          <VisualSection segment={segment} assets={project.assets} disabled={busy !== null} onChangeVisual={onChangeVisual} onOpenLayout={onOpenLayout} onResetToTemplate={segment.compositionIsOverride ? () => void run("visual", () => patchSegment(segment, { composition: segment.composition.textOverlay ? { ...segment.templateComposition, textOverlay: segment.composition.textOverlay } : null }), "Back to the master template visual; your on-screen text was kept.") : undefined}>
-            <TextControls segment={segment} disabled={busy !== null} onChange={onTextOverlayChange} onFlush={flushText} />
+          <VisualSection segment={segment} assets={project.assets} disabled={busy !== null} focusTrack={focusTrack} onChangeVisual={onChangeVisual} onOpenLayout={onOpenLayout} onResetToTemplate={segment.compositionIsOverride ? () => void run("visual", () => patchSegment(segment, { composition: segment.composition.textOverlay ? { ...segment.templateComposition, textOverlay: segment.composition.textOverlay } : null }), "Back to the master template visual; your on-screen text was kept.") : undefined}>
+            <TextControls segment={segment} disabled={busy !== null} highlighted={focusTrack === "text"} onChange={onTextOverlayChange} onFlush={flushText} />
           </VisualSection>
         )}
 
@@ -399,7 +399,7 @@ function AlignmentCorrection({ segment, busy, onSave, onConfirm }: { segment: Pr
 }
 
 /** What is on the video track for this segment, with the same "swap it" affordance the narration has. */
-function VisualSection({ segment, assets, disabled, onChangeVisual, onOpenLayout, onResetToTemplate, children }: { segment: ProjectSegmentDto; assets: ProjectDto["assets"]; disabled: boolean; onChangeVisual: () => void; onOpenLayout: () => void; onResetToTemplate?: () => void; children?: React.ReactNode }) {
+function VisualSection({ segment, assets, disabled, focusTrack, onChangeVisual, onOpenLayout, onResetToTemplate, children }: { segment: ProjectSegmentDto; assets: ProjectDto["assets"]; disabled: boolean; focusTrack: "text" | "video" | "audio"; onChangeVisual: () => void; onOpenLayout: () => void; onResetToTemplate?: () => void; children?: React.ReactNode }) {
   const items = segment.composition.slots.flatMap((slot) => slot.items.map((item) => assets[item.assetId]).filter((asset): asset is StudioAssetDto => Boolean(asset)));
   const first = items[0] ?? null;
   const summary = !first ? "No visual yet" : items.length > 1 ? `${items.length} visuals · ${segment.composition.layout === "full" ? "in sequence" : "split screen"}` : first.kind === "video" ? "Video clip" : "Picture";
@@ -409,7 +409,7 @@ function VisualSection({ segment, assets, disabled, onChangeVisual, onOpenLayout
         <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Visual</h3>
         <StatusPill tone={first ? (segment.compositionIsOverride ? "warning" : "ready") : "muted"}>{first ? (segment.compositionIsOverride ? "Changed" : "From template") : "Missing"}</StatusPill>
       </div>
-      <div className="mt-3 flex items-center gap-3 rounded-lg border border-[#d8dde5] bg-white p-2">
+      <div className={`mt-3 flex items-center gap-3 rounded-lg border bg-white p-2 ${focusTrack === "video" ? "border-[#a64026] ring-2 ring-[#a64026]/30" : "border-[#d8dde5]"}`}>
         <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[#e5e7eb]">
           {first ? <AssetThumb asset={first} /> : <span className="grid h-full w-full place-items-center text-[#8b9bad]"><ImagePlus className="size-4" /></span>}
         </span>

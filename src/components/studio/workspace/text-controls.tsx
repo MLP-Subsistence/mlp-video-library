@@ -11,16 +11,18 @@ import { textareaClass } from "@/components/studio/ui";
  * alignment/spacing, background plate, outline and shadow. Everything writes
  * straight into `composition.textOverlay`; the narration script is separate.
  */
-export function TextControls({ segment, disabled, onChange, onFlush }: {
+export function TextControls({ segment, disabled, highlighted, onChange, onFlush }: {
   segment: ProjectSegmentDto;
   disabled: boolean;
+  /** True when the text clip is the one selected on the timeline. */
+  highlighted?: boolean;
   onChange: (overlay: TextOverlay | undefined, immediate?: boolean) => void;
   onFlush: () => void;
 }) {
   const overlay = segment.composition.textOverlay;
   const update = (change: Partial<TextOverlay>, immediate = true) => overlay && onChange({ ...overlay, ...change }, immediate);
   return (
-    <div id="studio-text-controls" className="mt-4 rounded-xl border border-[#d8dde5] bg-[#f7f8fa] p-3">
+    <div id="studio-text-controls" className={`mt-4 rounded-xl border bg-[#f7f8fa] p-3 ${highlighted ? "border-[#a64026] ring-2 ring-[#a64026]/30" : "border-[#d8dde5]"}`}>
       <div className="flex items-center justify-between gap-2">
         <h4 className="inline-flex items-center gap-2 text-sm font-extrabold text-[#243447]"><Type className="size-4" /> On-screen text</h4>
         {overlay ? (

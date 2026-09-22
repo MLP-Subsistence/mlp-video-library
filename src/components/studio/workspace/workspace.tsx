@@ -11,14 +11,13 @@ import { CompositionPreview } from "@/components/studio/workspace/composition-pr
 import { FullNarrationModal } from "@/components/studio/workspace/full-narration";
 import { ScriptPanel, type PanelTab } from "@/components/studio/workspace/script-panel";
 import { SegmentList } from "@/components/studio/workspace/segment-list";
-import { Timeline } from "@/components/studio/workspace/timeline";
+import { Timeline, type TimelineTrack } from "@/components/studio/workspace/timeline";
 import { TranslationSettingsModal } from "@/components/studio/workspace/translation-settings";
 import { usePreviewPlayer } from "@/components/studio/workspace/use-player";
 import { summarizeProject, useProject } from "@/components/studio/workspace/use-project";
 import { api } from "@/lib/studio/client";
 import { replaceMainVisual } from "@/lib/studio/layouts";
 import type { ProjectDto, TextOverlay } from "@/lib/studio/types";
-import { DEFAULT_TEXT_OVERLAY } from "@/lib/studio/text-overlay";
 
 /** Desktop column widths for each combination of open/folded side panels (Tailwind needs the literals). */
 const GRID_COLUMNS: Record<string, string> = {
@@ -58,8 +57,10 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const [panels, setPanels] = useState({ segments: true, script: true, preview: true });
   const togglePanel = (panel: keyof typeof panels) => setPanels((current) => ({ ...current, [panel]: !current[panel] }));
   const [mobileTimeline, setMobileTimeline] = useState(false);
-  // Which of the right panel's four tabs is open (lifted so the timeline can jump to one).
+  // Which of the right panel's four tabs is open, and which timeline clip it is showing
+  // (lifted so selecting a clip opens and highlights its settings).
   const [panelTab, setPanelTab] = useState<PanelTab>("script");
+  const [selectedTrack, setSelectedTrack] = useState<TimelineTrack>("video");
   const [translating, setTranslating] = useState<{ done: number; remaining: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const summary = summarizeProject(project);
@@ -131,23 +132,15 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const previewTime = player.playing ? player.timeSec : activeBlock ? Math.max(activeBlock.startSec, Math.min(player.timeSec, activeBlock.endSec - 0.01)) : player.timeSec;
 
   // "Change visual" swaps the segment's main picture/video in place; "Layout" opens the full editor.
-  const changeVisual = (segmentId?: string) => {
-    if (segmentId && segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
-    setVisualPickerOpen(true);
-  };
-  const openLayout = (segmentId?: string) => {
-    if (segmentId && segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
-    setLayoutOpen(true);
-  };
-  const openTextEditor = (segmentId: string) => {
+  const changeVisual = () => setVisualPickerOpen(true);
+  const openLayout = () => setLayoutOpen(true);
+  /** Clicking a clip selects the segment and opens that clip's settings on the right. */
+  const selectClip = (segmentId: string, track: TimelineTrack) => {
     if (segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
-    setPanels((current) => ({ ...current, script: true, preview: true }));
-    setPanelTab("visuals");
-    const segment = project.segments.find((entry) => entry.segmentId === segmentId);
-    if (segment && !segment.composition.textOverlay) {
-      void patchSegment(segment, { composition: { ...segment.composition, textOverlay: { ...DEFAULT_TEXT_OVERLAY, text: segment.translation || "Your text" } } });
-    }
-    window.setTimeout(() => document.getElementById("studio-text-controls")?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
+    setSelectedTrack(track);
+    setPanelTab(track === "audio" ? "voice" : "visuals");
+    setPanels((current) => ({ ...current, script: true }));
+    if (track === "text") window.setTimeout(() => document.getElementById("studio-text-controls")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 120);
   };
 
   const timelineProps = {
@@ -155,10 +148,8 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
     activeSegmentId: activeSegment?.segmentId ?? "",
     timeSec: player.timeSec,
     playing: player.playing,
-    onSelect: selectSegment,
-    onChangeVisual: changeVisual,
-    onOpenLayout: openLayout,
-    onEditText: openTextEditor,
+    onSelectClip: selectClip,
+    selectedTrack,
     onSeek: player.seek,
     onPlayPause: () => (player.playing ? player.pause() : player.play())
   };
@@ -290,7 +281,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </div>
           )}
           <div className={`flex min-h-0 flex-1 flex-col ${panels.script ? "" : "lg:hidden"}`}>
-          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={() => changeVisual()} onOpenLayout={() => openLayout()} tab={panelTab} onTabChange={setPanelTab} />
+          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={changeVisual} onOpenLayout={openLayout} tab={panelTab} onTabChange={setPanelTab} focusTrack={selectedTrack} />
           </div>
         </aside>
       </div>
