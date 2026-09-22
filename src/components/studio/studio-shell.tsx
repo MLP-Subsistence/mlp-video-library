@@ -3,8 +3,8 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { AudioLines, CheckCircle2, Clapperboard, FolderKanban, Images, LayoutTemplate, Languages, LogOut, Menu, ShieldCheck, X } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { AudioLines, CheckCircle2, Clapperboard, FolderKanban, Images, LayoutTemplate, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, X } from "lucide-react";
 import { useShellProject } from "@/components/studio/shell-project";
 
 export type StudioShellUser = { name: string; roleLabel: string; canManageTemplates: boolean; canAccessAdmin: boolean };
@@ -17,10 +17,37 @@ type NavItem = { href: string; label: string; icon: typeof FolderKanban; exact?:
  * Educator Studio chrome. Mirrors the admin shell (dark sidebar, brick
  * accent, white content) so the studio feels like another MLP module.
  */
+/**
+ * Desktop sidebar open/collapsed, remembered per browser. An external store
+ * (not state-in-effect) so the server render and the first client render agree.
+ */
+const SIDEBAR_KEY = "mlp-studio-sidebar";
+const sidebarListeners = new Set<() => void>();
+function readSidebarCollapsed() {
+  try {
+    return window.localStorage.getItem(SIDEBAR_KEY) === "collapsed";
+  } catch {
+    return false;
+  }
+}
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_KEY, collapsed ? "collapsed" : "open");
+  } catch {
+    /* private mode: stays for this page only */
+  }
+  for (const listener of sidebarListeners) listener();
+}
+function subscribeSidebar(listener: () => void) {
+  sidebarListeners.add(listener);
+  return () => sidebarListeners.delete(listener);
+}
+
 export function StudioShell({ user, children }: { user: StudioShellUser; children: React.ReactNode }) {
   const pathname = usePathname();
   const project = useShellProject();
   const [menuOpen, setMenuOpen] = useState(false);
+  const collapsed = useSyncExternalStore(subscribeSidebar, readSidebarCollapsed, () => false);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -96,8 +123,15 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
       <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-white/10 bg-[#0d1a2b] px-3 text-white shadow-sm sm:px-5">
         <div className="flex h-full items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <button type="button" onClick={() => setMenuOpen(true)} className="grid size-10 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/5 lg:hidden" aria-label="Open studio menu">
-              <Menu className="size-5" />
+            <button
+              type="button"
+              onClick={() => (window.matchMedia("(min-width: 1024px)").matches ? writeSidebarCollapsed(!collapsed) : setMenuOpen(true))}
+              className="grid size-10 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/5 hover:bg-white/10"
+              aria-label={collapsed ? "Show the studio menu" : "Hide the studio menu"}
+              title={collapsed ? "Show menu" : "Hide menu (more room for the workspace)"}
+            >
+              {collapsed ? <PanelLeftOpen className="hidden size-5 lg:block" /> : <PanelLeftClose className="hidden size-5 lg:block" />}
+              <Menu className="size-5 lg:hidden" />
             </button>
             <Link href="/studio" className="flex min-w-0 items-center gap-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[#a64026] text-white"><Clapperboard className="size-4" /></span>
@@ -116,13 +150,30 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
         </div>
       </header>
 
-      <aside className="fixed bottom-0 left-0 top-14 hidden w-[230px] overflow-y-auto border-r border-[#e5e7eb] bg-white px-5 py-6 lg:block">
-        {nav()}
-        <div className="absolute bottom-6 left-5 right-5 space-y-2 border-t border-[#e5e7eb] pt-5">
-          <a href="/resources" className="admin-sidebar-link"><Images className="size-4" /> Public Library</a>
-          <a href="/admin/logout" className="admin-sidebar-link"><LogOut className="size-4" /> Logout</a>
-        </div>
-      </aside>
+      {collapsed ? (
+        <aside className="fixed bottom-0 left-0 top-14 hidden w-14 flex-col items-center gap-1 border-r border-[#e5e7eb] bg-white py-4 lg:flex" aria-label="Studio menu (collapsed)">
+          <RailLink href="/studio" label="Projects" icon={FolderKanban} active={pathname === "/studio"} />
+          {projectItems.length > 0 && <span className="my-2 h-px w-8 bg-[#e5e7eb]" />}
+          {projectItems.map((item) => (
+            <RailLink key={item.href} href={item.href} label={item.label} icon={item.icon} active={isActive(item)} />
+          ))}
+          {managerItems.length > 0 && <span className="my-2 h-px w-8 bg-[#e5e7eb]" />}
+          {managerItems.map((item) => (
+            <RailLink key={item.href} href={item.href} label={item.label} icon={item.icon} active={isActive(item)} />
+          ))}
+          <span className="flex-1" />
+          <RailLink href="/resources" label="Public Library" icon={Images} plain />
+          <RailLink href="/admin/logout" label="Logout" icon={LogOut} plain />
+        </aside>
+      ) : (
+        <aside className="fixed bottom-0 left-0 top-14 hidden w-[230px] overflow-y-auto border-r border-[#e5e7eb] bg-white px-5 py-6 lg:block">
+          {nav()}
+          <div className="absolute bottom-6 left-5 right-5 space-y-2 border-t border-[#e5e7eb] pt-5">
+            <a href="/resources" className="admin-sidebar-link"><Images className="size-4" /> Public Library</a>
+            <a href="/admin/logout" className="admin-sidebar-link"><LogOut className="size-4" /> Logout</a>
+          </div>
+        </aside>
+      )}
 
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -145,8 +196,18 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
         </div>
       )}
 
-      <div className="pt-14 lg:pl-[230px]">{children}</div>
+      <div className={`pt-14 ${collapsed ? "lg:pl-14" : "lg:pl-[230px]"}`}>{children}</div>
     </div>
+  );
+}
+
+/** Icon-only link for the collapsed sidebar; the label lives in the tooltip. */
+function RailLink({ href, label, icon: Icon, active = false, plain = false }: { href: string; label: string; icon: NavItem["icon"]; active?: boolean; plain?: boolean }) {
+  const className = `grid size-10 place-items-center rounded-lg ${active ? "bg-[#fbeaea] text-[#a64026]" : "text-[#526579] hover:bg-[#f2f4f7] hover:text-[#243447]"}`;
+  return plain ? (
+    <a href={href} className={className} title={label} aria-label={label}><Icon className="size-5" /></a>
+  ) : (
+    <Link href={href} className={className} title={label} aria-label={label} aria-current={active ? "page" : undefined}><Icon className="size-5" /></Link>
   );
 }
 
