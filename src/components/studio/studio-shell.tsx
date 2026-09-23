@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { AudioLines, CheckCircle2, Clapperboard, FolderKanban, Images, LayoutTemplate, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, X } from "lucide-react";
+import { AudioLines, CheckCircle2, Clapperboard, FolderKanban, Images, LayoutTemplate, Languages, Library, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, X } from "lucide-react";
 import { useShellProject } from "@/components/studio/shell-project";
 
 export type StudioShellUser = { name: string; roleLabel: string; canManageTemplates: boolean; canAccessAdmin: boolean };
@@ -70,7 +70,8 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
   const managerItems: NavItem[] = user.canManageTemplates
     ? [
         { href: "/studio/templates", label: "Master Templates", icon: LayoutTemplate },
-        { href: "/studio/assets", label: "Asset Library", icon: Images }
+        { href: "/studio/assets", label: "Asset Library", icon: Images },
+        { href: "/studio/voices", label: "Voice Library", icon: Library }
       ]
     : [];
   const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname.startsWith(item.href));
