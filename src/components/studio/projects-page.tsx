@@ -288,33 +288,43 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
                 <option value="custom">Another language…</option>
               </select>
             </Field>
-            {languageChoice === "custom" ? (
-              <Field label="Language name">
-                <input value={customLanguage} onChange={(event) => setCustomLanguage(event.target.value)} placeholder="e.g. Tigrinya" className={inputClass} />
-              </Field>
-            ) : (
-              <Field label="Region / country">
-                <input list="studio-regions" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Optional" className={inputClass} />
-                <datalist id="studio-regions">{(language?.regions ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
-              </Field>
-            )}
-            {(language?.varieties?.length || languageChoice === "custom") ? (
-              <Field label="Variety / dialect" hint="Only when it changes how the narration should sound.">
-                <input list="studio-varieties" value={variety} onChange={(event) => setVariety(event.target.value)} placeholder="Optional" className={inputClass} />
-                <datalist id="studio-varieties">{(language?.varieties ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
-              </Field>
-            ) : null}
             <Field label="Audience">
               <select value={audience} onChange={(event) => setAudience(event.target.value)} className={inputClass}>
                 {studioAudiences.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
               </select>
             </Field>
-            <Field label="Register">
-              <select value={register} onChange={(event) => setRegister(event.target.value)} className={inputClass}>
-                {studioRegisters.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-              </select>
-            </Field>
+            {languageChoice === "custom" && (
+              <Field label="Language name">
+                <input value={customLanguage} onChange={(event) => setCustomLanguage(event.target.value)} placeholder="e.g. Tigrinya" className={inputClass} />
+              </Field>
+            )}
           </section>
+
+          <details className="mt-4 group">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-bold text-[#a64026]">
+              More options <span className="text-[#8b9bad] transition-transform group-open:rotate-180">▾</span>
+            </summary>
+            <p className="mt-1 text-xs text-[#8b9bad]">Region, a specific dialect, or a formal/informal register — only if the default wouldn&apos;t sound right.</p>
+            <section className="mt-3 grid gap-4 sm:grid-cols-2">
+              {languageChoice !== "custom" && (
+                <Field label="Region / country">
+                  <input list="studio-regions" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Optional" className={inputClass} />
+                  <datalist id="studio-regions">{(language?.regions ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
+                </Field>
+              )}
+              {(language?.varieties?.length || languageChoice === "custom") ? (
+                <Field label="Variety / dialect" hint="Only when it changes how the narration should sound.">
+                  <input list="studio-varieties" value={variety} onChange={(event) => setVariety(event.target.value)} placeholder="Optional" className={inputClass} />
+                  <datalist id="studio-varieties">{(language?.varieties ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
+                </Field>
+              ) : null}
+              <Field label="Register" hint="How formal the narration should sound.">
+                <select value={register} onChange={(event) => setRegister(event.target.value)} className={inputClass}>
+                  {studioRegisters.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+                </select>
+              </Field>
+            </section>
+          </details>
           <p className="mt-5 text-sm text-[#6b7c8f]">
             You will localize <strong className="text-[#243447]">{video.title}</strong> ({video.segmentCount} segments) into <strong className="text-[#243447]">{languageName}</strong>. The original visuals and pacing come with it; you replace the narration.
           </p>

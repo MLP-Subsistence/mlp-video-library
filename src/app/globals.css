@@ -173,7 +173,8 @@ button:disabled {
   outline: none;
 }
 
-.mlp-input:focus {
+.mlp-input:focus,
+.mlp-input:focus-within {
   border-color: #a64026;
   box-shadow: 0 0 0 3px rgba(166, 64, 38, 0.12);
 }

@@ -27,16 +27,16 @@ export default async function StudioLoginPage({ searchParams }: { searchParams: 
           {params.error && <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-800">{params.error}</div>}
           <label className="mt-6 block">
             <span className="mb-2 block text-sm font-bold">Email Address</span>
-            <span className="relative block">
-              <Mail className="pointer-events-none absolute left-3 top-3 size-4 text-[#8b9bad]" />
-              <input name="email" type="email" autoComplete="email" placeholder="you@example.org" required className="mlp-input w-full pl-10" />
+            <span className="mlp-input flex items-center gap-2">
+              <Mail className="size-4 shrink-0 text-[#8b9bad]" />
+              <input name="email" type="email" autoComplete="email" placeholder="you@example.org" required className="h-full w-full border-0 bg-transparent p-0 text-[#243447] outline-none" />
             </span>
           </label>
           <label className="mt-5 block">
             <span className="mb-2 block text-sm font-bold">Password</span>
-            <span className="relative block">
-              <Lock className="pointer-events-none absolute left-3 top-3 size-4 text-[#8b9bad]" />
-              <input name="password" type="password" autoComplete="current-password" required className="mlp-input w-full pl-10" />
+            <span className="mlp-input flex items-center gap-2">
+              <Lock className="size-4 shrink-0 text-[#8b9bad]" />
+              <input name="password" type="password" autoComplete="current-password" required className="h-full w-full border-0 bg-transparent p-0 text-[#243447] outline-none" />
             </span>
           </label>
           <PendingSubmitButton className="mlp-btn-primary mt-6 w-full" pendingLabel="Signing in..."><LogIn className="size-4" /> Open Educator Studio</PendingSubmitButton>

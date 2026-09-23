@@ -149,9 +149,9 @@ function NewTemplateModal({ open, onClose, onCreated }: { open: boolean; onClose
       {error && <div className="mb-4"><InlineNotice tone="error">{error}</InlineNotice></div>}
       <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
         <div>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-[#8b9bad]" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search library lessons…" className="mlp-input w-full pl-10" />
+          <div className="mlp-input flex items-center gap-2">
+            <Search className="size-4 shrink-0 text-[#8b9bad]" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search library lessons…" className="h-full w-full border-0 bg-transparent p-0 text-[#243447] outline-none" />
           </div>
           <div className="mt-3 max-h-[46vh] space-y-2 overflow-y-auto pr-1">
             <button type="button" onClick={() => setVideoId(null)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${videoId === null ? "border-[#a64026] bg-[#fbeaea]/60" : "border-[#d8dde5]"}`}>

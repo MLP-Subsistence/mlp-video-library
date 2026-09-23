@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileAudio, Film, Folder, FolderOpen, ImageIcon, Layers, Search, Trash2, Upload } from "lucide-react";
+import { ChevronDown, FileAudio, Film, Folder, FolderOpen, ImageIcon, Layers, Search, Trash2, Upload } from "lucide-react";
 import { AssetThumb, useAssetList } from "@/components/studio/asset-library";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { InlineNotice, Spinner } from "@/components/studio/ui";
@@ -16,16 +16,18 @@ export function AssetsPage() {
   const [folderId, setFolderId] = useState<string | null>(null);
   const [folders, setFolders] = useState<StudioAssetFolderDto[] | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
-  const { assets, error, reload, setAssets } = useAssetList(kind, query, kind !== "image" || folders !== null, kind === "image" ? folderId : null);
+  const { assets, error, reload, setAssets } = useAssetList(kind, query, true, kind === "image" ? folderId : null);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [foldersOpen, setFoldersOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
+  // Folders load quietly in the background; the page opens on the full library, not one video's photos,
+  // so the common case (upload a logo, find a photo) doesn't land on an unexpectedly narrow view.
   useEffect(() => {
     void api<{ folders: StudioAssetFolderDto[] }>("/api/studio/assets/folders")
       .then((result) => {
         setFolders(result.folders);
-        setFolderId(result.folders[0]?.id ?? "originals");
         setFolderError(null);
       })
       .catch((caught) => { setFolders([]); setFolderError((caught as Error).message); });
@@ -53,20 +55,18 @@ export function AssetsPage() {
     await reload();
   }
 
-  async function rename(asset: StudioAssetDto) {
-    const name = window.prompt("Asset name", asset.name);
-    if (!name || name === asset.name) return;
+  async function rename(asset: StudioAssetDto, name: string) {
+    if (!name.trim() || name === asset.name) return;
     try {
-      const result = await api<{ asset: StudioAssetDto }>(`/api/studio/assets/${asset.id}`, { method: "PATCH", json: { name } });
+      const result = await api<{ asset: StudioAssetDto }>(`/api/studio/assets/${asset.id}`, { method: "PATCH", json: { name: name.trim() } });
       setAssets((list) => (list ?? []).map((entry) => (entry.id === asset.id ? { ...entry, name: result.asset.name } : entry)));
     } catch (caught) {
       setNotice((caught as Error).message);
     }
   }
 
-  async function tag(asset: StudioAssetDto) {
-    const tags = window.prompt("Tags (comma separated)", asset.tags);
-    if (tags === null) return;
+  async function tag(asset: StudioAssetDto, tags: string) {
+    if (tags === asset.tags) return;
     try {
       const result = await api<{ asset: StudioAssetDto }>(`/api/studio/assets/${asset.id}`, { method: "PATCH", json: { tags } });
       setAssets((list) => (list ?? []).map((entry) => (entry.id === asset.id ? { ...entry, tags: result.asset.tags } : entry)));
@@ -126,35 +126,45 @@ export function AssetsPage() {
               );
             })}
           </div>
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-[#8b9bad]" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or tag…" className="mlp-input w-full pl-10" />
+          <div className="mlp-input flex flex-1 items-center gap-2">
+            <Search className="size-4 shrink-0 text-[#8b9bad]" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or tag…" className="h-full w-full border-0 bg-transparent p-0 text-[#243447] outline-none" />
           </div>
         </div>
         {kind === "image" && (
-          <section className="mt-5 rounded-xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3]" aria-label="Video asset folders">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="inline-flex items-center gap-2 text-sm font-extrabold text-[#243447]"><FolderOpen className="size-4 text-[#a64026]" /> Original photos by video</h2>
-                <p className="mt-0.5 text-xs text-[#6b7c8f]">Open a video folder to see the original Shutterstock photos matched to images in that video. Unmatched photos remain in All verified originals.</p>
+          <section className="mt-5 rounded-xl bg-white shadow-sm ring-1 ring-[#edf0f3]" aria-label="Video asset folders">
+            <button
+              type="button"
+              onClick={() => setFoldersOpen((value) => !value)}
+              aria-expanded={foldersOpen}
+              className="flex w-full items-center justify-between gap-2 p-4 text-left"
+            >
+              <span>
+                <span className="inline-flex items-center gap-2 text-sm font-extrabold text-[#243447]"><FolderOpen className="size-4 text-[#a64026]" /> Browse by video{folderId ? ` — ${folderId === "originals" ? "All verified originals" : folders?.find((folder) => folder.id === folderId)?.title}` : ""}</span>
+                <span className="mt-0.5 block text-xs text-[#6b7c8f]">Find the original Shutterstock photos matched to a specific lesson video. Most people don&apos;t need this — everything is in the grid below either way.</span>
+              </span>
+              <ChevronDown className={`size-4 shrink-0 text-[#6b7c8f] transition-transform ${foldersOpen ? "rotate-180" : ""}`} />
+            </button>
+            {foldersOpen && (
+              <div className="border-t border-[#edf0f3] p-4 pt-3">
+                <button type="button" onClick={() => setFolderId(null)} className={`mb-3 rounded-md px-3 py-2 text-xs font-bold ${folderId === null ? "bg-[#243447] text-white" : "border border-[#d8dde5] text-[#526579]"}`}>All library images</button>
+                <div className="grid max-h-72 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                  {folders?.map((folder) => (
+                    <button key={folder.id} type="button" onClick={() => setFolderId(folder.id)} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === folder.id ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+                      <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f3e8e6] text-[#a64026]">
+                        {folder.thumbnailUrl ? <span className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(folder.thumbnailUrl)})` }} aria-hidden /> : <Folder className="size-5" />}
+                      </span>
+                      <span className="min-w-0"><span className="line-clamp-2 text-sm font-extrabold text-[#243447]" title={folder.title}>{folder.title}</span><span className="block text-xs text-[#6b7c8f]">{folder.assetCount} original photo{folder.assetCount === 1 ? "" : "s"}</span></span>
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setFolderId("originals")} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === "originals" ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f3e8e6] text-[#a64026]"><FolderOpen className="size-5" /></span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-[#243447]">All verified originals</span><span className="block text-xs text-[#6b7c8f]">Matched and unmatched photos</span></span>
+                  </button>
+                  {!folders && !folderError && <span className="col-span-full inline-flex items-center justify-center gap-2 p-4 text-sm text-[#6b7c8f]"><Spinner /> Loading video folders…</span>}
+                </div>
               </div>
-              <button type="button" onClick={() => setFolderId(null)} className={`rounded-md px-3 py-2 text-xs font-bold ${folderId === null ? "bg-[#243447] text-white" : "border border-[#d8dde5] text-[#526579]"}`}>All library images</button>
-            </div>
-            <div className="mt-3 grid max-h-72 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-              {folders?.map((folder) => (
-                <button key={folder.id} type="button" onClick={() => setFolderId(folder.id)} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === folder.id ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
-                  <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f3e8e6] text-[#a64026]">
-                    {folder.thumbnailUrl ? <span className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(folder.thumbnailUrl)})` }} aria-hidden /> : <Folder className="size-5" />}
-                  </span>
-                  <span className="min-w-0"><span className="line-clamp-2 text-sm font-extrabold text-[#243447]" title={folder.title}>{folder.title}</span><span className="block text-xs text-[#6b7c8f]">{folder.assetCount} original photo{folder.assetCount === 1 ? "" : "s"}</span></span>
-                </button>
-              ))}
-              <button type="button" onClick={() => setFolderId("originals")} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${folderId === "originals" ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
-                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f3e8e6] text-[#a64026]"><FolderOpen className="size-5" /></span>
-                <span className="min-w-0"><span className="block truncate text-sm font-extrabold text-[#243447]">All verified originals</span><span className="block text-xs text-[#6b7c8f]">Matched and unmatched photos</span></span>
-              </button>
-              {!folders && !folderError && <span className="col-span-full inline-flex items-center justify-center gap-2 p-4 text-sm text-[#6b7c8f]"><Spinner /> Loading video folders…</span>}
-            </div>
+            )}
           </section>
         )}
         {kind === "image" && folderId && folders && (
@@ -171,8 +181,25 @@ export function AssetsPage() {
                 {asset.kind !== "image" && asset.durationSec ? <span className="absolute bottom-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-extrabold text-white">{formatClock(asset.durationSec)}</span> : null}
               </div>
               <div className="p-3">
-                <button type="button" onClick={() => rename(asset)} className="block w-full truncate text-left text-sm font-extrabold text-[#243447]" title="Rename">{asset.name}</button>
-                <button type="button" onClick={() => tag(asset)} className="mt-0.5 block w-full truncate text-left text-xs text-[#6b7c8f]" title="Edit tags">{asset.tags || "Add tags…"}</button>
+                <input
+                  key={`${asset.id}-name`}
+                  defaultValue={asset.name}
+                  onBlur={(event) => void rename(asset, event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                  aria-label="Asset name"
+                  title="Click to rename"
+                  className="-mx-1 block w-[calc(100%+8px)] truncate rounded-md border border-transparent px-1 text-sm font-extrabold text-[#243447] outline-none hover:border-[#d8dde5] focus:border-[#a64026] focus:bg-white"
+                />
+                <input
+                  key={`${asset.id}-tags`}
+                  defaultValue={asset.tags}
+                  onBlur={(event) => void tag(asset, event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                  placeholder="Add tags, comma separated…"
+                  aria-label="Asset tags"
+                  title="Click to edit tags"
+                  className="-mx-1 mt-0.5 block w-[calc(100%+8px)] truncate rounded-md border border-transparent px-1 text-xs text-[#6b7c8f] outline-none hover:border-[#d8dde5] focus:border-[#a64026] focus:bg-white"
+                />
                 <div className="mt-2 flex items-center justify-between text-xs text-[#6b7c8f]">
                   <span className="inline-flex items-center gap-1"><Layers className="size-3" /> {asset.usedIn ?? 0} segment{asset.usedIn === 1 ? "" : "s"} · {formatBytes(asset.sizeBytes)}</span>
                   <button type="button" onClick={() => remove(asset)} className={`grid size-7 place-items-center rounded-md ${asset.usedIn ? "text-[#c9d0da]" : "text-red-600 hover:bg-red-50"}`} aria-label="Delete asset" title={asset.usedIn ? "In use — replace it first" : "Delete"}><Trash2 className="size-3.5" /></button>

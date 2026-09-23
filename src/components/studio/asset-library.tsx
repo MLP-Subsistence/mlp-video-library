@@ -127,9 +127,9 @@ export function AssetLibrary({
 
   return (
     <Drawer open={open} onClose={onClose} title={title} description={description}>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-[#8b9bad]" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search assets by name or tag…" className="mlp-input w-full pl-10" />
+      <div className="mlp-input flex items-center gap-2">
+        <Search className="size-4 shrink-0 text-[#8b9bad]" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search assets by name or tag…" className="h-full w-full border-0 bg-transparent p-0 text-[#243447] outline-none" />
       </div>
       {kinds.length > 1 && (
         <div className="mt-4 grid grid-cols-3 rounded-lg border border-[#d8dde5] bg-white p-1">
