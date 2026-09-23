@@ -4,10 +4,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { AudioLines, CheckCircle2, Clapperboard, FolderKanban, Images, LayoutTemplate, Languages, Library, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, X } from "lucide-react";
+import { AudioLines, CheckCircle2, Clapperboard, FolderKanban, Images, LayoutTemplate, Languages, Library, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useShellProject } from "@/components/studio/shell-project";
 
-export type StudioShellUser = { name: string; roleLabel: string; canManageTemplates: boolean; canAccessAdmin: boolean };
+export type StudioShellUser = { name: string; roleLabel: string; canManageTemplates: boolean };
 
 export type StudioShellProject = { id: string; title: string; language: string } | null;
 
@@ -140,11 +140,6 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            {user.canAccessAdmin && (
-              <a href="/admin" className="hidden items-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-bold text-white/85 hover:bg-white/5 md:inline-flex">
-                <ShieldCheck className="size-4" /> Admin
-              </a>
-            )}
             <span className="grid size-8 place-items-center rounded-full bg-[#d8532c] text-xs font-extrabold" title={user.roleLabel}>{initials(user.name)}</span>
             <span className="hidden text-sm font-bold sm:inline">{user.name}</span>
           </div>
@@ -189,7 +184,6 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
             </div>
             {nav(true)}
             <div className="mt-5 space-y-2 border-t border-[#e5e7eb] pt-5">
-              {user.canAccessAdmin && <a href="/admin" className="admin-sidebar-link min-h-12"><ShieldCheck className="size-4" /> Admin</a>}
               <a href="/resources" className="admin-sidebar-link min-h-12"><Images className="size-4" /> Public Library</a>
               <a href="/admin/logout" className="admin-sidebar-link min-h-12"><LogOut className="size-4" /> Logout</a>
             </div>
