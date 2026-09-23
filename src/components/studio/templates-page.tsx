@@ -147,7 +147,7 @@ function NewTemplateModal({ open, onClose, onCreated }: { open: boolean; onClose
       }
     >
       {error && <div className="mb-4"><InlineNotice tone="error">{error}</InlineNotice></div>}
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_18.75rem]">
         <div>
           <div className="mlp-input flex items-center gap-2">
             <Search className="size-4 shrink-0 text-[#8b9bad]" />

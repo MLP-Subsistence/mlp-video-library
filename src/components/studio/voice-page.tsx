@@ -197,7 +197,7 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
           ))}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <div className="grid gap-6 xl:grid-cols-[1fr_22.5rem]">
           <section className="space-y-6">
             {tab === "voices" && (
               <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
@@ -280,7 +280,7 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
                   {pending.length} ready to generate{unapproved ? ` · ${unapproved} translation${unapproved === 1 ? "" : "s"} still need approval in the Workspace` : ""}
                 </p>
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-left text-sm">
+                  <table className="w-full min-w-[40rem] text-left text-sm">
                     <thead className="border-b border-[#edf0f3] text-[11px] uppercase tracking-wide text-[#526579]">
                       <tr>
                         <th className="py-2 pr-3">Segment</th>
@@ -433,7 +433,7 @@ function HistoryTab({ projectId, voices, models }: { projectId: string; voices: 
       <p className="mt-1 text-sm text-[#6b7c8f]">Every narration generation attempt for this localization, newest first.</p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <label className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
+        <label className="flex min-w-[12.5rem] flex-1 items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
           <Search className="size-4 text-[#8b9bad]" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search history" />
         </label>

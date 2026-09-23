@@ -22,10 +22,10 @@ import type { ProjectDto, TextOverlay } from "@/lib/studio/types";
 
 /** Desktop column widths for each combination of open/folded side panels (Tailwind needs the literals). */
 const GRID_COLUMNS: Record<string, string> = {
-  "true:true": "lg:grid-cols-[200px_minmax(0,1fr)_340px] xl:grid-cols-[250px_minmax(0,1fr)_400px]",
-  "true:false": "lg:grid-cols-[200px_minmax(0,1fr)_44px] xl:grid-cols-[250px_minmax(0,1fr)_44px]",
-  "false:true": "lg:grid-cols-[44px_minmax(0,1fr)_340px] xl:grid-cols-[44px_minmax(0,1fr)_400px]",
-  "false:false": "lg:grid-cols-[44px_minmax(0,1fr)_44px]"
+  "true:true": "lg:grid-cols-[12.5rem_minmax(0,1fr)_21.25rem] xl:grid-cols-[15.625rem_minmax(0,1fr)_25rem]",
+  "true:false": "lg:grid-cols-[12.5rem_minmax(0,1fr)_2.75rem] xl:grid-cols-[15.625rem_minmax(0,1fr)_2.75rem]",
+  "false:true": "lg:grid-cols-[2.75rem_minmax(0,1fr)_21.25rem] xl:grid-cols-[2.75rem_minmax(0,1fr)_25rem]",
+  "false:false": "lg:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]"
 };
 
 /** A folded side column: one tall button that reopens it, with the panel name written vertically. */
@@ -159,7 +159,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-56px)] flex-col lg:h-[calc(100vh-56px)] lg:overflow-hidden">
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col lg:h-[calc(100vh-3.5rem)] lg:overflow-hidden">
       <StudioPageHeader
         sticky={false}
         title={project.title}
@@ -248,15 +248,16 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
                 className="mx-auto max-w-4xl shadow-md"
               />
             )}
-            <div className="mx-auto mt-3 flex max-w-4xl items-center gap-2">
-              <span className="flex-1" />
+            <div className="mx-auto mt-3 flex w-full max-w-4xl flex-wrap items-center justify-center gap-2">
               <button type="button" onClick={() => activeSegment && (segmentPlaying ? player.pause() : player.playSegment(activeSegment.segmentId))} className="mlp-btn-dark h-10 min-h-10 whitespace-nowrap rounded-lg px-4" disabled={!activeSegment}>
                 {segmentPlaying ? <Pause className="size-4" /> : <Play className="size-4" />} {segmentPlaying ? "Stop" : "Preview segment"}
               </button>
               <button type="button" onClick={() => activeSegment && (contextPlaying ? player.pause() : player.playAround(activeSegment.segmentId))} className="mlp-btn-outline h-10 whitespace-nowrap" disabled={!activeSegment || project.segments.length < 2} title="Play the end of the previous segment, this one and the start of the next, to hear how they flow together">
                 {contextPlaying ? <Pause className="size-4" /> : <ListMusic className="size-4" />} {contextPlaying ? "Stop" : "Hear in context"}
               </button>
-              <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline hidden h-10 whitespace-nowrap lg:inline-flex" title="Fold the preview away so the timeline gets more room"><ChevronUp className="size-4" /> Hide preview</button>
+              <span className="hidden lg:contents">
+                <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline h-10 whitespace-nowrap" title="Fold the preview away so the timeline gets more room"><ChevronUp className="size-4" /> Hide preview</button>
+              </span>
             </div>
           </div>
           <div className={`hidden shrink-0 lg:block ${panels.preview ? "" : "lg:min-h-0 lg:overflow-y-auto"}`}>

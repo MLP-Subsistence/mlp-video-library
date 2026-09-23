@@ -135,7 +135,7 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
           </>
         }
       >
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
           <div>
             <h3 className="mb-3 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Composition</h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

@@ -90,13 +90,13 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border-radius: 9px;
+  gap: 0.5rem;
+  border-radius: 0.5625rem;
   background: #a64026;
   color: #fff;
   font-weight: 800;
-  min-height: 44px;
-  padding: 0 20px;
+  min-height: 2.75rem;
+  padding: 0 1.25rem;
   text-align: center;
   border: 1px solid transparent;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 120ms ease;
@@ -110,13 +110,13 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border-radius: 5px;
+  gap: 0.5rem;
+  border-radius: 0.3125rem;
   background: #624237;
   color: #fff;
   font-weight: 800;
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 2.375rem;
+  padding: 0 0.875rem;
   border: 1px solid transparent;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 120ms ease;
 }
@@ -125,14 +125,14 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 0.5rem;
   border: 1px solid #d8dde5;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: #fff;
   color: #243447;
   font-weight: 700;
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: 2.75rem;
+  padding: 0 1rem;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 120ms ease;
 }
 
@@ -163,15 +163,15 @@ button:disabled {
 
 .mlp-drawer-link {
   display: flex;
-  min-height: 52px;
+  min-height: 3.25rem;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
   border: 1px solid #d8dde5;
-  border-radius: 12px;
+  border-radius: 0.75rem;
   background: #fff;
   color: #243447;
-  padding: 0 16px;
-  font-size: 16px;
+  padding: 0 1rem;
+  font-size: 1rem;
   font-weight: 800;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 120ms ease;
 }
@@ -183,11 +183,11 @@ button:disabled {
 }
 
 .mlp-input {
-  height: 44px;
+  height: 2.75rem;
   border: 1px solid #d8dde5;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: #fff;
-  padding: 0 14px;
+  padding: 0 0.875rem;
   color: #243447;
   outline: none;
 }
@@ -195,32 +195,32 @@ button:disabled {
 .mlp-input:focus,
 .mlp-input:focus-within {
   border-color: #a64026;
-  box-shadow: 0 0 0 3px rgba(166, 64, 38, 0.12);
+  box-shadow: 0 0 0 0.1875rem rgba(166, 64, 38, 0.12);
 }
 
 .mlp-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
   border: 1px solid #e5ccd0;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   background: #fbeaea;
   color: #a64026;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1;
-  padding: 7px 12px;
+  padding: 0.4375rem 0.75rem;
 }
 
 .mlp-soft-badge {
   display: inline-flex;
   align-items: center;
   border: 1px solid #d8dde5;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   background: #f2f4f7;
   color: #536579;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1;
-  padding: 7px 12px;
+  padding: 0.4375rem 0.75rem;
 }
 
 .admin-shell {
@@ -232,11 +232,11 @@ button:disabled {
 .admin-sidebar-link {
   display: flex;
   align-items: center;
-  gap: 12px;
-  border-radius: 7px;
-  padding: 12px 14px;
+  gap: 0.75rem;
+  border-radius: 0.4375rem;
+  padding: 0.75rem 0.875rem;
   color: #526579;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 120ms ease;
 }
@@ -247,25 +247,25 @@ button:disabled {
   color: #a64026;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 48rem) {
   .mlp-container {
-    width: min(100% - 24px, 1180px);
+    width: min(100% - 1.5rem, 73.75rem);
   }
 
   .mlp-card {
-    border-radius: 12px;
+    border-radius: 0.75rem;
   }
 
   .mlp-badge,
   .mlp-soft-badge {
-    font-size: 11px;
-    padding: 7px 10px;
+    font-size: 0.6875rem;
+    padding: 0.4375rem 0.625rem;
   }
 
   .mlp-btn-primary,
   .mlp-btn-outline {
-    min-height: 48px;
-    border-radius: 10px;
+    min-height: 3rem;
+    border-radius: 0.625rem;
   }
 }
 
@@ -273,5 +273,18 @@ button:disabled {
 @media (min-width: 1440px) {
   .mlp-container {
     width: max(min(1280px, calc(100% - 72px)), calc(100% - 12vw));
+  }
+}
+
+/*
+ * Educator Studio on computer screens runs at a 13px base instead of 16px
+ * (about 80%), so the workspace fits comfortably without browser zoom.
+ * Studio sizes are in rem, so everything scales together; breakpoints use
+ * the browser's own base, so layouts switch at the same widths. Phones and
+ * tablets keep the full size for comfortable tapping.
+ */
+@media (min-width: 1024px) {
+  html:has([data-studio-shell]) {
+    font-size: 13px;
   }
 }

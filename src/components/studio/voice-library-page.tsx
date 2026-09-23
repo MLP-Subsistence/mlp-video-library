@@ -113,7 +113,7 @@ export function VoiceLibraryPage() {
           ))}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+        <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
           <section>
             {tab === "voices" && (
               <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
@@ -284,7 +284,7 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
       ) : (
         <>
           <div className="mt-4 flex flex-wrap gap-2">
-            <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
+            <label className="flex min-w-[13.75rem] flex-1 items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
               <Search className="size-4 text-[#8b9bad]" />
               <input value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void search(); }} placeholder="Warm narrator, storyteller, teacher…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search the voice library" />
             </label>

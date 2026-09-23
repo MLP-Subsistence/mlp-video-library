@@ -179,7 +179,7 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
           <>
             <section>
               <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Original — {languageName(project.template.sourceLanguageCode)}</h3>
-              <p className="mt-2 text-[15px] leading-relaxed text-[#243447]">{segment.sourceScript || <span className="italic text-[#8b9bad]">No source script for this segment.</span>}</p>
+              <p className="mt-2 text-[0.9375rem] leading-relaxed text-[#243447]">{segment.sourceScript || <span className="italic text-[#8b9bad]">No source script for this segment.</span>}</p>
               {project.template.masterAssetUrl && segment.source && (
                 <OriginalClipButton key={segment.id} url={project.template.masterAssetUrl} startSec={segment.source.startSec} endSec={segment.source.endSec} />
               )}
@@ -213,7 +213,7 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
                 rows={6}
                 dir="auto"
                 placeholder={`Write the ${project.targetLanguageName} narration here, or use Translate.`}
-                className={`${textareaClass} mt-2 text-[17px] leading-relaxed`}
+                className={`${textareaClass} mt-2 text-[1.0625rem] leading-relaxed`}
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#6b7c8f]">
                 <span>{saving ? "Saving…" : savedAt ? `Saved ${relative(savedAt)}` : "Autosaves as you type"}</span>

@@ -157,6 +157,16 @@ Used in three places: Translation settings (new "Translate into" field at the to
 - **Lesson preview vs. other sound**: `preview-player.ts` gained `registerExternalPlayer()`. `use-player.ts` registers its `stop`, so starting a voice sample, a recording or the original clip stops the lesson preview. Starting the lesson preview calls `stopPreview()` + `pauseOtherAudio(null, itself)` to silence everything else without stopping itself. Covered in `__tests__/preview-player.test.ts`.
 - **Admin portal** `confirm-delete-button.tsx` uses the Studio's `useConfirm()` dialog instead of `window.confirm`. It holds the submit, asks, then calls `form.requestSubmit(button)` so the server action and the button's name/value are exactly what a plain click sends. A two-sentence message is split at the first "? " into title and detail. With this, no `window.confirm/alert/prompt` remains anywhere in `src`.
 
+## Studio density: 80% scale on computer screens (23 September 2026)
+
+The owner found the Studio "too zoomed in". Their preferred screenshot matched browser zoom at 80%. On screens ≥1024px, `html:has([data-studio-shell])` now sets `font-size: 13px` (globals.css; the attribute is on `StudioShell`'s root). Phones and tablets keep 16px for tapping, and the Studio login page and public site are unaffected.
+
+For everything to scale together, the Studio's fixed pixel sizes became rem (px/16, so identical at 16px): the sidebar `w-/pl-[14.375rem]`, workspace `GRID_COLUMNS`, page grid columns, `calc(100vh-3.5rem)` (the header height), and `text-[15px]`/`[17px]`. The shared `.mlp-btn-*`, `.mlp-input`, `.mlp-badge`, `.mlp-soft-badge`, `.admin-sidebar-link` and `.mlp-drawer-link` classes also moved to rem. That leaves the public site and admin portal pixel-identical, because their root stays 16px. Media queries in rem still use the browser's 16px base, so breakpoints didn't move. The 10–11px timeline labels and the timeline's 64px track-label column stay in px on purpose.
+
+`StudioPageHeader` no longer wraps on `lg+`: the title truncates (full title on hover) and the actions stay on one row. The preview buttons row wraps and centres. **Cascade gotcha, again:** `.mlp-btn-outline` sets `display` after Tailwind's layers, so `hidden` on the same element loses. "Hide preview" was showing (and doing nothing) on phones; it's now wrapped in `<span className="hidden lg:contents">`. No other element combines `hidden` with a class that sets `display`.
+
+Checked with iframes at 1024/1280/1366/1536/1714/1920 px on the workspace, projects, Voice Library, AI Voice and Review pages: no horizontal scroll, and the workspace fills the window exactly.
+
 ## Remaining work and manual/operational gates
 
 1. **Production worker:** identify a persistent host with Node/FFmpeg/FFprobe, production DB and bucket configuration; start `npm.cmd run worker` (or an equivalent managed service), then verify an actual queued render and full-narration alignment. Netlify itself cannot do FFmpeg work. `C:\ffmpeg\bin\ffmpeg.exe` was available locally, but local availability is not production worker availability.

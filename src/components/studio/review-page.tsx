@@ -113,7 +113,7 @@ export function ReviewPage({ initial, activeJob }: { initial: ProjectDto; active
           </section>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="grid gap-6 lg:grid-cols-[1fr_22.5rem]">
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
             {videoReady && project.renderedAssetUrl ? (
               <>

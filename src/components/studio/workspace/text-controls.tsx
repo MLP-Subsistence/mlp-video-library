@@ -55,7 +55,7 @@ export function TextControls({ segment, disabled, highlighted, onChange, onFlush
           </div>
 
           {/* Font row */}
-          <div className="grid grid-cols-[1fr_92px] gap-2">
+          <div className="grid grid-cols-[1fr_5.75rem] gap-2">
             <label className="text-xs font-bold text-[#526579]">Font
               <select value={overlay.fontFamily} disabled={disabled} onChange={(event) => update({ fontFamily: event.target.value as TextOverlay["fontFamily"] })} className="mlp-input mt-1 h-10 w-full text-sm" style={{ fontFamily: overlay.fontFamily }}>
                 {TEXT_FONTS.map((font) => <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>)}

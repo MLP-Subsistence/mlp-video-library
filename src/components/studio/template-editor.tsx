@@ -125,7 +125,7 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
             </InlineNotice>
           </div>
         )}
-        <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[18.75rem_1fr]">
           <aside className="rounded-2xl bg-white shadow-sm ring-1 ring-[#edf0f3]">
             <div className="flex items-center justify-between border-b border-[#edf0f3] px-4 py-3">
               <span className="text-xs font-extrabold uppercase tracking-wide text-[#243447]">Segments</span>
@@ -181,7 +181,7 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
           </aside>
 
           {active ? (
-            <section className="grid gap-6 xl:grid-cols-[1fr_380px]">
+            <section className="grid gap-6 xl:grid-cols-[1fr_23.75rem]">
               <div className="space-y-4">
                 <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] sm:p-5">
                   <div className="flex items-center justify-between">
@@ -246,7 +246,7 @@ function SegmentForm({ segment, sourceLanguageCode, autosave }: { segment: Templ
         <input value={title} onChange={(event) => { setTitle(event.target.value); autosave(segment.id, { title: event.target.value }); }} className={inputClass} />
       </Field>
       <Field label={`Source script (${sourceLanguageCode.toUpperCase()})`} hint="What the narrator says in this segment. Keep segments to one idea; they become the units educators translate and record.">
-        <textarea value={script} onChange={(event) => { setScript(event.target.value); autosave(segment.id, { sourceScript: event.target.value }); }} rows={8} className={`${textareaClass} text-[15px] leading-relaxed`} />
+        <textarea value={script} onChange={(event) => { setScript(event.target.value); autosave(segment.id, { sourceScript: event.target.value }); }} rows={8} className={`${textareaClass} text-[0.9375rem] leading-relaxed`} />
       </Field>
       <Field label="Educational pause after narration (seconds)" hint="Added to every localization unless the educator changes it.">
         <input type="number" min={0} max={10} step={0.1} value={pause} onChange={(event) => { setPause(Number(event.target.value)); autosave(segment.id, { pauseAfterSec: Number(event.target.value) }); }} className={inputClass} />

@@ -120,7 +120,7 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
   );
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell" data-studio-shell>
       <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-white/10 bg-[#0d1a2b] px-3 text-white shadow-sm sm:px-5">
         <div className="flex h-full items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -162,7 +162,7 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
           <RailLink href="/studio/logout" label="Logout" icon={LogOut} plain />
         </aside>
       ) : (
-        <aside className="fixed bottom-0 left-0 top-14 hidden w-[230px] flex-col overflow-y-auto border-r border-[#e5e7eb] bg-white px-5 py-6 lg:flex">
+        <aside className="fixed bottom-0 left-0 top-14 hidden w-[14.375rem] flex-col overflow-y-auto border-r border-[#e5e7eb] bg-white px-5 py-6 lg:flex">
           {nav()}
           <div className="mt-auto space-y-2 border-t border-[#e5e7eb] pt-5">
             <a href="/resources" className="admin-sidebar-link"><Images className="size-4" /> Public Library</a>
@@ -191,7 +191,7 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
         </div>
       )}
 
-      <div className={`pt-14 ${collapsed ? "lg:pl-14" : "lg:pl-[230px]"}`}>{children}</div>
+      <div className={`pt-14 ${collapsed ? "lg:pl-14" : "lg:pl-[14.375rem]"}`}>{children}</div>
     </div>
   );
 }
@@ -218,15 +218,15 @@ function initials(name: string) {
 export function StudioPageHeader({ title, subtitle, badge, actions, sticky = true }: { title: string; subtitle?: React.ReactNode; badge?: React.ReactNode; actions?: React.ReactNode; sticky?: boolean }) {
   return (
     <div className={`${sticky ? "sticky top-14" : "relative shrink-0"} z-30 border-b border-[#e5e7eb] bg-white/95 px-3 py-3 backdrop-blur sm:px-5 lg:px-8`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 lg:flex-nowrap">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-lg font-extrabold text-[#243447] sm:text-xl">{title}</h1>
+            <h1 className="min-w-0 max-w-full truncate text-lg font-extrabold text-[#243447] sm:text-xl" title={title}>{title}</h1>
             {badge}
           </div>
           {subtitle && <div className="mt-0.5 text-sm text-[#6b7c8f]">{subtitle}</div>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:flex-nowrap">{actions}</div>}
       </div>
     </div>
   );
