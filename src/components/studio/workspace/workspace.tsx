@@ -49,6 +49,9 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const { project, activeSegment, activeIndex, setActiveSegmentId, patchSegment, patchProject } = controller;
   const { canUndo, undo } = controller;
   const player = usePreviewPlayer(project);
+  const segmentPlaying = player.playing && player.range?.kind === "segment";
+  const contextPlaying = player.playing && player.range?.kind === "context";
+  const lessonPlaying = player.playing && !player.range;
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [visualPickerOpen, setVisualPickerOpen] = useState(false);
   const [fullNarrationOpen, setFullNarrationOpen] = useState(false);
@@ -168,9 +171,9 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
         }
         actions={
           <>
-            <button type="button" onClick={() => void controller.undo()} disabled={!controller.canUndo} className="mlp-btn-outline size-10 px-0" aria-label="Undo last edit" title={controller.canUndo ? `Undo ${controller.undoLabel || "last edit"} (Ctrl+Z)` : "Nothing to undo"}><Undo2 className="size-4" /></button>
-            <button type="button" onClick={() => (player.playing ? player.pause() : player.playFull())} className="mlp-btn-outline h-10" title="Play the whole lesson">
-              {player.playing && !player.range ? <Pause className="size-4" /> : <PlayCircle className="size-4" />} <span className="hidden xl:inline">Preview lesson</span>
+            <button type="button" onClick={() => void controller.undo()} disabled={!controller.canUndo} className="mlp-btn-outline h-10 px-3" aria-label="Undo last edit" title={controller.canUndo ? `Undo ${controller.undoLabel || "last edit"} (Ctrl+Z)` : "Nothing to undo yet"}><Undo2 className="size-4" /> <span className="hidden sm:inline">Undo</span></button>
+            <button type="button" onClick={() => (lessonPlaying ? player.pause() : player.playFull())} className="mlp-btn-outline h-10" title="Play the whole lesson">
+              {lessonPlaying ? <Pause className="size-4" /> : <PlayCircle className="size-4" />} <span className="hidden xl:inline">{lessonPlaying ? "Stop" : "Preview lesson"}</span>
             </button>
             <ActionMenu label="Lesson tools">
               <MenuItem icon={Wand2} onClick={translateLesson} disabled={Boolean(translating)} hint="Fill every empty segment with an AI draft">Translate entire lesson</MenuItem>
@@ -219,8 +222,8 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
                 {activeSegment ? `Segment ${String(activeIndex + 1).padStart(2, "0")} — ${activeSegment.title}` : "Preview hidden"}
               </span>
               <div className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => activeSegment && (player.playing ? player.pause() : player.playSegment(activeSegment.segmentId))} className="mlp-btn-outline h-9" disabled={!activeSegment}>
-                  {player.playing && player.range && !player.range.label.startsWith("Around") ? <Pause className="size-4" /> : <Play className="size-4" />} Preview Segment
+                <button type="button" onClick={() => activeSegment && (segmentPlaying ? player.pause() : player.playSegment(activeSegment.segmentId))} className="mlp-btn-outline h-9" disabled={!activeSegment}>
+                  {segmentPlaying ? <Pause className="size-4" /> : <Play className="size-4" />} {segmentPlaying ? "Stop" : "Preview segment"}
                 </button>
                 <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline h-9"><ChevronDown className="size-4" /> Show preview</button>
               </div>
@@ -247,13 +250,13 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             )}
             <div className="mx-auto mt-3 flex max-w-4xl items-center gap-2">
               <span className="flex-1" />
-              <button type="button" onClick={() => activeSegment && (player.playing ? player.pause() : player.playSegment(activeSegment.segmentId))} className="mlp-btn-dark h-10 min-h-10 whitespace-nowrap rounded-lg px-4" disabled={!activeSegment}>
-                {player.playing && player.range && !player.range.label.startsWith("Around") ? <Pause className="size-4" /> : <Play className="size-4" />} Preview segment
+              <button type="button" onClick={() => activeSegment && (segmentPlaying ? player.pause() : player.playSegment(activeSegment.segmentId))} className="mlp-btn-dark h-10 min-h-10 whitespace-nowrap rounded-lg px-4" disabled={!activeSegment}>
+                {segmentPlaying ? <Pause className="size-4" /> : <Play className="size-4" />} {segmentPlaying ? "Stop" : "Preview segment"}
               </button>
-              <button type="button" onClick={() => activeSegment && player.playAround(activeSegment.segmentId)} className="mlp-btn-outline h-10" disabled={!activeSegment || project.segments.length < 2} title="Play the end of the previous segment, this one and the start of the next">
-                Around
+              <button type="button" onClick={() => activeSegment && (contextPlaying ? player.pause() : player.playAround(activeSegment.segmentId))} className="mlp-btn-outline h-10 whitespace-nowrap" disabled={!activeSegment || project.segments.length < 2} title="Play the end of the previous segment, this one and the start of the next, to hear how they flow together">
+                {contextPlaying ? <Pause className="size-4" /> : <ListMusic className="size-4" />} {contextPlaying ? "Stop" : "Hear in context"}
               </button>
-              <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline hidden size-10 px-0 lg:inline-flex" aria-label="Hide the preview" title="Fold the preview away so the timeline gets the height"><ChevronUp className="size-4" /></button>
+              <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline hidden h-10 whitespace-nowrap lg:inline-flex" title="Fold the preview away so the timeline gets more room"><ChevronUp className="size-4" /> Hide preview</button>
             </div>
           </div>
           <div className={`hidden shrink-0 lg:block ${panels.preview ? "" : "lg:min-h-0 lg:overflow-y-auto"}`}>

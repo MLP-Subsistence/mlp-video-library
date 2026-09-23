@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { pauseOtherAudio, registerExternalPlayer, stopPreview } from "@/lib/studio/preview-player";
 import { blockAtTime } from "@/lib/studio/timing";
 import type { ProjectDto, TimelineBlock } from "@/lib/studio/types";
 
@@ -11,7 +12,7 @@ import type { ProjectDto, TimelineBlock } from "@/lib/studio/types";
  * educational pauses (and for segments without narration) the clock simply
  * advances. No rendering is needed to preview: visuals are laid out live.
  */
-export type PlayRange = { startSec: number; endSec: number; label: string } | null;
+export type PlayRange = { startSec: number; endSec: number; label: string; kind: "segment" | "context" } | null;
 
 export function usePreviewPlayer(project: ProjectDto) {
   const [timeSec, setTimeSec] = useState(0);
@@ -82,6 +83,18 @@ export function usePreviewPlayer(project: ProjectDto) {
     audioRef.current?.pause();
   }, []);
 
+  // Voice samples, recordings and the original clip stop the lesson preview when they start, and vice versa.
+  const externalStop = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    const stopFromOutside = () => stop();
+    externalStop.current = stopFromOutside;
+    return registerExternalPlayer(stopFromOutside);
+  }, [stop]);
+  const silenceOthers = useCallback(() => {
+    stopPreview();
+    pauseOtherAudio(null, externalStop.current);
+  }, []);
+
   const tick = useCallback(
     (now: number) => {
       const dt = Math.min(0.25, (now - lastTick.current) / 1000);
@@ -127,13 +140,14 @@ export function usePreviewPlayer(project: ProjectDto) {
       const time = start >= limit - 0.01 ? (range ? range.startSec : 0) : start;
       timeRef.current = time;
       setTimeSec(time);
+      silenceOthers();
       setPlaying(true);
       lastTick.current = performance.now();
       syncAudio(time, true);
       if (frame.current) cancelAnimationFrame(frame.current);
       frame.current = requestAnimationFrame(tick);
     },
-    [range, syncAudio, tick]
+    [range, silenceOthers, syncAudio, tick]
   );
 
   const seek = useCallback(
@@ -147,10 +161,11 @@ export function usePreviewPlayer(project: ProjectDto) {
   );
 
   const playRange = useCallback(
-    (startSec: number, endSec: number, label: string) => {
-      setRange({ startSec, endSec, label });
+    (startSec: number, endSec: number, label: string, kind: "segment" | "context") => {
+      setRange({ startSec, endSec, label, kind });
       timeRef.current = startSec;
       setTimeSec(startSec);
+      silenceOthers();
       setPlaying(true);
       lastTick.current = performance.now();
       blockRef.current = null;
@@ -161,13 +176,13 @@ export function usePreviewPlayer(project: ProjectDto) {
         frame.current = requestAnimationFrame(tick);
       });
     },
-    [syncAudio, tick]
+    [silenceOthers, syncAudio, tick]
   );
 
   const playSegment = useCallback(
     (segmentId: string) => {
       const block = projectRef.current.timeline.blocks.find((entry) => entry.segmentId === segmentId);
-      if (block) playRange(block.startSec, block.endSec, block.title);
+      if (block) playRange(block.startSec, block.endSec, block.title, "segment");
     },
     [playRange]
   );
@@ -179,7 +194,7 @@ export function usePreviewPlayer(project: ProjectDto) {
       if (index < 0) return;
       const start = blocks[Math.max(0, index - 1)].startSec;
       const end = blocks[Math.min(blocks.length - 1, index + 1)].endSec;
-      playRange(start, end, `Around ${blocks[index].title}`);
+      playRange(start, end, `In context: ${blocks[index].title}`, "context");
     },
     [playRange]
   );

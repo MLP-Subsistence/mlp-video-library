@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { countriesInText, findCountry } from "../countries";
-import { previewState, stopPreview, togglePreview } from "../preview-player";
+import { pauseOtherAudio, previewState, registerExternalPlayer, stopPreview, togglePreview } from "../preview-player";
 
 class FakeAudio {
   static created: FakeAudio[] = [];
@@ -61,6 +61,21 @@ test("a sample that finishes clears the playing state, and a late event from a s
   assert.deepEqual(previewState(), { id: "voice-b", status: "playing" });
   FakeAudio.created[1].onended?.();
   assert.equal(previewState(), null);
+});
+
+test("a voice sample stops the lesson preview, and the lesson preview can silence others without stopping itself", () => {
+  let lessonStops = 0;
+  const stopLesson = () => {
+    lessonStops += 1;
+  };
+  const unregister = registerExternalPlayer(stopLesson);
+  togglePreview("voice-a", "a.mp3");
+  assert.equal(lessonStops, 1);
+  pauseOtherAudio(null, stopLesson);
+  assert.equal(lessonStops, 1);
+  unregister();
+  togglePreview("voice-b", "b.mp3");
+  assert.equal(lessonStops, 1);
 });
 
 test("region text maps to the right country flags", () => {

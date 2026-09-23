@@ -60,8 +60,23 @@ export function togglePreview(id: string, src: string | null | undefined, by: sy
   });
 }
 
-/** Pause every on-page player marked `data-exclusive-audio` except `keep`, so recordings never talk over each other. */
-export function pauseOtherAudio(keep: HTMLAudioElement | null) {
+const externalPlayers = new Set<() => void>();
+
+/** Players that live outside this module (the workspace lesson preview) register how to stop themselves. */
+export function registerExternalPlayer(stop: () => void) {
+  externalPlayers.add(stop);
+  return () => {
+    externalPlayers.delete(stop);
+  };
+}
+
+/**
+ * Something is about to make sound: stop the lesson preview (except `keepExternal`)
+ * and pause every on-page player marked `data-exclusive-audio` except `keep`,
+ * so nothing ever talks over anything else.
+ */
+export function pauseOtherAudio(keep: HTMLAudioElement | null, keepExternal?: () => void) {
+  for (const stop of externalPlayers) if (stop !== keepExternal) stop();
   if (typeof document === "undefined") return;
   for (const element of document.querySelectorAll<HTMLAudioElement>("audio[data-exclusive-audio]")) if (element !== keep) element.pause();
 }
