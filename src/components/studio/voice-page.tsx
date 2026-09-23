@@ -2,29 +2,65 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AudioLines, Check, Coins, Library, ListMusic, Mic, Play, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, Upload } from "lucide-react";
+import {
+  AudioLines,
+  Check,
+  ChevronDown,
+  Clock,
+  Coins,
+  Filter,
+  Library,
+  ListMusic,
+  Mic,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings2,
+  Sparkles,
+  Trash2,
+  Upload,
+  Wand2,
+  X
+} from "lucide-react";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
-import { Field, InlineNotice, Spinner, StatusPill, inputClass } from "@/components/studio/ui";
+import { Field, InlineNotice, Spinner, StatusPill, inputClass, textareaClass } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
+import { ELEVENLABS_LANGUAGES } from "@/lib/studio/elevenlabs-languages";
+import { TRANSLATION_TIER_GUIDANCE, TRANSLATION_TIER_LABEL, findTranslationLanguage } from "@/lib/studio/language-catalog";
 import { formatSeconds } from "@/lib/studio/timing";
-import type { ProjectDto, SharedVoiceOption, VoiceAccountStatus, VoiceModelOption, VoiceOption, VoiceSettings } from "@/lib/studio/types";
+import type { ProjectDto, SharedVoiceOption, VoiceAccountStatus, VoiceDesignPreview, VoiceHistoryEntry, VoiceModelOption, VoiceOption, VoiceSettings } from "@/lib/studio/types";
 
 type VoicesResponse = { provider: string; model: string; voices: VoiceOption[]; credits: { limit: number; used: number; remaining: number } };
 type AccountResponse = { provider: string; defaultModel: string; status: VoiceAccountStatus | null; models: VoiceModelOption[] };
-type VoiceTab = "voices" | "library" | "clone" | "settings" | "segments";
+type Notice = { tone: "info" | "success" | "warning" | "error"; text: string } | null;
+type VoiceTab = "voices" | "library" | "create" | "history" | "settings" | "segments";
 
 const VOICE_TABS: Array<{ id: VoiceTab; label: string; icon: typeof AudioLines }> = [
-  { id: "voices", label: "Voices", icon: AudioLines },
-  { id: "library", label: "Voice library", icon: Library },
-  { id: "clone", label: "Clone a voice", icon: Mic },
+  { id: "voices", label: "My Voices", icon: AudioLines },
+  { id: "library", label: "Explore", icon: Library },
+  { id: "create", label: "Create voice", icon: Wand2 },
+  { id: "history", label: "History", icon: Clock },
   { id: "settings", label: "Settings", icon: Settings2 },
   { id: "segments", label: "Segments", icon: ListMusic }
 ];
 
+/** One-click category filters, matching ElevenLabs' own voice-library categories. */
+const VOICE_CATEGORY_PILLS = [
+  ["conversational", "Conversational"],
+  ["narrative_story", "Narration"],
+  ["characters_animation", "Characters"],
+  ["social_media", "Social Media"],
+  ["informative_educational", "Educational"],
+  ["advertisement", "Advertisement"],
+  ["entertainment_tv", "Entertainment"]
+] as const;
+
 /**
  * AI Voice page: pick a project voice, tune the few settings that matter,
  * and generate narration for every approved translation that still needs
- * it. All provider calls happen server-side; educators never see ElevenLabs.
+ * it. All provider calls happen server-side; educators never see raw
+ * ElevenLabs responses, only friendly results.
  */
 export function VoicePage({ initial }: { initial: ProjectDto }) {
   const [project, setProject] = useState(initial);
@@ -33,11 +69,12 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
   const [settings, setSettings] = useState<VoiceSettings>(initial.voiceSettings);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
-  const [notice, setNotice] = useState<{ tone: "info" | "success" | "warning" | "error"; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
   const [previewing, setPreviewing] = useState<string | null>(null);
   const [tab, setTab] = useState<VoiceTab>("voices");
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [voiceQuery, setVoiceQuery] = useState("");
+  const [voiceCategory, setVoiceCategory] = useState("");
 
   useEffect(() => {
     api<VoicesResponse>("/api/studio/voice/voices")
@@ -125,7 +162,7 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
     }
   };
 
-  const preview = (voice: VoiceOption) => {
+  const preview = (voice: { id: string; previewUrl?: string | null }) => {
     if (!voice.previewUrl) return;
     setPreviewing(voice.id);
     const audio = new Audio(voice.previewUrl);
@@ -136,8 +173,12 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
 
   const credits = voices?.credits ?? project.credits;
   const canManageVoices = project.permissions.canManageTemplates;
+  const provider = voices?.provider ?? account?.provider ?? "mock";
+  const activeModelId = settings.model ?? account?.defaultModel ?? voices?.model;
+  const activeModel = account?.models.find((model) => model.id === activeModelId);
+  const translationLanguage = findTranslationLanguage(project.targetLanguageName) ?? findTranslationLanguage(project.targetLanguageCode);
 
-  /** A voice added from the library or freshly cloned becomes this project's voice straight away. */
+  /** A voice added from the library, cloned, or designed becomes this project's voice straight away. */
   const onVoiceAdded = async (voice: VoiceOption) => {
     const refreshed = await reloadVoices().catch(() => null);
     const stored = refreshed?.voices.find((entry) => entry.id === voice.id) ?? voice;
@@ -158,6 +199,12 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
       setBusy(null);
     }
   };
+
+  const filteredVoices = (voices?.voices ?? []).filter((voice) => {
+    if (voiceQuery.trim() && !`${voice.name} ${voice.description ?? ""} ${Object.values(voice.labels ?? {}).join(" ")}`.toLowerCase().includes(voiceQuery.trim().toLowerCase())) return false;
+    if (voiceCategory && voice.labels?.use_case !== voiceCategory && !Object.values(voice.labels ?? {}).some((value) => value === voiceCategory)) return false;
+    return true;
+  });
 
   return (
     <>
@@ -200,106 +247,89 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
             {tab === "voices" && (
               <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-lg font-extrabold text-[#243447]">Project voice</h2>
+                  <h2 className="text-lg font-extrabold text-[#243447]">My Voices</h2>
                   {project.defaultVoiceName && <StatusPill tone="accent">{project.defaultVoiceName}</StatusPill>}
                 </div>
-                <p className="mt-1 text-sm text-[#6b7c8f]">Every AI-narrated segment uses this voice unless a segment overrides it in the Segments tab.</p>
+                <p className="mt-1 text-sm text-[#6b7c8f]">The MLP account&apos;s voices. Every AI-narrated segment uses the one you pick here, unless a segment overrides it in the Segments tab.</p>
+
                 {voices && voices.voices.length > 6 && (
-                  <label className="mt-3 flex items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
-                    <Search className="size-4 text-[#8b9bad]" />
-                    <input value={voiceQuery} onChange={(event) => setVoiceQuery(event.target.value)} placeholder="Search the account's voices…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search voices" />
-                  </label>
+                  <>
+                    <label className="mt-3 flex items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
+                      <Search className="size-4 text-[#8b9bad]" />
+                      <input value={voiceQuery} onChange={(event) => setVoiceQuery(event.target.value)} placeholder="Search the account's voices…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search voices" />
+                    </label>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <CategoryPill active={voiceCategory === ""} onClick={() => setVoiceCategory("")}>All</CategoryPill>
+                      {VOICE_CATEGORY_PILLS.map(([value, label]) => (
+                        <CategoryPill key={value} active={voiceCategory === value} onClick={() => setVoiceCategory(value)}>{label}</CategoryPill>
+                      ))}
+                    </div>
+                  </>
                 )}
+
                 {voiceError ? (
                   <div className="mt-4"><InlineNotice tone="warning">{voiceError}</InlineNotice></div>
                 ) : !voices ? (
                   <div className="mt-4 flex items-center gap-2 text-sm text-[#6b7c8f]"><Spinner /> Loading voices…</div>
+                ) : filteredVoices.length === 0 ? (
+                  <p className="mt-4 text-sm text-[#6b7c8f]">No voices match. {canManageVoices && <button type="button" onClick={() => setTab("library")} className="font-bold text-[#a64026]">Browse the voice library</button>} to add one.</p>
                 ) : (
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {voices.voices
-                      .filter((voice) => !voiceQuery.trim() || `${voice.name} ${voice.description ?? ""} ${Object.values(voice.labels ?? {}).join(" ")}`.toLowerCase().includes(voiceQuery.trim().toLowerCase()))
-                      .map((voice) => {
-                        const selected = voice.id === project.defaultVoiceId;
-                        return (
-                          <div key={voice.id} className={`flex items-center gap-3 rounded-xl border p-3 ${selected ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5]"}`}>
-                            <button type="button" onClick={() => preview(voice)} disabled={!voice.previewUrl} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447] disabled:opacity-40" aria-label={`Preview ${voice.name}`}>
-                              {previewing === voice.id ? <Spinner /> : <Play className="size-4" />}
+                    {filteredVoices.map((voice) => {
+                      const selected = voice.id === project.defaultVoiceId;
+                      const removable = canManageVoices && !selected && (voice.category === "cloned" || voice.category === "designed" || voice.category === "professional");
+                      return (
+                        <div key={voice.id} className={`flex items-center gap-3 rounded-xl border p-3 ${selected ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5]"}`}>
+                          <button type="button" onClick={() => preview(voice)} disabled={!voice.previewUrl} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447] disabled:opacity-40" aria-label={`Preview ${voice.name}`}>
+                            {previewing === voice.id ? <Spinner /> : <Play className="size-4" />}
+                          </button>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-extrabold text-[#243447]">{voice.name}{voice.category && voice.category !== "premade" ? ` · ${voice.category}` : ""}</span>
+                            <span className="block truncate text-xs text-[#6b7c8f]">{voice.description || Object.values(voice.labels ?? {}).join(" · ") || (voice.languages?.length ? voice.languages.join(", ") : "Multilingual")}</span>
+                          </span>
+                          <button type="button" onClick={() => chooseVoice(voice)} disabled={busy !== null || selected} className={selected ? "inline-flex h-9 items-center gap-1 rounded-lg bg-[#a64026] px-3 text-xs font-extrabold text-white" : "mlp-btn-outline h-9 px-3 text-xs"}>
+                            {selected ? <><Check className="size-3.5" /> Selected</> : "Use"}
+                          </button>
+                          {removable && (
+                            <button type="button" onClick={() => removeVoice(voice)} disabled={busy !== null} className="grid size-9 shrink-0 place-items-center rounded-md border border-red-200 text-red-600" aria-label={`Remove ${voice.name}`} title="Remove this voice from the account">
+                              <Trash2 className="size-4" />
                             </button>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-extrabold text-[#243447]">{voice.name}{voice.category === "cloned" ? " · cloned" : ""}</span>
-                              <span className="block truncate text-xs text-[#6b7c8f]">{voice.description || Object.values(voice.labels ?? {}).join(" · ") || (voice.languages?.length ? voice.languages.join(", ") : "Multilingual")}</span>
-                            </span>
-                            <button type="button" onClick={() => chooseVoice(voice)} disabled={busy !== null || selected} className={selected ? "inline-flex h-9 items-center gap-1 rounded-lg bg-[#a64026] px-3 text-xs font-extrabold text-white" : "mlp-btn-outline h-9 px-3 text-xs"}>
-                              {selected ? <><Check className="size-3.5" /> Selected</> : "Use"}
-                            </button>
-                            {canManageVoices && voice.category === "cloned" && !selected && (
-                              <button type="button" onClick={() => removeVoice(voice)} disabled={busy !== null} className="grid size-9 shrink-0 place-items-center rounded-md border border-red-200 text-red-600" aria-label={`Remove ${voice.name}`} title="Remove this voice from the account">
-                                <Trash2 className="size-4" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
             )}
 
-            {tab === "library" && <VoiceLibrary canManage={canManageVoices} provider={voices?.provider ?? account?.provider ?? "mock"} onAdded={onVoiceAdded} onNotice={setNotice} />}
+            {tab === "library" && <VoiceLibrary canManage={canManageVoices} provider={provider} onAdded={onVoiceAdded} onNotice={setNotice} />}
 
-            {tab === "clone" && <VoiceCloner canManage={canManageVoices} canClone={account?.status?.canCloneVoices ?? false} provider={voices?.provider ?? account?.provider ?? "mock"} onCloned={onVoiceAdded} onNotice={setNotice} />}
+            {tab === "create" && (
+              <CreateVoiceTab
+                canManage={canManageVoices}
+                canClone={account?.status?.canCloneVoices ?? false}
+                provider={provider}
+                onSaved={onVoiceAdded}
+                onNotice={setNotice}
+              />
+            )}
+
+            {tab === "history" && <HistoryTab projectId={project.id} voices={voices?.voices ?? []} models={account?.models ?? []} />}
 
             {tab === "settings" && (
-              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
-                <h2 className="text-lg font-extrabold text-[#243447]">Voice settings</h2>
-                <p className="mt-1 text-sm text-[#6b7c8f]">These apply to narration generated from now on, for this localization only. The defaults suit most lessons.</p>
-                <div className="mt-4 grid gap-5 sm:grid-cols-2">
-                  <Slider label="Stability" hint="Higher = steadier, lower = more expressive" value={settings.stability ?? 0.5} min={0} max={1} step={0.05} onChange={(value) => saveSettings({ ...settings, stability: value })} />
-                  <Slider label="Similarity" hint="How closely to match the chosen voice" value={settings.similarity ?? 0.75} min={0} max={1} step={0.05} onChange={(value) => saveSettings({ ...settings, similarity: value })} />
-                  <Slider label="Style" hint="Extra expressiveness; keep low for teaching" value={settings.style ?? 0} min={0} max={1} step={0.05} onChange={(value) => saveSettings({ ...settings, style: value })} />
-                  <Slider label="Speed" hint="Speaking pace" value={settings.speed ?? 1} min={0.7} max={1.2} step={0.05} onChange={(value) => saveSettings({ ...settings, speed: value })} />
-                </div>
-
-                <div className="mt-6 border-t border-[#edf0f3] pt-4">
-                  <h3 className="text-sm font-extrabold text-[#243447]">Model</h3>
-                  <p className="text-xs text-[#6b7c8f]">Faster models cost fewer credits per character; the multilingual model is the most natural for teaching.</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {(account?.models.length ? account.models : [{ id: account?.defaultModel ?? voices?.model ?? "eleven_multilingual_v2", name: account?.defaultModel ?? voices?.model ?? "Default model", costFactor: 1 }]).map((model) => {
-                      const current = (settings.model ?? account?.defaultModel ?? voices?.model) === model.id;
-                      return (
-                        <button
-                          key={model.id}
-                          type="button"
-                          onClick={() => saveSettings({ ...settings, model: model.id })}
-                          aria-pressed={current}
-                          className={`rounded-xl border p-3 text-left ${current ? "border-[#a64026] bg-[#fbeaea]/60" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}
-                        >
-                          <span className="block text-sm font-extrabold text-[#243447]">{model.name}</span>
-                          <span className="block text-xs text-[#6b7c8f]">{model.description ?? model.id}</span>
-                          {model.costFactor !== undefined && <span className="mt-1 block text-[11px] font-bold text-[#a64026]">{model.costFactor === 1 ? "1 credit per character" : `${model.costFactor} credits per character`}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {settings.model && settings.model !== (account?.defaultModel ?? voices?.model) && (
-                    <button type="button" onClick={() => saveSettings({ ...settings, model: undefined })} className="mt-2 text-xs font-bold text-[#a64026]">Use the studio default ({account?.defaultModel ?? voices?.model})</button>
-                  )}
-                </div>
-
-                <div className="mt-6 border-t border-[#edf0f3] pt-4">
-                  <h3 className="text-sm font-extrabold text-[#243447]">Provider account</h3>
-                  {account?.status ? (
-                    <dl className="mt-2 grid gap-x-6 gap-y-1 text-xs text-[#526579] sm:grid-cols-2">
-                      <div className="flex justify-between gap-2"><dt>Plan</dt><dd className="font-bold text-[#243447]">{account.status.tier ?? "—"}</dd></div>
-                      <div className="flex justify-between gap-2"><dt>Provider characters</dt><dd className="font-bold text-[#243447]">{account.status.characterCount?.toLocaleString() ?? "—"}{account.status.characterLimit ? ` / ${account.status.characterLimit.toLocaleString()}` : ""}</dd></div>
-                      <div className="flex justify-between gap-2"><dt>Voices used</dt><dd className="font-bold text-[#243447]">{account.status.voicesUsed ?? "—"}{account.status.voiceLimit ? ` / ${account.status.voiceLimit}` : ""}</dd></div>
-                      <div className="flex justify-between gap-2"><dt>Voice cloning</dt><dd className="font-bold text-[#243447]">{account.status.canCloneVoices ? "Available" : "Not on this plan"}</dd></div>
-                    </dl>
-                  ) : (
-                    <p className="mt-2 text-xs text-[#6b7c8f]">Provider: {voices?.provider === "mock" ? "placeholder voice (development)" : "ElevenLabs"} · Model: {voices?.model}</p>
-                  )}
-                </div>
-              </div>
+              <SettingsTab
+                settings={settings}
+                onChange={saveSettings}
+                voices={voices?.voices ?? []}
+                defaultVoiceId={project.defaultVoiceId}
+                onChooseVoice={chooseVoice}
+                account={account}
+                fallbackModel={voices?.model}
+                provider={provider}
+                translationLanguage={translationLanguage}
+                targetLanguageName={project.targetLanguageName}
+              />
             )}
 
             {tab === "segments" && (
@@ -374,7 +404,7 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
               <div className="mt-1 text-sm text-[#6b7c8f]">{credits.used.toLocaleString()} used of {credits.limit.toLocaleString()}</div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#f2f4f7]"><div className="h-full bg-[#a64026]" style={{ width: `${credits.limit ? Math.min(100, Math.round((credits.used / credits.limit) * 100)) : 0}%` }} /></div>
               <p className="mt-3 text-xs text-[#6b7c8f]">One credit per character of text narrated. Generating all missing narration now would use about {estimate.toLocaleString()} credits.</p>
-              <p className="mt-2 text-xs text-[#8b9bad]">Choosing, previewing, cloning and removing voices are free — only generating narration uses credits.</p>
+              <p className="mt-2 text-xs text-[#8b9bad]">Choosing, previewing, browsing, cloning, designing and removing voices are free — only generating narration uses credits.</p>
               {credits.remaining < estimate && <div className="mt-3"><InlineNotice tone="warning">Not enough credits for everything. Ask the MLP administrator to increase your allowance.</InlineNotice></div>}
             </div>
 
@@ -382,10 +412,21 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
               <h2 className="text-sm font-extrabold uppercase tracking-wide text-[#6b7c8f]">This localization</h2>
               <dl className="mt-3 space-y-1 text-sm">
                 <div className="flex justify-between gap-2"><dt className="text-[#6b7c8f]">Voice</dt><dd className="font-extrabold text-[#243447]">{project.defaultVoiceName ?? "Not chosen"}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-[#6b7c8f]">Model</dt><dd className="font-extrabold text-[#243447]">{settings.model ?? account?.defaultModel ?? voices?.model ?? "—"}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-[#6b7c8f]">Model</dt><dd className="font-extrabold text-[#243447]">{activeModel?.name ?? activeModelId ?? "—"}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-[#6b7c8f]">Ready to generate</dt><dd className="font-extrabold text-[#243447]">{pending.length}</dd></div>
               </dl>
             </div>
+
+            {translationLanguage && (
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3]">
+                <h2 className="text-sm font-extrabold uppercase tracking-wide text-[#6b7c8f]">Text translation support</h2>
+                <p className="mt-2 text-xs text-[#6b7c8f]">For the Translate step (GPT), not voice — {project.targetLanguageName} is:</p>
+                <div className="mt-2">
+                  <StatusPill tone={translationLanguage.tier === "STRONG" ? "ready" : translationLanguage.tier === "GOOD_PRACTICAL" ? "warning" : "error"}>{TRANSLATION_TIER_LABEL[translationLanguage.tier]}</StatusPill>
+                </div>
+                <p className="mt-2 text-xs text-[#6b7c8f]">{TRANSLATION_TIER_GUIDANCE[translationLanguage.tier]}</p>
+              </div>
+            )}
 
             <Field label="Language context (read-only)">
               <input readOnly value={[project.targetLanguageName, project.region, project.variety, project.audience].filter(Boolean).join(" · ")} className={`${inputClass} bg-[#f7f8fa]`} />
@@ -397,22 +438,17 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
   );
 }
 
-/** Browse the provider's public library and copy a voice into the account (free). */
-const VOICE_LANGUAGES = [
-  ["", "Any language"],
-  ["en", "English"],
-  ["fr", "French"],
-  ["es", "Spanish"],
-  ["pt", "Portuguese"],
-  ["sw", "Swahili"],
-  ["ar", "Arabic"],
-  ["hi", "Hindi"],
-  ["te", "Telugu"],
-  ["ta", "Tamil"],
-  ["de", "German"],
-  ["it", "Italian"],
-  ["zh", "Chinese"]
-] as const;
+function CategoryPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${active ? "border-[#a64026] bg-[#fbeaea] text-[#a64026]" : "border-[#d8dde5] bg-white text-[#526579] hover:border-[#c9d0da]"}`}>
+      {children}
+    </button>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Voice library (Explore)                                                     */
+/* -------------------------------------------------------------------------- */
 
 const VOICE_GENDERS = [
   ["", "Any voice"],
@@ -428,16 +464,6 @@ const VOICE_AGES = [
   ["old", "Older"]
 ] as const;
 
-const VOICE_USE_CASES = [
-  ["", "Any use"],
-  ["informative_educational", "Teaching"],
-  ["narrative_story", "Storytelling"],
-  ["conversational", "Conversational"],
-  ["advertisement", "Advertisement"],
-  ["social_media", "Social media"],
-  ["characters_animation", "Characters"]
-] as const;
-
 const VOICE_CATEGORIES = [
   ["", "Any quality"],
   ["professional", "Professional"],
@@ -448,15 +474,20 @@ const VOICE_CATEGORIES = [
 /** Accents worth one click for MLP's languages; anything else can be typed. */
 const VOICE_ACCENTS = ["", "african", "american", "british", "australian", "indian", "irish", "canadian", "nigerian", "kenyan", "south african"] as const;
 
-function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: boolean; provider: string; onAdded: (voice: VoiceOption) => void; onNotice: (notice: { tone: "info" | "success" | "warning" | "error"; text: string } | null) => void }) {
-  const [filters, setFilters] = useState({ q: "", language: "", gender: "", age: "", accent: "", useCase: "", category: "" });
+type LibraryFilters = { q: string; language: string; gender: string; age: string; accent: string; useCase: string; category: string };
+const EMPTY_LIBRARY_FILTERS: LibraryFilters = { q: "", language: "", gender: "", age: "", accent: "", useCase: "", category: "" };
+
+/** Browse the provider's public library and copy a voice into the account (free). */
+function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: boolean; provider: string; onAdded: (voice: VoiceOption) => void; onNotice: (notice: Notice) => void }) {
+  const [filters, setFilters] = useState<LibraryFilters>(EMPTY_LIBRARY_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [results, setResults] = useState<SharedVoiceOption[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const connected = provider !== "mock";
 
-  const search = async (override?: Partial<typeof filters>) => {
+  const search = async (override?: Partial<LibraryFilters>) => {
     const next = { ...filters, ...override };
     setFilters(next);
     setSearching(true);
@@ -497,11 +528,12 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
     void audio.play().catch(() => setPlaying(null));
   };
 
-  const activeFilters = Object.entries(filters).filter(([key, value]) => key !== "q" && value.trim()).length;
+  const panelFilterCount = (["gender", "age", "accent", "category"] as const).filter((key) => filters[key].trim()).length;
+  const languageName = ELEVENLABS_LANGUAGES.find((entry) => entry.code === filters.language)?.name;
 
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
-      <h2 className="text-lg font-extrabold text-[#243447]">Voice library</h2>
+      <h2 className="text-lg font-extrabold text-[#243447]">Explore</h2>
       <p className="mt-1 text-sm text-[#6b7c8f]">Search the provider&apos;s public voices, listen to them, and add the ones you want to the MLP account. Searching, listening and adding cost no credits.</p>
 
       {!connected ? (
@@ -517,36 +549,53 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
               <Search className="size-4 text-[#8b9bad]" />
               <input value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void search(); }} placeholder="Warm narrator, storyteller, teacher…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search the voice library" />
             </label>
+            <LanguageCombobox value={filters.language} onChange={(value) => void search({ language: value })} />
+            <div className="relative">
+              <button type="button" onClick={() => setFiltersOpen((value) => !value)} className="mlp-btn-outline h-10">
+                <Filter className="size-4" /> Filters{panelFilterCount > 0 ? ` (${panelFilterCount})` : ""} <ChevronDown className="size-3.5" />
+              </button>
+              {filtersOpen && (
+                <div className="absolute right-0 z-20 mt-1 w-72 rounded-xl border border-[#d8dde5] bg-white p-3 shadow-lg">
+                  <FilterRow label="Quality" value={filters.category} options={VOICE_CATEGORIES} onChange={(value) => void search({ category: value })} />
+                  <FilterRow label="Gender" value={filters.gender} options={VOICE_GENDERS} onChange={(value) => void search({ gender: value })} />
+                  <FilterRow label="Age" value={filters.age} options={VOICE_AGES} onChange={(value) => void search({ age: value })} />
+                  <label className="mt-2 block text-xs font-bold text-[#526579]">
+                    Accent
+                    <input
+                      list="mlp-voice-accents"
+                      value={filters.accent}
+                      onChange={(event) => setFilters({ ...filters, accent: event.target.value })}
+                      onBlur={() => void search()}
+                      onKeyDown={(event) => { if (event.key === "Enter") void search(); }}
+                      placeholder="Any accent"
+                      className="mlp-input mt-1 h-9 w-full text-sm"
+                    />
+                    <datalist id="mlp-voice-accents">
+                      {VOICE_ACCENTS.filter(Boolean).map((accent) => <option key={accent} value={accent} />)}
+                    </datalist>
+                  </label>
+                  {panelFilterCount > 0 && (
+                    <button type="button" onClick={() => void search({ gender: "", age: "", accent: "", category: "" })} className="mt-2 text-xs font-bold text-[#a64026]">Clear these filters</button>
+                  )}
+                </div>
+              )}
+            </div>
             <button type="button" onClick={() => void search()} disabled={searching} className="mlp-btn-primary h-10">{searching ? <Spinner /> : <Search className="size-4" />} Search</button>
           </div>
 
-          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            <FilterSelect label="Language" value={filters.language} options={VOICE_LANGUAGES} onChange={(value) => void search({ language: value })} />
-            <FilterSelect label="Voice" value={filters.gender} options={VOICE_GENDERS} onChange={(value) => void search({ gender: value })} />
-            <FilterSelect label="Age" value={filters.age} options={VOICE_AGES} onChange={(value) => void search({ age: value })} />
-            <FilterSelect label="Best for" value={filters.useCase} options={VOICE_USE_CASES} onChange={(value) => void search({ useCase: value })} />
-            <FilterSelect label="Quality" value={filters.category} options={VOICE_CATEGORIES} onChange={(value) => void search({ category: value })} />
-            <label className="block text-xs font-bold text-[#526579]">
-              Accent
-              <input
-                list="mlp-voice-accents"
-                value={filters.accent}
-                onChange={(event) => setFilters({ ...filters, accent: event.target.value })}
-                onBlur={() => void search()}
-                onKeyDown={(event) => { if (event.key === "Enter") void search(); }}
-                placeholder="Any accent"
-                className="mlp-input mt-1 h-10 w-full text-sm"
-              />
-              <datalist id="mlp-voice-accents">
-                {VOICE_ACCENTS.filter(Boolean).map((accent) => <option key={accent} value={accent} />)}
-              </datalist>
-            </label>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <CategoryPill active={!filters.useCase} onClick={() => void search({ useCase: "" })}>All</CategoryPill>
+            {VOICE_CATEGORY_PILLS.map(([value, label]) => (
+              <CategoryPill key={value} active={filters.useCase === value} onClick={() => void search({ useCase: value })}>{label}</CategoryPill>
+            ))}
           </div>
 
-          {activeFilters > 0 && (
-            <button type="button" onClick={() => void search({ language: "", gender: "", age: "", accent: "", useCase: "", category: "" })} className="mt-2 text-xs font-bold text-[#a64026]">
-              Clear {activeFilters} filter{activeFilters === 1 ? "" : "s"}
-            </button>
+          {(languageName || filters.q) && (
+            <p className="mt-2 text-xs text-[#8b9bad]">
+              {languageName ? `Language: ${languageName}` : ""}
+              {languageName && filters.q ? " · " : ""}
+              {filters.q ? `“${filters.q}”` : ""}
+            </p>
           )}
 
           {!results ? (
@@ -577,19 +626,99 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
   );
 }
 
-function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: ReadonlyArray<readonly [string, string]>; onChange: (value: string) => void }) {
+function FilterRow({ label, value, options, onChange }: { label: string; value: string; options: ReadonlyArray<readonly [string, string]>; onChange: (value: string) => void }) {
   return (
-    <label className="block text-xs font-bold text-[#526579]">
+    <label className="mt-2 block text-xs font-bold text-[#526579] first:mt-0">
       {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mlp-input mt-1 h-10 w-full text-sm">
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="mlp-input mt-1 h-9 w-full text-sm">
         {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
       </select>
     </label>
   );
 }
 
+/** Searchable language dropdown, in the spirit of ElevenLabs' own language picker. */
+function LanguageCombobox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = ELEVENLABS_LANGUAGES.find((entry) => entry.code === value);
+  const filtered = ELEVENLABS_LANGUAGES.filter((entry) => !query.trim() || entry.name.toLowerCase().includes(query.trim().toLowerCase()));
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-pressed={open} className="mlp-btn-outline h-10">
+        {selected ? selected.name : "Any language"} <ChevronDown className="size-3.5" />
+      </button>
+      {open && (
+        <div className="absolute left-0 z-20 mt-1 w-64 rounded-xl border border-[#d8dde5] bg-white shadow-lg">
+          <div className="border-b border-[#edf0f3] p-2">
+            <label className="flex items-center gap-2 rounded-lg border border-[#d8dde5] px-2">
+              <Search className="size-3.5 text-[#8b9bad]" />
+              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search languages…" className="h-8 flex-1 bg-transparent text-sm outline-none" />
+            </label>
+          </div>
+          <div className="max-h-64 overflow-y-auto p-1">
+            <button type="button" onClick={() => { onChange(""); setOpen(false); setQuery(""); }} className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm font-bold ${!value ? "bg-[#fbeaea] text-[#a64026]" : "text-[#243447] hover:bg-[#f7f8fa]"}`}>
+              Any language
+            </button>
+            {filtered.map((entry) => (
+              <button
+                key={entry.code}
+                type="button"
+                onClick={() => { onChange(entry.code); setOpen(false); setQuery(""); }}
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-bold ${value === entry.code ? "bg-[#fbeaea] text-[#a64026]" : "text-[#243447] hover:bg-[#f7f8fa]"}`}
+              >
+                {entry.name}
+                {!entry.v2 && <span className="text-[10px] font-bold uppercase text-[#8b9bad]">v3</span>}
+              </button>
+            ))}
+            {filtered.length === 0 && <p className="px-2 py-3 text-center text-xs text-[#8b9bad]">No languages match.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Create voice: Instant Clone or Voice Design                                 */
+/* -------------------------------------------------------------------------- */
+
+function CreateVoiceTab({ canManage, canClone, provider, onSaved, onNotice }: { canManage: boolean; canClone: boolean; provider: string; onSaved: (voice: VoiceOption) => void; onNotice: (notice: Notice) => void }) {
+  const [method, setMethod] = useState<"clone" | "design">("clone");
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+        <h2 className="text-lg font-extrabold text-[#243447]">Create voice</h2>
+        <p className="mt-1 text-sm text-[#6b7c8f]">Two ways to get a new voice for the MLP account. Neither uses this project&apos;s narration credits.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <MethodCard active={method === "clone"} onClick={() => setMethod("clone")} icon={Mic} title="Instant Voice Clone" description="Upload recordings of a real speaker; the provider builds a voice that sounds like them." time="~2 minutes" />
+          <MethodCard active={method === "design"} onClick={() => setMethod("design")} icon={Wand2} title="Voice Design" description="Describe a voice in words and get a few candidates to listen to before saving one." time="Under a minute" />
+        </div>
+        <p className="mt-3 text-xs text-[#8b9bad]">Professional Voice Clone (30+ minutes of studio-quality audio, manual verification) and Voice Remixing aren&apos;t wired into this page yet — the MLP team can use them directly in the ElevenLabs dashboard if a lesson needs them.</p>
+      </div>
+      {method === "clone" ? (
+        <VoiceCloner canManage={canManage} canClone={canClone} provider={provider} onCloned={onSaved} onNotice={onNotice} />
+      ) : (
+        <VoiceDesigner canManage={canManage} provider={provider} onSaved={onSaved} onNotice={onNotice} />
+      )}
+    </div>
+  );
+}
+
+function MethodCard({ active, onClick, icon: Icon, title, description, time }: { active: boolean; onClick: () => void; icon: typeof Mic; title: string; description: string; time: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active} className={`rounded-xl border p-4 text-left ${active ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+      <Icon className={`size-5 ${active ? "text-[#a64026]" : "text-[#6b7c8f]"}`} />
+      <span className="mt-2 block text-sm font-extrabold text-[#243447]">{title}</span>
+      <span className="mt-1 block text-xs text-[#6b7c8f]">{description}</span>
+      <span className="mt-2 inline-block rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#526579]">{time}</span>
+    </button>
+  );
+}
+
 /** Instant voice cloning from recordings — free of narration credits, uses a voice slot. */
-function VoiceCloner({ canManage, canClone, provider, onCloned, onNotice }: { canManage: boolean; canClone: boolean; provider: string; onCloned: (voice: VoiceOption) => void; onNotice: (notice: { tone: "info" | "success" | "warning" | "error"; text: string } | null) => void }) {
+function VoiceCloner({ canManage, canClone, provider, onCloned, onNotice }: { canManage: boolean; canClone: boolean; provider: string; onCloned: (voice: VoiceOption) => void; onNotice: (notice: Notice) => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -611,7 +740,7 @@ function VoiceCloner({ canManage, canClone, provider, onCloned, onNotice }: { ca
       const data = (await response.json()) as { voice?: VoiceOption; error?: string };
       if (!response.ok || !data.voice) throw new Error(data.error ?? "The voice could not be cloned.");
       onCloned(data.voice);
-      onNotice({ tone: "success", text: `"${data.voice.name}" is ready. Choose it in the Voices tab to narrate this lesson with it.` });
+      onNotice({ tone: "success", text: `"${data.voice.name}" is ready. Choose it in My Voices to narrate this lesson with it.` });
       setName("");
       setDescription("");
       setFiles([]);
@@ -624,8 +753,8 @@ function VoiceCloner({ canManage, canClone, provider, onCloned, onNotice }: { ca
 
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
-      <h2 className="text-lg font-extrabold text-[#243447]">Clone a voice</h2>
-      <p className="mt-1 text-sm text-[#6b7c8f]">
+      <h3 className="inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-[#6b7c8f]"><Mic className="size-4" /> Instant Voice Clone</h3>
+      <p className="mt-2 text-sm text-[#6b7c8f]">
         Upload recordings of one speaker — a minute or two of clear speech is plenty — and the provider builds a voice that can narrate any lesson. Cloning itself costs no credits; only generating narration does.
       </p>
       {provider === "mock" && <div className="mt-4"><InlineNotice tone="warning">No voice provider is connected yet, so cloning is unavailable. An administrator sets ElevenLabs up in /admin/studio.</InlineNotice></div>}
@@ -660,7 +789,348 @@ function VoiceCloner({ canManage, canClone, provider, onCloned, onNotice }: { ca
   );
 }
 
-function Slider({ label, hint, value, min, max, step, onChange }: { label: string; hint: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
+/** Text to Voice: describe a voice, listen to candidates, save the one you like. */
+function VoiceDesigner({ canManage, provider, onSaved, onNotice }: { canManage: boolean; provider: string; onSaved: (voice: VoiceOption) => void; onNotice: (notice: Notice) => void }) {
+  const [voiceDescription, setVoiceDescription] = useState("");
+  const [sampleText, setSampleText] = useState("");
+  const [previews, setPreviews] = useState<VoiceDesignPreview[] | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [selectedPreview, setSelectedPreview] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [playing, setPlaying] = useState<string | null>(null);
+
+  const generate = async () => {
+    setGenerating(true);
+    setPreviews(null);
+    setSelectedPreview(null);
+    onNotice(null);
+    try {
+      const result = await api<{ previews: VoiceDesignPreview[]; text: string }>("/api/studio/voice/design", { method: "POST", json: { voiceDescription, text: sampleText.trim() || undefined } });
+      setPreviews(result.previews);
+      if (result.previews.length === 0) onNotice({ tone: "warning", text: "No candidates came back. Try describing the voice differently." });
+    } catch (caught) {
+      onNotice({ tone: "error", text: (caught as Error).message });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const listen = (preview: VoiceDesignPreview) => {
+    setPlaying(preview.previewId);
+    const audio = new Audio(`data:audio/mpeg;base64,${preview.audioBase64}`);
+    audio.onended = () => setPlaying(null);
+    audio.onerror = () => setPlaying(null);
+    void audio.play().catch(() => setPlaying(null));
+  };
+
+  const save = async () => {
+    if (!selectedPreview) return;
+    setSaving(true);
+    onNotice(null);
+    try {
+      const result = await api<{ voice: VoiceOption }>("/api/studio/voice/design/save", { method: "POST", json: { generatedVoiceId: selectedPreview, name, description: voiceDescription } });
+      onSaved(result.voice);
+      onNotice({ tone: "success", text: `"${result.voice.name}" is ready. Choose it in My Voices to narrate this lesson with it.` });
+      setVoiceDescription("");
+      setSampleText("");
+      setPreviews(null);
+      setSelectedPreview(null);
+      setName("");
+    } catch (caught) {
+      onNotice({ tone: "error", text: (caught as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+      <h3 className="inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-[#6b7c8f]"><Wand2 className="size-4" /> Voice Design</h3>
+      <p className="mt-2 text-sm text-[#6b7c8f]">Describe the voice you want — age, tone, accent, pace — and generate a few candidates to listen to. Nothing is added to the account until you save one.</p>
+      {provider === "mock" && <div className="mt-4"><InlineNotice tone="warning">No voice provider is connected yet, so Voice Design is unavailable. An administrator sets ElevenLabs up in /admin/studio.</InlineNotice></div>}
+      {!canManage && <div className="mt-4"><InlineNotice tone="info">Only content managers and administrators can add voices to the shared MLP account.</InlineNotice></div>}
+
+      <div className="mt-4 space-y-4">
+        <Field label="Voice description" hint="At least 20 characters. Example: “Warm, patient middle-aged Kenyan woman, calm classroom narrator, moderate pace.”">
+          <textarea value={voiceDescription} onChange={(event) => setVoiceDescription(event.target.value)} maxLength={1000} rows={3} className={textareaClass} placeholder="Warm, patient middle-aged Kenyan woman, calm classroom narrator, moderate pace." />
+        </Field>
+        <Field label="Sample line to read (optional)" hint="Leave blank to use a default sample.">
+          <input value={sampleText} onChange={(event) => setSampleText(event.target.value)} maxLength={1000} className={inputClass} placeholder="Marketplace literacy helps you buy and sell wisely." />
+        </Field>
+        <button type="button" onClick={() => void generate()} disabled={generating || provider === "mock" || !canManage || voiceDescription.trim().length < 20} className="mlp-btn-primary h-11">
+          {generating ? <Spinner /> : <Sparkles className="size-4" />} Generate candidates
+        </button>
+
+        {previews && previews.length > 0 && (
+          <div className="space-y-2 border-t border-[#edf0f3] pt-4">
+            <h4 className="text-sm font-extrabold text-[#243447]">Candidates</h4>
+            {previews.map((preview, index) => (
+              <label key={preview.previewId} className={`flex items-center gap-3 rounded-xl border p-3 ${selectedPreview === preview.previewId ? "border-[#a64026] bg-[#fbeaea]/60" : "border-[#d8dde5]"}`}>
+                <input type="radio" name="voice-design-preview" checked={selectedPreview === preview.previewId} onChange={() => setSelectedPreview(preview.previewId)} className="accent-[#a64026]" />
+                <button type="button" onClick={() => listen(preview)} className="grid size-9 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447]" aria-label={`Listen to candidate ${index + 1}`}>
+                  {playing === preview.previewId ? <Spinner /> : <Play className="size-4" />}
+                </button>
+                <span className="text-sm font-bold text-[#243447]">Candidate {index + 1}{preview.durationSec ? ` · ${preview.durationSec.toFixed(1)}s` : ""}</span>
+              </label>
+            ))}
+            {selectedPreview && (
+              <div className="flex flex-wrap items-end gap-2 pt-2">
+                <Field label="Save as" hint="Name for the voice list.">
+                  <input value={name} onChange={(event) => setName(event.target.value)} maxLength={60} className={inputClass} placeholder="Aline — designed narrator" />
+                </Field>
+                <button type="button" onClick={() => void save()} disabled={saving || !name.trim()} className="mlp-btn-primary h-11">
+                  {saving ? <Spinner /> : <Check className="size-4" />} Save this voice
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* History                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function HistoryTab({ projectId, voices, models }: { projectId: string; voices: VoiceOption[]; models: VoiceModelOption[] }) {
+  const [entries, setEntries] = useState<VoiceHistoryEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [voiceFilter, setVoiceFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  useEffect(() => {
+    api<{ history: VoiceHistoryEntry[] }>(`/api/studio/projects/${projectId}/voice/history`)
+      .then((result) => setEntries(result.history))
+      .catch((caught) => setError((caught as Error).message));
+  }, [projectId]);
+
+  const voiceNameById = useMemo(() => new Map(voices.map((voice) => [voice.id, voice.name])), [voices]);
+  const modelNameById = useMemo(() => new Map(models.map((model) => [model.id, model.name])), [models]);
+
+  const filtered = (entries ?? []).filter((entry) => {
+    if (voiceFilter && entry.voiceId !== voiceFilter) return false;
+    if (modelFilter && entry.model !== modelFilter) return false;
+    if (statusFilter && entry.status !== statusFilter) return false;
+    if (query.trim() && !`${entry.textSnippet ?? ""} ${entry.segmentTitle ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())) return false;
+    return true;
+  });
+
+  const groups = useMemo(() => {
+    const byDate = new Map<string, VoiceHistoryEntry[]>();
+    for (const entry of filtered) {
+      const label = new Date(entry.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      byDate.set(label, [...(byDate.get(label) ?? []), entry]);
+    }
+    return [...byDate.entries()];
+  }, [filtered]);
+
+  const activeFilterCount = [voiceFilter, modelFilter, statusFilter].filter(Boolean).length;
+
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+      <h2 className="text-lg font-extrabold text-[#243447]">History</h2>
+      <p className="mt-1 text-sm text-[#6b7c8f]">Every narration generation attempt for this localization, newest first.</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <label className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-[#d8dde5] px-3">
+          <Search className="size-4 text-[#8b9bad]" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search history…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search history" />
+        </label>
+        <select value={voiceFilter} onChange={(event) => setVoiceFilter(event.target.value)} className="mlp-input h-10 text-sm" aria-label="Filter by voice">
+          <option value="">All voices</option>
+          {[...new Set((entries ?? []).map((entry) => entry.voiceId))].map((id) => <option key={id} value={id}>{voiceNameById.get(id) ?? id}</option>)}
+        </select>
+        <select value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} className="mlp-input h-10 text-sm" aria-label="Filter by model">
+          <option value="">All models</option>
+          {[...new Set((entries ?? []).map((entry) => entry.model))].map((id) => <option key={id} value={id}>{modelNameById.get(id) ?? id}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mlp-input h-10 text-sm" aria-label="Filter by status">
+          <option value="">Any status</option>
+          <option value="charged">Generated</option>
+          <option value="failed">Failed</option>
+          <option value="reserved">In progress</option>
+        </select>
+        {activeFilterCount > 0 && (
+          <button type="button" onClick={() => { setVoiceFilter(""); setModelFilter(""); setStatusFilter(""); }} className="inline-flex items-center gap-1 text-xs font-bold text-[#a64026]"><X className="size-3.5" /> Clear filters</button>
+        )}
+      </div>
+
+      {error ? (
+        <div className="mt-4"><InlineNotice tone="warning">{error}</InlineNotice></div>
+      ) : !entries ? (
+        <div className="mt-4 flex items-center gap-2 text-sm text-[#6b7c8f]"><Spinner /> Loading history…</div>
+      ) : filtered.length === 0 ? (
+        <p className="mt-4 text-sm text-[#6b7c8f]">{entries.length === 0 ? "No narration has been generated for this localization yet." : "Nothing matches those filters."}</p>
+      ) : (
+        <div className="mt-4 space-y-5">
+          {groups.map(([date, dayEntries]) => (
+            <div key={date}>
+              <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wide text-[#8b9bad]">{date}</h3>
+              <div className="space-y-1.5">
+                {dayEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-[#edf0f3] p-3">
+                    <StatusPill tone={entry.status === "charged" ? "ready" : entry.status === "failed" ? "error" : "warning"}>
+                      {entry.status === "charged" ? "Generated" : entry.status === "failed" ? "Failed" : "In progress"}
+                    </StatusPill>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold text-[#243447]" dir="auto">{entry.textSnippet ? (entry.textSnippet.length > 140 ? `${entry.textSnippet.slice(0, 140)}…` : entry.textSnippet) : entry.segmentTitle ?? "—"}</span>
+                      <span className="mt-0.5 block text-xs text-[#6b7c8f]">
+                        {voiceNameById.get(entry.voiceId) ?? entry.voiceId} · {modelNameById.get(entry.model) ?? entry.model} · {entry.characters.toLocaleString()} characters
+                        {entry.isRetry ? " · retry" : ""} · {relativeTime(entry.createdAt)}
+                      </span>
+                    </span>
+                    {entry.outputAssetUrl && (
+                      <audio controls preload="none" src={entry.outputAssetUrl} className="h-9 w-40 shrink-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function relativeTime(iso: string) {
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
+  if (seconds < 86400 * 7) return `${Math.round(seconds / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Settings                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function SettingsTab({
+  settings,
+  onChange,
+  voices,
+  defaultVoiceId,
+  onChooseVoice,
+  account,
+  fallbackModel,
+  provider,
+  translationLanguage,
+  targetLanguageName
+}: {
+  settings: VoiceSettings;
+  onChange: (next: VoiceSettings) => void;
+  voices: VoiceOption[];
+  defaultVoiceId: string | null;
+  onChooseVoice: (voice: VoiceOption) => void;
+  account: AccountResponse | null;
+  fallbackModel?: string;
+  provider: string;
+  translationLanguage: ReturnType<typeof findTranslationLanguage>;
+  targetLanguageName: string;
+}) {
+  const activeModelId = settings.model ?? account?.defaultModel ?? fallbackModel;
+  const activeModel = account?.models.find((model) => model.id === activeModelId);
+  const supportsLanguageOverride = activeModel?.supportsLanguageOverride ?? false;
+
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
+      <h2 className="text-lg font-extrabold text-[#243447]">Voice settings</h2>
+      <p className="mt-1 text-sm text-[#6b7c8f]">These apply to narration generated from now on, for this localization only.</p>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <Field label="Voice">
+          <select
+            value={defaultVoiceId ?? ""}
+            onChange={(event) => {
+              const voice = voices.find((entry) => entry.id === event.target.value);
+              if (voice) onChooseVoice(voice);
+            }}
+            className={`${inputClass} h-11`}
+          >
+            <option value="" disabled>Choose a voice…</option>
+            {voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Model">
+          <select value={activeModelId ?? ""} onChange={(event) => onChange({ ...settings, model: event.target.value })} className={`${inputClass} h-11`}>
+            {(account?.models.length ? account.models : [{ id: activeModelId ?? "eleven_multilingual_v2", name: activeModelId ?? "Default model" }]).map((model) => (
+              <option key={model.id} value={model.id}>{model.name}</option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      {activeModel?.description && <p className="mt-2 text-xs text-[#6b7c8f]">{activeModel.description}</p>}
+
+      <div className="mt-6 grid gap-5 sm:grid-cols-2">
+        <RangeSetting label="Speed" value={settings.speed ?? 1} min={0.7} max={1.2} step={0.05} low="Slower" high="Faster" onChange={(value) => onChange({ ...settings, speed: value })} />
+        <RangeSetting label="Stability" value={settings.stability ?? 0.5} min={0} max={1} step={0.05} low="More variable" high="More stable" onChange={(value) => onChange({ ...settings, stability: value })} />
+        <RangeSetting label="Similarity" value={settings.similarity ?? 0.75} min={0} max={1} step={0.05} low="Low" high="High" onChange={(value) => onChange({ ...settings, similarity: value })} />
+        <RangeSetting label="Style Exaggeration" value={settings.style ?? 0} min={0} max={1} step={0.05} low="None" high="Exaggerated" onChange={(value) => onChange({ ...settings, style: value })} />
+      </div>
+
+      <div className="mt-6 border-t border-[#edf0f3] pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <span>
+            <span className="block text-sm font-extrabold text-[#243447]">Language Override</span>
+            <span className="block text-xs text-[#6b7c8f]">
+              {supportsLanguageOverride
+                ? "Force pronunciation in a specific language instead of the model's own detection."
+                : `${activeModel?.name ?? "This model"} doesn't support a language override — pick a Flash, Turbo or v3 model above to use it.`}
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={Boolean(settings.languageOverride)}
+            disabled={!supportsLanguageOverride}
+            onClick={() => onChange({ ...settings, languageOverride: settings.languageOverride ? undefined : (ELEVENLABS_LANGUAGES.find((entry) => entry.name === targetLanguageName)?.code ?? "en") })}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-40 ${settings.languageOverride ? "bg-[#a64026]" : "bg-[#d8dde5]"}`}
+          >
+            <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition ${settings.languageOverride ? "left-5" : "left-0.5"}`} />
+          </button>
+        </div>
+        {supportsLanguageOverride && settings.languageOverride && (
+          <select value={settings.languageOverride} onChange={(event) => onChange({ ...settings, languageOverride: event.target.value })} className={`${inputClass} mt-3 h-10 max-w-xs text-sm`}>
+            {ELEVENLABS_LANGUAGES.map((entry) => <option key={entry.code} value={entry.code}>{entry.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      {translationLanguage && (
+        <div className="mt-6 border-t border-[#edf0f3] pt-4">
+          <h3 className="text-sm font-extrabold text-[#243447]">Text translation support — {targetLanguageName}</h3>
+          <p className="mt-1 text-xs text-[#6b7c8f]">For the GPT Translate step, not voice synthesis.</p>
+          <div className="mt-2 flex items-center gap-2">
+            <StatusPill tone={translationLanguage.tier === "STRONG" ? "ready" : translationLanguage.tier === "GOOD_PRACTICAL" ? "warning" : "error"}>{TRANSLATION_TIER_LABEL[translationLanguage.tier]}</StatusPill>
+          </div>
+          <p className="mt-2 text-xs text-[#6b7c8f]">{TRANSLATION_TIER_GUIDANCE[translationLanguage.tier]}</p>
+        </div>
+      )}
+
+      <div className="mt-6 border-t border-[#edf0f3] pt-4">
+        <h3 className="text-sm font-extrabold text-[#243447]">Provider account</h3>
+        {account?.status ? (
+          <dl className="mt-2 grid gap-x-6 gap-y-1 text-xs text-[#526579] sm:grid-cols-2">
+            <div className="flex justify-between gap-2"><dt>Plan</dt><dd className="font-bold text-[#243447]">{account.status.tier ?? "—"}</dd></div>
+            <div className="flex justify-between gap-2"><dt>Provider characters</dt><dd className="font-bold text-[#243447]">{account.status.characterCount?.toLocaleString() ?? "—"}{account.status.characterLimit ? ` / ${account.status.characterLimit.toLocaleString()}` : ""}</dd></div>
+            <div className="flex justify-between gap-2"><dt>Voices used</dt><dd className="font-bold text-[#243447]">{account.status.voicesUsed ?? "—"}{account.status.voiceLimit ? ` / ${account.status.voiceLimit}` : ""}</dd></div>
+            <div className="flex justify-between gap-2"><dt>Voice cloning</dt><dd className="font-bold text-[#243447]">{account.status.canCloneVoices ? "Available" : "Not on this plan"}</dd></div>
+          </dl>
+        ) : (
+          <p className="mt-2 text-xs text-[#6b7c8f]">Provider: {provider === "mock" ? "placeholder voice (development)" : "ElevenLabs"} · Model: {activeModelId}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RangeSetting({ label, value, min, max, step, low, high, onChange }: { label: string; value: number; min: number; max: number; step: number; low: string; high: string; onChange: (value: number) => void }) {
   const [local, setLocal] = useState(value);
   const [previous, setPrevious] = useState(value);
   if (previous !== value) {
@@ -673,7 +1143,10 @@ function Slider({ label, hint, value, min, max, step, onChange }: { label: strin
         {label} <span className="tabular-nums text-[#6b7c8f]">{local.toFixed(2)}</span>
       </span>
       <input type="range" min={min} max={max} step={step} value={local} onChange={(event) => setLocal(Number(event.target.value))} onMouseUp={() => onChange(local)} onTouchEnd={() => onChange(local)} onKeyUp={() => onChange(local)} className="mt-1 w-full accent-[#a64026]" />
-      <span className="block text-xs text-[#6b7c8f]">{hint}</span>
+      <span className="mt-0.5 flex justify-between text-[11px] text-[#8b9bad]">
+        <span>{low}</span>
+        <span>{high}</span>
+      </span>
     </label>
   );
 }

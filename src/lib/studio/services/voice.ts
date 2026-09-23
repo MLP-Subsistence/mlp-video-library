@@ -100,6 +100,74 @@ export async function voiceAccountStatus() {
   return { provider: provider.id, defaultModel: settings.voiceModel, status, models };
 }
 
+/**
+ * Voice Design: describe a voice in words, listen to a few generated
+ * candidates, then save the one you want. Generating previews uses a small
+ * amount of the provider's own quota but never this project's narration
+ * credits — only `generateSegmentVoice` charges those.
+ */
+export async function designVoicePreviews(args: { voiceDescription: string; text?: string }) {
+  const { provider } = await requireProvider();
+  if (!provider.designVoice) throw new StudioError("The current voice provider cannot design voices. Switch the provider to ElevenLabs in /admin/studio first.", 501);
+  const voiceDescription = args.voiceDescription.trim().slice(0, 1000);
+  if (voiceDescription.length < 20) throw new StudioError("Describe the voice in a bit more detail (at least 20 characters) — for example the speaker's age, tone and accent.");
+  try {
+    return await provider.designVoice({ voiceDescription, text: args.text?.trim().slice(0, 1000) || undefined });
+  } catch (error) {
+    throw new StudioError("Those voices could not be generated right now. Please try again shortly.", 502, String(error));
+  }
+}
+
+export async function saveDesignedVoice(args: { generatedVoiceId: string; name: string; description: string }) {
+  const { provider } = await requireProvider();
+  if (!provider.saveDesignedVoice) throw new StudioError("The current voice provider cannot save designed voices.", 501);
+  const name = args.name.trim().slice(0, 60);
+  if (!name) throw new StudioError("Give the new voice a name.");
+  try {
+    return await provider.saveDesignedVoice({ generatedVoiceId: args.generatedVoiceId, name, description: args.description.trim().slice(0, 400) });
+  } catch (error) {
+    const message = String(error);
+    if (/voice_limit|slot/i.test(message)) throw new StudioError("The ElevenLabs account has no free voice slots. Remove a voice you no longer use first.", 409, message);
+    throw new StudioError("That voice could not be saved. Please try again shortly.", 502, message);
+  }
+}
+
+/** This project's narration-generation history, newest first — the ledger already records every attempt. */
+export async function voiceHistory(projectId: string, options: { limit?: number } = {}) {
+  const rows = await prisma.studioVoiceUsage.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(200, Math.max(1, options.limit ?? 100))
+  });
+  // `segmentId` on the ledger is the StudioProjectSegment id (this project's copy), not the
+  // master StudioSegment id — it has no Prisma relation because a segment can be removed from
+  // the template after it was billed, so the lookup is manual and tolerant of misses.
+  const projectSegmentIds = [...new Set(rows.map((row) => row.segmentId).filter((id): id is string => Boolean(id)))];
+  const [projectSegments, assets] = await Promise.all([
+    prisma.studioProjectSegment.findMany({ where: { id: { in: projectSegmentIds } }, select: { id: true, translation: true, segment: { select: { key: true, title: true, sourceScript: true } } } }),
+    prisma.studioAsset.findMany({ where: { id: { in: rows.map((row) => row.outputAssetId).filter((id): id is string => Boolean(id)) } }, select: { id: true, url: true } })
+  ]);
+  const projectSegmentById = new Map(projectSegments.map((row) => [row.id, row]));
+  const assetUrlById = new Map(assets.map((asset) => [asset.id, asset.url]));
+  return rows.map((row) => {
+    const projectSegment = row.segmentId ? projectSegmentById.get(row.segmentId) : undefined;
+    return {
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+      status: row.status,
+      characters: row.characters,
+      voiceId: row.voiceId,
+      model: row.model,
+      segmentId: row.segmentId,
+      segmentTitle: projectSegment?.segment.title ?? null,
+      segmentKey: projectSegment?.segment.key ?? null,
+      textSnippet: projectSegment?.translation || projectSegment?.segment.sourceScript || null,
+      outputAssetUrl: row.outputAssetId ? assetUrlById.get(row.outputAssetId) ?? null : null,
+      isRetry: row.isRetry
+    };
+  });
+}
+
 export async function generateSegmentVoice(options: { userId: string; projectId: string; projectSegmentId: string; force?: boolean }) {
   const settings = await getStudioSettings();
   const provider = getVoiceProvider(settings.voiceProvider);

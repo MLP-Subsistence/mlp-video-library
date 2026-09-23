@@ -1,4 +1,5 @@
-import type { SharedVoiceOption, VoiceAccountStatus, VoiceModelOption, VoiceOption, VoiceSettings } from "@/lib/studio/types";
+import { modelSupportsLanguageOverride } from "@/lib/studio/elevenlabs-languages";
+import type { SharedVoiceOption, VoiceAccountStatus, VoiceDesignPreview, VoiceModelOption, VoiceOption, VoiceSettings } from "@/lib/studio/types";
 import { buildPlaceholderSpeech, estimateSpeechSeconds } from "@/lib/studio/wav";
 
 /**
@@ -43,6 +44,13 @@ export type CloneRequest = {
   files: Array<{ filename: string; bytes: Buffer; contentType: string }>;
 };
 
+export type DesignVoiceRequest = {
+  /** What the voice should sound like, e.g. "Warm middle-aged Kenyan woman, calm classroom narrator". */
+  voiceDescription: string;
+  /** Sample line read aloud in the previews; a default is used if omitted. */
+  text?: string;
+};
+
 /**
  * Everything below `synthesize` is optional and costs no narration credits:
  * browsing voices, copying one from the public library, cloning a voice from
@@ -59,6 +67,10 @@ export interface VoiceProvider {
   deleteVoice?(voiceId: string): Promise<void>;
   listModels?(): Promise<VoiceModelOption[]>;
   accountStatus?(): Promise<VoiceAccountStatus>;
+  /** Generate a few candidate voices from a text description — Voice Design. Nothing is saved yet. */
+  designVoice?(request: DesignVoiceRequest): Promise<{ previews: VoiceDesignPreview[]; text: string }>;
+  /** Save one of the generated candidates to the account as a real, usable voice. */
+  saveDesignedVoice?(args: { generatedVoiceId: string; name: string; description: string }): Promise<VoiceOption>;
 }
 
 /** Placeholder provider so the whole narration → timeline → render pipeline runs without ElevenLabs. */
@@ -89,6 +101,12 @@ export const mockVoiceProvider: VoiceProvider = {
   },
   async accountStatus() {
     return { provider: "mock", tier: "development", characterCount: null, characterLimit: null, canCloneVoices: false, voicesUsed: null, voiceLimit: null };
+  },
+  async designVoice() {
+    throw new Error("Voice Design needs the ElevenLabs provider. An administrator connects it in /admin/studio.");
+  },
+  async saveDesignedVoice() {
+    throw new Error("Voice Design needs the ElevenLabs provider. An administrator connects it in /admin/studio.");
   }
 };
 
@@ -259,8 +277,34 @@ export const elevenLabsVoiceProvider: VoiceProvider = {
         name: model.name ?? model.model_id,
         description: model.description ?? undefined,
         costFactor: modelCostFactor(model.model_id),
-        languages: (model.languages ?? []).map((entry) => entry.name ?? entry.language_id ?? "").filter(Boolean)
+        languages: (model.languages ?? []).map((entry) => entry.name ?? entry.language_id ?? "").filter(Boolean),
+        supportsLanguageOverride: modelSupportsLanguageOverride(model.model_id)
       }));
+  },
+  /**
+   * Voice Design (text to voice): describe a voice in words and get a few
+   * candidates to listen to before saving any of them. Uses a small amount of
+   * the provider's own quota, never this project's narration credits.
+   */
+  async designVoice(request) {
+    type Preview = { generated_voice_id: string; audio_base_64: string; duration_secs?: number };
+    const data = await elevenLabs<{ previews?: Preview[]; text?: string }>("/v1/text-to-voice/create-previews", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ voice_description: request.voiceDescription, ...(request.text ? { text: request.text } : {}) })
+    });
+    return {
+      text: data.text ?? request.text ?? "",
+      previews: (data.previews ?? []).map((preview) => ({ previewId: preview.generated_voice_id, audioBase64: preview.audio_base_64, durationSec: preview.duration_secs }))
+    };
+  },
+  async saveDesignedVoice({ generatedVoiceId, name, description }) {
+    const data = await elevenLabs<{ voice_id: string }>("/v1/text-to-voice/create-voice-from-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ voice_name: name, voice_description: description, generated_voice_id: generatedVoiceId })
+    });
+    return { id: data.voice_id, name, description, category: "designed" };
   },
   async accountStatus() {
     const data = await elevenLabs<{
@@ -291,6 +335,8 @@ export const elevenLabsVoiceProvider: VoiceProvider = {
       body: JSON.stringify({
         text: request.text,
         model_id: request.model,
+        // Only models that accept it get a language_code — sending it to others is a 422.
+        ...(request.settings.languageOverride && modelSupportsLanguageOverride(request.model) ? { language_code: request.settings.languageOverride } : {}),
         voice_settings: {
           stability: request.settings.stability ?? 0.5,
           similarity_boost: request.settings.similarity ?? 0.75,

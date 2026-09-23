@@ -251,6 +251,8 @@ export type VoiceSettings = {
   speed?: number;
   /** Optional per-project model; falls back to the studio-wide default. */
   model?: string;
+  /** Explicit `language_code` sent to the provider; only models that support it use it. */
+  languageOverride?: string;
 };
 
 export type VoiceOption = {
@@ -274,6 +276,31 @@ export type VoiceModelOption = {
   /** Credits charged per character, relative to the standard model. */
   costFactor?: number;
   languages?: string[];
+  /** Whether this model accepts an explicit language_code override. */
+  supportsLanguageOverride?: boolean;
+};
+
+/** One generated candidate from Voice Design, not yet saved to the account. */
+export type VoiceDesignPreview = {
+  previewId: string;
+  audioBase64: string;
+  durationSec?: number;
+};
+
+/** A past narration generation, for the History tab. Text/voice are looked up client-side from what is loaded. */
+export type VoiceHistoryEntry = {
+  id: string;
+  createdAt: string;
+  status: string;
+  characters: number;
+  voiceId: string;
+  model: string;
+  segmentId: string | null;
+  segmentTitle: string | null;
+  segmentKey: string | null;
+  textSnippet: string | null;
+  outputAssetUrl: string | null;
+  isRetry: boolean;
 };
 
 /** What the provider account allows — shown so nobody has to open the ElevenLabs dashboard. */
