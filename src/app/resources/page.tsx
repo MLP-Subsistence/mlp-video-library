@@ -30,7 +30,7 @@ export default async function ResourcesPage() {
         <h1 className="text-3xl font-extrabold sm:text-4xl">Choose a Language</h1>
       </section>
       <section className="mlp-container pb-12">
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mlp-card-grid">
           {languages.map((language) => (
             <Link key={language.id} href={`/resources/${language.code}`} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-[#edf0f3] transition hover:-translate-y-0.5 hover:shadow-md">
               <div className="relative aspect-video bg-[#f2f4f7]">

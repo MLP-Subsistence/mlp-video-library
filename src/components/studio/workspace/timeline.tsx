@@ -228,7 +228,7 @@ export function Timeline({
                         })}
                       </div>
                     ) : (
-                      <BlockFace segment={segment} block={block} assets={assets} large={large} />
+                      <BlockFace segment={segment} block={block} assets={assets} large={large} widthPx={block.durationSec * pxPerSec} />
                     )}
                   </Block>
                 );
@@ -253,7 +253,7 @@ export function Timeline({
                         {narration.url ? (
                           <Waveform url={narration.url} startSec={narration.startSec ?? 0} endSec={(narration.startSec ?? 0) + narration.durationSec} seed={segment.key} />
                         ) : (
-                          <div className="flex h-full items-center justify-center text-[10px] font-bold uppercase tracking-wide text-[#8b9bad]">{isActive || block.durationSec * pxPerSec >= 150 ? "No narration" : ""}</div>
+                          <div className="flex h-full items-center justify-center text-[10px] font-bold uppercase tracking-wide text-[#8b9bad]">{block.durationSec * pxPerSec >= (isActive ? 90 : 150) ? "No narration" : ""}</div>
                         )}
                       </div>
                       {block.pauseSec > 0 && (
@@ -329,22 +329,26 @@ function Block({ block, pxPerSec, active, selected, onClick, warnings, children 
   );
 }
 
-function BlockFace({ segment, block, assets, large }: { segment: ProjectSegmentDto; block: TimelineBlock; assets: Record<string, import("@/lib/studio/types").StudioAssetDto>; large?: boolean }) {
+function BlockFace({ segment, block, assets, large, widthPx }: { segment: ProjectSegmentDto; block: TimelineBlock; assets: Record<string, import("@/lib/studio/types").StudioAssetDto>; large?: boolean; widthPx: number }) {
   const first = block.items[0] ? assets[block.items[0].assetId] : null;
   const mixed = block.items.length > 1;
+  // Titles in clips too narrow to read them come out as stray letters; the tooltip still names the segment.
+  const showText = widthPx >= (large ? 220 : 110);
   return (
     <div className="flex h-full w-full items-center gap-2 pl-1 pr-5">
       <span className={`relative h-full shrink-0 overflow-hidden rounded-sm bg-[#e5e7eb] ${large ? "w-36" : "w-12"}`}>
         {first ? <Thumb asset={first} atSec={block.items[0]?.sourceStartSec ?? 0} /> : <span className="grid h-full w-full place-items-center text-[#8b9bad]"><ImageIcon className="size-3.5" /></span>}
       </span>
-      <span className="min-w-0">
-        <span className="block truncate text-[11px] font-extrabold text-[#243447]">
-          {String(block.index + 1).padStart(2, "0")} {segment.title}
+      {showText && (
+        <span className="min-w-0">
+          <span className="block truncate text-[11px] font-extrabold text-[#243447]">
+            {String(block.index + 1).padStart(2, "0")} {segment.title}
+          </span>
+          <span className="block truncate text-[10px] text-[#6b7c8f]">
+            {mixed ? `${block.items.length} visuals` : first ? first.kind === "video" ? "Video" : "Image" : "No visual"} · {block.durationSec.toFixed(1)} s
+          </span>
         </span>
-        <span className="block truncate text-[10px] text-[#6b7c8f]">
-          {mixed ? `${block.items.length} visuals` : first ? first.kind === "video" ? "Video" : "Image" : "No visual"} · {block.durationSec.toFixed(1)} s
-        </span>
-      </span>
+      )}
     </div>
   );
 }

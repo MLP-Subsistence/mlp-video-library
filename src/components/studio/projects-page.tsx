@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, FolderKanban, Languages, Plus, Trash2 } from "lucide-react";
+import { Flag, LanguagePicker, RegionPicker, projectFlag, suggestedCountries } from "@/components/studio/language-picker";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { EmptyState, Field, InlineNotice, Modal, Spinner, StatusPill, inputClass, useConfirm } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
@@ -85,7 +86,8 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
                       <h3 className="truncate text-lg font-extrabold text-[#243447]">{project.title}</h3>
                       <StatusPill tone={status.tone}>{status.label}</StatusPill>
                     </div>
-                    <p className="mt-1 text-sm text-[#6b7c8f]">
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-[#6b7c8f]">
+                      <Flag code={projectFlag("", project.targetLanguageName, project.region)} className="h-3 w-4" />
                       {project.targetLanguageName}
                       {project.region ? ` · ${project.region}` : ""}
                       {!canManageTemplates ? "" : ` · ${project.createdByName}`}
@@ -130,9 +132,8 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
   const [playlists, setPlaylists] = useState<LibraryPlaylistDto[] | null>(null);
   const [playlistId, setPlaylistId] = useState("");
   const [videoId, setVideoId] = useState("");
-  const [languageChoice, setLanguageChoice] = useState("rw");
-  const [customLanguage, setCustomLanguage] = useState("");
-  const [region, setRegion] = useState("");
+  const [language, setLanguage] = useState<{ code: string; name: string }>({ code: "rw", name: "Kinyarwanda" });
+  const [region, setRegion] = useState("Rwanda");
   const [variety, setVariety] = useState("");
   const [audience, setAudience] = useState("Adult learners");
   const [register, setRegister] = useState(studioRegisters[0]);
@@ -150,7 +151,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
       .catch((caught) => setError((caught as Error).message));
   }, [open]);
 
-  const language = useMemo(() => studioLanguages.find((entry) => entry.code === languageChoice) ?? null, [languageChoice]);
+  const varieties = useMemo(() => studioLanguages.find((entry) => entry.code === language.code)?.varieties ?? [], [language.code]);
   const playlist = playlists?.find((entry) => entry.id === playlistId) ?? null;
   const video = playlist?.videos.find((entry) => entry.id === videoId) ?? null;
   const step = !video ? 1 : 2;
@@ -160,11 +161,9 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
     setBusy(true);
     setError(null);
     try {
-      const languageName = languageChoice === "custom" ? customLanguage.trim() : language?.name ?? "";
-      const languageCode = languageChoice === "custom" ? customLanguage.trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 8) || "xx" : languageChoice;
       const result = await api<{ id: string }>("/api/studio/projects", {
         method: "POST",
-        json: { templateId: video.templateId, languageCode, languageName, region: region || null, variety: variety || null, audience: audience || null, register: register || null }
+        json: { templateId: video.templateId, languageCode: language.code, languageName: language.name, region: region || null, variety: variety || null, audience: audience || null, register: register || null }
       });
       onCreated(result.id);
     } catch (caught) {
@@ -174,7 +173,6 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
     }
   }
 
-  const languageName = languageChoice === "custom" ? customLanguage || "…" : language?.name;
 
   return (
     <Modal
@@ -191,7 +189,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
             </button>
           )}
           <button type="button" onClick={onClose} className="mlp-btn-outline">Cancel</button>
-          <button type="button" onClick={submit} disabled={busy || !video?.templateId || video.templateStatus !== "ready" || (languageChoice === "custom" && !customLanguage.trim())} className="mlp-btn-primary">
+          <button type="button" onClick={submit} disabled={busy || !video?.templateId || video.templateStatus !== "ready" || !language.name.trim()} className="mlp-btn-primary">
             {busy ? <Spinner /> : <Languages className="size-4" />} Start Localization
           </button>
         </>
@@ -273,33 +271,23 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
           </div>
           <h3 className="mb-2 mt-5 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">3 · Language</h3>
           <section className="grid gap-4 sm:grid-cols-2">
-            <Field label="Language">
-              <select
-                value={languageChoice}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setLanguageChoice(next);
-                  setRegion(studioLanguages.find((entry) => entry.code === next)?.regions?.[0] ?? "");
-                  setVariety("");
-                }}
-                className={inputClass}
-              >
-                {studioLanguages.map((entry) => (
-                  <option key={entry.code} value={entry.code}>{entry.name}</option>
-                ))}
-                <option value="custom">Another language…</option>
-              </select>
-            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Language">
+                <LanguagePicker
+                  value={language}
+                  onChange={(choice) => {
+                    setLanguage({ code: choice.code, name: choice.name });
+                    setRegion(suggestedCountries(choice)[0]?.name ?? "");
+                    setVariety("");
+                  }}
+                />
+              </Field>
+            </div>
             <Field label="Audience">
               <select value={audience} onChange={(event) => setAudience(event.target.value)} className={inputClass}>
                 {studioAudiences.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
               </select>
             </Field>
-            {languageChoice === "custom" && (
-              <Field label="Language name">
-                <input value={customLanguage} onChange={(event) => setCustomLanguage(event.target.value)} placeholder="e.g. Tigrinya" className={inputClass} />
-              </Field>
-            )}
           </section>
 
           <details className="mt-4 group">
@@ -308,18 +296,13 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
             </summary>
             <p className="mt-1 text-xs text-[#8b9bad]">Region, a specific dialect, or a formal/informal register — only if the default wouldn&apos;t sound right.</p>
             <section className="mt-3 grid gap-4 sm:grid-cols-2">
-              {languageChoice !== "custom" && (
-                <Field label="Region / country">
-                  <input list="studio-regions" value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Optional" className={inputClass} />
-                  <datalist id="studio-regions">{(language?.regions ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
-                </Field>
-              )}
-              {(language?.varieties?.length || languageChoice === "custom") ? (
-                <Field label="Variety / dialect" hint="Only when it changes how the narration should sound.">
-                  <input list="studio-varieties" value={variety} onChange={(event) => setVariety(event.target.value)} placeholder="Optional" className={inputClass} />
-                  <datalist id="studio-varieties">{(language?.varieties ?? []).map((entry) => <option key={entry} value={entry} />)}</datalist>
-                </Field>
-              ) : null}
+              <Field label="Region / country">
+                <RegionPicker value={region} onChange={setRegion} language={language} />
+              </Field>
+              <Field label="Variety / dialect" hint="Only when it changes how the narration should sound.">
+                <input list="studio-varieties" value={variety} onChange={(event) => setVariety(event.target.value)} placeholder={varieties[0] ? `e.g. ${varieties[0]} (optional)` : "Optional"} className={inputClass} />
+                <datalist id="studio-varieties">{varieties.map((entry) => <option key={entry} value={entry} />)}</datalist>
+              </Field>
               <Field label="Register" hint="How formal the narration should sound.">
                 <select value={register} onChange={(event) => setRegister(event.target.value)} className={inputClass}>
                   {studioRegisters.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
@@ -328,7 +311,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
             </section>
           </details>
           <p className="mt-5 text-sm text-[#6b7c8f]">
-            You will localize <strong className="text-[#243447]">{video.title}</strong> ({video.segmentCount} segments) into <strong className="text-[#243447]">{languageName}</strong>. The original visuals and pacing come with it; you replace the narration.
+            You will localize <strong className="text-[#243447]">{video.title}</strong> ({video.segmentCount} segments) into <strong className="text-[#243447]">{language.name}</strong>. The original visuals and pacing come with it; you replace the narration.
           </p>
         </>
       )}

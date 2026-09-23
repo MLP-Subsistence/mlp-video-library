@@ -60,7 +60,7 @@ export default async function LanguageFormatsPage({ params }: { params: Promise<
         </div>
       </section>
       <section className="mlp-container py-10 sm:py-12">
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mlp-card-grid">
           {formatOptions.map((format) => {
             const count = countMap.get(format.name) ?? 0;
             return (

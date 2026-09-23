@@ -28,7 +28,7 @@ const helpItems = [
 
 export default function HelpPage() {
   return (
-    <main className="min-h-screen bg-[#f7f8fa] text-slate-900">
+    <main className="mlp-page">
       <PublicHeader />
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <Link

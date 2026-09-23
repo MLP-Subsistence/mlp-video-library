@@ -73,7 +73,7 @@ export function ResourceFormatPlayer({
   return (
     <div className="space-y-6">
       <article ref={playerRef} className="scroll-mt-24 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#edf0f3]">
-        <div className="relative aspect-video overflow-hidden bg-black">
+        <div className="relative mx-auto aspect-video w-full max-w-[calc((100vh-11rem)*16/9)] overflow-hidden bg-black">
           {selected.youtubeVideoId ? (
             <iframe
               src={`https://www.youtube.com/embed/${selected.youtubeVideoId}`}
@@ -142,7 +142,7 @@ export function ResourceFormatPlayer({
           )}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mlp-card-grid gap-3 [--card-min:300px]">
           {resources.map((resource, index) => {
             const isActive = resource.id === selected.id;
             return (

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Settings2, Undo2, Wand2 } from "lucide-react";
 import { AssetLibrary } from "@/components/studio/asset-library";
+import { Flag, projectFlag } from "@/components/studio/language-picker";
 import { LayoutEditor } from "@/components/studio/layout-editor";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { ActionMenu, InlineNotice, MenuItem, Spinner, StatusPill } from "@/components/studio/ui";
@@ -161,7 +162,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
         title={project.title}
         badge={
           <>
-            <span className="mlp-soft-badge">{project.targetLanguageName}{project.region ? ` · ${project.region}` : ""}</span>
+            <button type="button" onClick={() => setSettingsOpen(true)} className="mlp-soft-badge gap-1.5 hover:border-[#c9d0da]" title="Translation settings"><Flag code={projectFlag(project.targetLanguageCode, project.targetLanguageName, project.region)} className="h-3 w-4" />{project.targetLanguageName}{project.region ? ` · ${project.region}` : ""}</button>
             <StatusPill tone={summary.needReview === 0 ? "ready" : "warning"}>{summary.total - summary.needReview} / {summary.total} ready</StatusPill>
           </>
         }
@@ -174,7 +175,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             <ActionMenu label="Lesson tools">
               <MenuItem icon={Wand2} onClick={translateLesson} disabled={Boolean(translating)} hint="Fill every empty segment with an AI draft">Translate entire lesson</MenuItem>
               <MenuItem icon={ListMusic} onClick={() => setFullNarrationOpen(true)} hint="One long recording, split across the segments">Import full narration</MenuItem>
-              <MenuItem icon={Settings2} onClick={() => setSettingsOpen(true)} hint="Region, dialect, audience, glossary">Translation settings</MenuItem>
+              <MenuItem icon={Settings2} onClick={() => setSettingsOpen(true)} hint="Language, region, dialect, audience, glossary">Translation settings</MenuItem>
             </ActionMenu>
             <Link href={`/studio/projects/${project.id}/review`} className="mlp-btn-primary h-10">
               <span className="hidden sm:inline">Review &amp; Generate</span><span className="sm:hidden">Review</span> <ArrowRight className="size-4" />

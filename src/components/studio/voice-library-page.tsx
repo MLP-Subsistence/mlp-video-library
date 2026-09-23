@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, ChevronDown, Filter, Library, Mic, Play, Plus, Search, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { Check, ChevronDown, Filter, Library, Mic, Plus, Search, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
+import { PreviewButton } from "@/components/studio/audio-preview";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
-import { Field, InlineNotice, Spinner, StatusPill, inputClass, textareaClass } from "@/components/studio/ui";
+import { Field, InlineNotice, Spinner, inputClass, textareaClass } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
 import { ELEVENLABS_LANGUAGES } from "@/lib/studio/elevenlabs-languages";
 import type { SharedVoiceOption, VoiceAccountStatus, VoiceDesignPreview, VoiceModelOption, VoiceOption } from "@/lib/studio/types";
@@ -53,7 +54,6 @@ export function VoiceLibraryPage() {
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [previewing, setPreviewing] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
 
@@ -72,15 +72,6 @@ export function VoiceLibraryPage() {
   };
 
   const provider = voices?.provider ?? account?.provider ?? "mock";
-
-  const preview = (voice: { id: string; previewUrl?: string | null }) => {
-    if (!voice.previewUrl) return;
-    setPreviewing(voice.id);
-    const audio = new Audio(voice.previewUrl);
-    audio.onended = () => setPreviewing(null);
-    audio.onerror = () => setPreviewing(null);
-    void audio.play().catch(() => setPreviewing(null));
-  };
 
   const remove = async (voice: VoiceOption) => {
     setBusy(voice.id);
@@ -156,9 +147,7 @@ export function VoiceLibraryPage() {
                       const removable = voice.category === "cloned" || voice.category === "designed" || voice.category === "professional";
                       return (
                         <div key={voice.id} className="flex items-center gap-3 rounded-xl border border-[#d8dde5] p-3">
-                          <button type="button" onClick={() => preview(voice)} disabled={!voice.previewUrl} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447] disabled:opacity-40" aria-label={`Preview ${voice.name}`}>
-                            {previewing === voice.id ? <Spinner /> : <Play className="size-4" />}
-                          </button>
+                          <PreviewButton id={voice.id} src={voice.previewUrl} label={voice.name} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-extrabold text-[#243447]">{voice.name}{voice.category && voice.category !== "premade" ? ` · ${voice.category}` : ""}</span>
                             <span className="block truncate text-xs text-[#6b7c8f]">{voice.description || Object.values(voice.labels ?? {}).join(" · ") || (voice.languages?.length ? voice.languages.join(", ") : "Multilingual")}</span>
@@ -240,10 +229,11 @@ const EMPTY_LIBRARY_FILTERS: LibraryFilters = { q: "", language: "", gender: "",
 function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: boolean; provider: string; onAdded: (voice: VoiceOption) => void; onNotice: (notice: Notice) => void }) {
   const [filters, setFilters] = useState<LibraryFilters>(EMPTY_LIBRARY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  useDismiss(filtersRef, filtersOpen, () => setFiltersOpen(false));
   const [results, setResults] = useState<SharedVoiceOption[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
   const connected = provider !== "mock";
 
   const search = async (override?: Partial<LibraryFilters>) => {
@@ -277,15 +267,6 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
     }
   };
 
-  const listen = (voice: SharedVoiceOption) => {
-    if (!voice.previewUrl) return;
-    setPlaying(voice.id);
-    const audio = new Audio(voice.previewUrl);
-    audio.onended = () => setPlaying(null);
-    audio.onerror = () => setPlaying(null);
-    void audio.play().catch(() => setPlaying(null));
-  };
-
   const panelFilterCount = (["gender", "age", "accent", "category"] as const).filter((key) => filters[key].trim()).length;
   const languageName = ELEVENLABS_LANGUAGES.find((entry) => entry.code === filters.language)?.name;
 
@@ -308,7 +289,7 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
               <input value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void search(); }} placeholder="Warm narrator, storyteller, teacher…" className="h-10 flex-1 bg-transparent text-sm outline-none" aria-label="Search the voice library" />
             </label>
             <LanguageCombobox value={filters.language} onChange={(value) => void search({ language: value })} />
-            <div className="relative">
+            <div ref={filtersRef} className="relative">
               <button type="button" onClick={() => setFiltersOpen((value) => !value)} className="mlp-btn-outline h-10">
                 <Filter className="size-4" /> Filters{panelFilterCount > 0 ? ` (${panelFilterCount})` : ""} <ChevronDown className="size-3.5" />
               </button>
@@ -364,9 +345,7 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {results.map((voice) => (
                 <div key={`${voice.publicOwnerId}:${voice.id}`} className="flex items-center gap-3 rounded-xl border border-[#d8dde5] p-3">
-                  <button type="button" onClick={() => listen(voice)} disabled={!voice.previewUrl} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447] disabled:opacity-40" aria-label={`Listen to ${voice.name}`}>
-                    {playing === voice.id ? <Spinner /> : <Play className="size-4" />}
-                  </button>
+                  <PreviewButton id={`library:${voice.publicOwnerId}:${voice.id}`} src={voice.previewUrl} label={voice.name} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-extrabold text-[#243447]">{voice.name}</span>
                     <span className="block truncate text-xs text-[#6b7c8f]">{[voice.gender, voice.age?.replace("_", " "), voice.accent, voice.languages?.[0], voice.useCase?.replace(/_/g, " ")].filter(Boolean).join(" · ") || voice.description || "Library voice"}</span>
@@ -395,15 +374,40 @@ function FilterRow({ label, value, options, onChange }: { label: string; value: 
   );
 }
 
+/** Close a popover on a click outside it or on Escape. */
+function useDismiss(ref: RefObject<HTMLElement | null>, open: boolean, close: () => void) {
+  const closeRef = useRef(close);
+  useEffect(() => {
+    closeRef.current = close;
+  });
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) closeRef.current();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeRef.current();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, ref]);
+}
+
 /** Searchable language dropdown, in the spirit of ElevenLabs' own language picker. */
 function LanguageCombobox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismiss(rootRef, open, () => setOpen(false));
   const selected = ELEVENLABS_LANGUAGES.find((entry) => entry.code === value);
   const filtered = ELEVENLABS_LANGUAGES.filter((entry) => !query.trim() || entry.name.toLowerCase().includes(query.trim().toLowerCase()));
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-pressed={open} className="mlp-btn-outline h-10">
         {selected ? selected.name : "Any language"} <ChevronDown className="size-3.5" />
       </button>
@@ -555,7 +559,6 @@ function VoiceDesigner({ canManage, provider, onSaved, onNotice }: { canManage: 
   const [selectedPreview, setSelectedPreview] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
-  const [playing, setPlaying] = useState<string | null>(null);
 
   const generate = async () => {
     setGenerating(true);
@@ -571,14 +574,6 @@ function VoiceDesigner({ canManage, provider, onSaved, onNotice }: { canManage: 
     } finally {
       setGenerating(false);
     }
-  };
-
-  const listen = (preview: VoiceDesignPreview) => {
-    setPlaying(preview.previewId);
-    const audio = new Audio(`data:audio/mpeg;base64,${preview.audioBase64}`);
-    audio.onended = () => setPlaying(null);
-    audio.onerror = () => setPlaying(null);
-    void audio.play().catch(() => setPlaying(null));
   };
 
   const save = async () => {
@@ -624,9 +619,7 @@ function VoiceDesigner({ canManage, provider, onSaved, onNotice }: { canManage: 
             {previews.map((preview, index) => (
               <label key={preview.previewId} className={`flex items-center gap-3 rounded-xl border p-3 ${selectedPreview === preview.previewId ? "border-[#a64026] bg-[#fbeaea]/60" : "border-[#d8dde5]"}`}>
                 <input type="radio" name="voice-design-preview" checked={selectedPreview === preview.previewId} onChange={() => setSelectedPreview(preview.previewId)} className="accent-[#a64026]" />
-                <button type="button" onClick={() => listen(preview)} className="grid size-9 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447]" aria-label={`Listen to candidate ${index + 1}`}>
-                  {playing === preview.previewId ? <Spinner /> : <Play className="size-4" />}
-                </button>
+                <PreviewButton id={`design:${preview.previewId}`} src={`data:audio/mpeg;base64,${preview.audioBase64}`} label={`candidate ${index + 1}`} size="size-9" />
                 <span className="text-sm font-bold text-[#243447]">Candidate {index + 1}{preview.durationSec ? ` · ${preview.durationSec.toFixed(1)}s` : ""}</span>
               </label>
             ))}

@@ -46,7 +46,7 @@ export default async function Home() {
           <p className="mb-3 flex items-center gap-2 font-extrabold uppercase tracking-wide text-[#a64026]"><Languages className="size-4" /> Choose a language</p>
           <h2 className="text-2xl font-extrabold sm:text-3xl">Select a Language</h2>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mlp-card-grid">
           {languages.map((language) => (
             <Link key={language.id} href={`/resources/${language.code}`} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-[#edf0f3] transition hover:-translate-y-0.5 hover:shadow-md">
               <div className="relative aspect-video bg-[#f2f4f7]">

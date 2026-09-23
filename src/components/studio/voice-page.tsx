@@ -9,13 +9,13 @@ import {
   Clock,
   Coins,
   ListMusic,
-  Play,
   RefreshCw,
   Search,
   Settings2,
   Sparkles,
   X
 } from "lucide-react";
+import { PreviewButton, pauseOtherAudio, stopPreview } from "@/components/studio/audio-preview";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { Field, InlineNotice, Spinner, StatusPill, inputClass } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
@@ -63,7 +63,6 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
-  const [previewing, setPreviewing] = useState<string | null>(null);
   const [tab, setTab] = useState<VoiceTab>("voices");
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [voiceQuery, setVoiceQuery] = useState("");
@@ -147,15 +146,6 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
     } finally {
       setBusy(null);
     }
-  };
-
-  const preview = (voice: { id: string; previewUrl?: string | null }) => {
-    if (!voice.previewUrl) return;
-    setPreviewing(voice.id);
-    const audio = new Audio(voice.previewUrl);
-    audio.onended = () => setPreviewing(null);
-    audio.onerror = () => setPreviewing(null);
-    void audio.play().catch(() => setPreviewing(null));
   };
 
   const credits = voices?.credits ?? project.credits;
@@ -251,9 +241,7 @@ export function VoicePage({ initial }: { initial: ProjectDto }) {
                       const selected = voice.id === project.defaultVoiceId;
                       return (
                         <div key={voice.id} className={`flex items-center gap-3 rounded-xl border p-3 ${selected ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5]"}`}>
-                          <button type="button" onClick={() => preview(voice)} disabled={!voice.previewUrl} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f2f4f7] text-[#243447] disabled:opacity-40" aria-label={`Preview ${voice.name}`}>
-                            {previewing === voice.id ? <Spinner /> : <Play className="size-4" />}
-                          </button>
+                          <PreviewButton id={voice.id} src={voice.previewUrl} label={voice.name} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-extrabold text-[#243447]">{voice.name}{voice.category && voice.category !== "premade" ? ` · ${voice.category}` : ""}</span>
                             <span className="block truncate text-xs text-[#6b7c8f]">{voice.description || Object.values(voice.labels ?? {}).join(" · ") || (voice.languages?.length ? voice.languages.join(", ") : "Multilingual")}</span>
@@ -493,7 +481,7 @@ function HistoryTab({ projectId, voices, models }: { projectId: string; voices: 
                       </span>
                     </span>
                     {entry.outputAssetUrl && (
-                      <audio controls preload="none" src={entry.outputAssetUrl} className="h-9 w-40 shrink-0" />
+                      <audio controls preload="none" src={entry.outputAssetUrl} data-exclusive-audio onPlay={(event) => { stopPreview(); pauseOtherAudio(event.currentTarget); }} className="h-9 w-40 shrink-0" />
                     )}
                   </div>
                 ))}

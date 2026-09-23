@@ -23,6 +23,8 @@ export const PATCH = studioRoute(async (request: Request, { params }: Params) =>
   const { id } = await params;
   const existing = await requireProjectAccess(user, id);
   const body = await readJson<{
+    targetLanguageCode?: string;
+    targetLanguageName?: string;
     region?: string | null;
     variety?: string | null;
     audience?: string | null;
@@ -34,6 +36,19 @@ export const PATCH = studioRoute(async (request: Request, { params }: Params) =>
     renderQuality?: string;
   }>(request);
   const data: Record<string, unknown> = {};
+  if (body.targetLanguageName !== undefined || body.targetLanguageCode !== undefined) {
+    const name = cleanText(body.targetLanguageName).slice(0, 80);
+    const code = cleanText(body.targetLanguageCode).toLowerCase().replace(/[^a-z-]/g, "").slice(0, 12);
+    if (!name || !code) throw new StudioError("Choose a target language.");
+    if (name !== existing.targetLanguageName || code !== existing.targetLanguageCode) {
+      const work = await prisma.studioProjectSegment.count({
+        where: { projectId: id, OR: [{ translation: { not: "" } }, { narrationStatus: { not: "missing" } }, { narrationAssetId: { not: null } }] }
+      });
+      if (work > 0) throw new StudioError(`This localization already has ${existing.targetLanguageName} work in ${work} segment${work === 1 ? "" : "s"}. Start a new localization for another language instead.`, 409);
+      data.targetLanguageName = name;
+      data.targetLanguageCode = code;
+    }
+  }
   if (body.region !== undefined) data.region = cleanOptional(body.region)?.slice(0, 80) ?? null;
   if (body.variety !== undefined) data.variety = cleanOptional(body.variety)?.slice(0, 80) ?? null;
   if (body.audience !== undefined) data.audience = cleanOptional(body.audience)?.slice(0, 80) ?? null;

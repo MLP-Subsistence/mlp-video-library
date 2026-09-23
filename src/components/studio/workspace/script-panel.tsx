@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, AudioLines, Check, Clock, FileAudio, FileText, Grid2X2, ImagePlus, Mic, RefreshCw, Sparkles, Trash2, Type, Upload, Wand2 } from "lucide-react";
+import { ArrowRight, AudioLines, Check, ChevronDown, Clock, FileAudio, FileText, Grid2X2, ImagePlus, Mic, Pause, Play, RefreshCw, Sparkles, Trash2, Type, Upload, Wand2 } from "lucide-react";
 import { AssetThumb } from "@/components/studio/asset-library";
+import { pauseOtherAudio, stopPreview } from "@/components/studio/audio-preview";
+import { Flag, projectFlag } from "@/components/studio/language-picker";
 import { SegmentRecorder } from "@/components/studio/workspace/recorder";
 import { TextControls } from "@/components/studio/workspace/text-controls";
 import type { ProjectController } from "@/components/studio/workspace/use-project";
@@ -179,18 +181,24 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
               <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Original — {languageName(project.template.sourceLanguageCode)}</h3>
               <p className="mt-2 text-[15px] leading-relaxed text-[#243447]">{segment.sourceScript || <span className="italic text-[#8b9bad]">No source script for this segment.</span>}</p>
               {project.template.masterAssetUrl && segment.source && (
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#6b7c8f]">Listen to the original ({(segment.source.endSec - segment.source.startSec).toFixed(1)} s):</span>
-                  <NarrationPlayer url={project.template.masterAssetUrl} startSec={segment.source.startSec} endSec={segment.source.endSec} />
-                </div>
+                <OriginalClipButton key={segment.id} url={project.template.masterAssetUrl} startSec={segment.source.startSec} endSec={segment.source.endSec} />
               )}
             </section>
 
             <section className="border-t border-[#edf0f3] pt-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">
-                  Translation — {project.targetLanguageName}{" "}
-                  <button type="button" onClick={onOpenSettings} className="ml-1 font-bold normal-case tracking-normal text-[#a64026]" title="Region, dialect, audience, register and glossary">settings</button>
+                  Translation —{" "}
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="ml-1 inline-flex items-center gap-1.5 rounded-md border border-[#e5ccd0] bg-[#fbeaea]/60 px-2 py-1 align-middle font-bold normal-case tracking-normal text-[#a64026] hover:bg-[#fbeaea]"
+                    title="Change the language, region, dialect, audience or glossary"
+                  >
+                    <Flag code={projectFlag(project.targetLanguageCode, project.targetLanguageName, project.region)} className="h-3 w-4" />
+                    {project.targetLanguageName}
+                    <ChevronDown className="size-3.5" />
+                  </button>
                 </h3>
                 <div className="flex items-center gap-2">
                   <StatusPill tone={translationTone}>{segment.translationStatus === "approved" ? "Approved" : segment.translationStatus === "draft" ? (segment.translationSource === "ai" ? "AI draft" : "Draft") : "Missing"}</StatusPill>
@@ -451,7 +459,52 @@ function NarrationPlayer({ url, startSec, endSec }: { url: string; startSec: num
       audio.removeEventListener("play", onPlay);
     };
   }, [startSec, endSec, url]);
-  return <audio ref={ref} controls preload="metadata" src={url} className="h-9 min-w-0 flex-1" />;
+  return <audio ref={ref} controls preload="metadata" src={url} data-exclusive-audio onPlay={(event) => { stopPreview(); pauseOtherAudio(event.currentTarget); }} className="h-9 min-w-0 flex-1" />;
+}
+
+/** Plays just this segment's slice of the original master video's audio; press again to stop. */
+function OriginalClipButton({ url, startSec, endSec }: { url: string; startSec: number; endSec: number }) {
+  const ref = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    const audio = ref.current;
+    if (!audio) return;
+    const onTime = () => {
+      if (audio.currentTime >= endSec) audio.pause();
+    };
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
+      audio.pause();
+    };
+  }, [endSec]);
+  const toggle = () => {
+    const audio = ref.current;
+    if (!audio) return;
+    if (!audio.paused) {
+      audio.pause();
+      return;
+    }
+    stopPreview();
+    pauseOtherAudio(audio);
+    audio.currentTime = startSec;
+    void audio.play().catch(() => setPlaying(false));
+  };
+  return (
+    <>
+      <audio ref={ref} src={url} preload="none" data-exclusive-audio className="hidden" />
+      <button type="button" onClick={toggle} aria-pressed={playing} className={`mt-2 inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-bold ${playing ? "border-[#a64026] bg-[#a64026] text-white" : "border-[#d8dde5] bg-white text-[#243447] hover:border-[#c9d0da]"}`}>
+        {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+        {playing ? "Stop" : "Listen to the original"} · {(endSec - startSec).toFixed(1)} s
+      </button>
+    </>
+  );
 }
 
 function sourceLabel(source: ProjectSegmentDto["narration"]["source"]) {

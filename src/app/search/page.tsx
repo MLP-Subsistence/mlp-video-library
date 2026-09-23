@@ -71,7 +71,7 @@ export default async function SearchPage({
       </section>
       <section className="mlp-container py-10">
         {resources.length > 0 ? (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mlp-card-grid [--card-min:270px]">
             {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} />)}
           </div>
         ) : (

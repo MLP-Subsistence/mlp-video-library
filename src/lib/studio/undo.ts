@@ -13,7 +13,7 @@ const SEGMENT_FIELDS = [
 ] as const;
 
 const PROJECT_FIELDS = [
-  "region", "variety", "audience", "register", "glossary", "defaultVoiceId",
+  "targetLanguageCode", "targetLanguageName", "region", "variety", "audience", "register", "glossary", "defaultVoiceId",
   "defaultVoiceName", "voiceSettings", "renderQuality"
 ] as const;
 

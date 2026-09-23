@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <main className="min-h-screen bg-[#f7f8fa] text-[#243447]">
+    <main className="mlp-page">
       <PublicHeader />
-      <section className="mlp-container py-10 sm:py-14">
+      <section className="mlp-container max-w-5xl py-10 sm:py-14">
         <div className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-[#e5e7eb] sm:p-10">
           <p className="text-sm font-extrabold uppercase tracking-wide text-[#a64026]">Marketplace Literacy Project</p>
           <h1 className="mt-3 text-3xl font-extrabold sm:text-5xl">Terms of Service</h1>

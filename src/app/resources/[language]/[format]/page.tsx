@@ -92,7 +92,7 @@ export default async function ResourceFormatPage({
         </section>
 
         <section className="mlp-container py-8 sm:py-10">
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mlp-card-grid">
             {formatSubmenus.map((submenu) => {
               const count = countMap.get(submenu.name) ?? 0;
               return (
