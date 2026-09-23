@@ -61,7 +61,8 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const [panels, setPanels] = useState({ segments: true, script: true, preview: true });
   const togglePanel = (panel: keyof typeof panels) => setPanels((current) => ({ ...current, [panel]: !current[panel] }));
   const [mobileTimeline, setMobileTimeline] = useState(false);
-  // Which of the right panel's four tabs is open, and which timeline clip it is showing
+  // Which right-panel page is open, and which timeline clip it is showing.
+  // Script and Voice intentionally share one page for read-along recording.
   // (lifted so selecting a clip opens and highlights its settings).
   const [panelTab, setPanelTab] = useState<PanelTab>("script");
   const [selectedTrack, setSelectedTrack] = useState<TimelineTrack>("video");
@@ -142,7 +143,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const selectClip = (segmentId: string, track: TimelineTrack) => {
     if (segmentId !== activeSegment?.segmentId) selectSegment(segmentId);
     setSelectedTrack(track);
-    setPanelTab(track === "audio" ? "voice" : "visuals");
+    setPanelTab(track === "audio" ? "script" : "visuals");
     setPanels((current) => ({ ...current, script: true }));
     if (track === "text") window.setTimeout(() => document.getElementById("studio-text-controls")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 120);
   };

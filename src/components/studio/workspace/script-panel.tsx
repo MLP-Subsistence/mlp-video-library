@@ -14,12 +14,12 @@ import { formatSeconds } from "@/lib/studio/timing";
 import type { Composition, ProjectDto, ProjectSegmentDto, StudioAssetDto, TextOverlay } from "@/lib/studio/types";
 
 type NarrationTab = "record" | "ai" | "upload";
-export type PanelTab = "script" | "voice" | "visuals" | "timing";
+export type PanelTab = "script" | "visuals" | "timing";
 
 /**
- * Right-hand panel. One segment at a time, in four short tabs — Script,
- * Voice, Visuals, Timing — instead of one long scrolling form, with
- * Approve & Next always visible at the bottom.
+ * Right-hand panel. One segment at a time, in three short tabs — Script &
+ * Voice, Visuals, Timing. Script and narration deliberately share one page
+ * so an educator can read the words while recording.
  */
 export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings, onChangeVisual, onOpenLayout, tab: panelTab, onTabChange, focusTrack }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void; onChangeVisual: () => void; onOpenLayout: () => void; tab: PanelTab; onTabChange: (tab: PanelTab) => void; focusTrack: "text" | "video" | "audio" }) {
   const { project, activeSegment, patchSegment, setLocalTranslation, setLocalComposition, saving, savedAt } = controller;
@@ -150,15 +150,14 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
   const canGenerateVoice = Boolean(project.defaultVoiceId || segment.voiceIdOverride);
 
   const tabs: Array<{ id: PanelTab; label: string; icon: typeof FileText; attention: boolean }> = [
-    { id: "script", label: "Script", icon: FileText, attention: segment.translationStatus !== "approved" },
-    { id: "voice", label: "Voice", icon: Mic, attention: segment.narration.status !== "ready" },
+    { id: "script", label: "Script & Voice", icon: FileText, attention: segment.translationStatus !== "approved" || segment.narration.status !== "ready" },
     { id: "visuals", label: "Visuals", icon: Type, attention: !segment.composition.slots.some((slot) => slot.items.length > 0) },
     { id: "timing", label: "Timing", icon: Clock, attention: false }
   ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid grid-cols-4 gap-1 border-b border-[#edf0f3] px-2 py-2">
+      <div className="grid grid-cols-3 gap-1 border-b border-[#edf0f3] px-2 py-2">
         {tabs.map(({ id, label, icon: Icon, attention }) => (
           <button
             key={id}
@@ -238,8 +237,8 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
           </>
         )}
 
-        {panelTab === "voice" && (
-          <section className={focusTrack === "audio" ? "rounded-xl p-2 ring-2 ring-[#a64026]/40" : ""}>
+        {panelTab === "script" && (
+          <section className={`border-t border-[#edf0f3] pt-4 ${focusTrack === "audio" ? "rounded-xl p-2 ring-2 ring-[#a64026]/40" : ""}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Narration</h3>
               <div className="flex items-center gap-2">
@@ -257,6 +256,13 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
                 </button>
               </div>
             )}
+
+            <div className="mt-3 rounded-xl border border-[#e5ccd0] bg-[#fff8f6] p-3" dir="auto">
+              <p className="text-[11px] font-extrabold uppercase tracking-wide text-[#a64026]">Read this while recording</p>
+              <p className="mt-1 whitespace-pre-wrap text-[1.0625rem] font-semibold leading-relaxed text-[#243447]">
+                {draft.trim() || segment.sourceScript || <span className="font-normal italic text-[#8b9bad]">Add or translate the script above before recording.</span>}
+              </p>
+            </div>
             {segment.narration.status === "needs_update" && (
               <div className="mt-3">
                 <InlineNotice tone="warning">The translation changed after this narration was made. Re-record, upload or regenerate it so the audio matches the text.</InlineNotice>
@@ -290,7 +296,7 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
                       Choose a voice for this project on the <a href={`/studio/projects/${project.id}/voice`} className="font-bold text-[#a64026]">AI Voice</a> page first.
                     </p>
                   ) : segment.translationStatus !== "approved" ? (
-                    <p className="text-sm text-[#6b7c8f]">Approve the translation in the Script tab, then generate the narration with {project.defaultVoiceName ?? "the project voice"}.</p>
+                    <p className="text-sm text-[#6b7c8f]">Approve the translation above, then generate the narration with {project.defaultVoiceName ?? "the project voice"}.</p>
                   ) : (
                     <div className="flex flex-wrap items-center gap-3">
                       <button type="button" onClick={() => generateVoice(segment.narration.source === "ai")} disabled={busy !== null} className="mlp-btn-primary">
