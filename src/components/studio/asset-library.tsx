@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, FileAudio, Film, ImageIcon, Layers, Search, Trash2, Upload } from "lucide-react";
-import { Drawer, InlineNotice, Spinner } from "@/components/studio/ui";
+import { Drawer, InlineNotice, Spinner, useConfirm } from "@/components/studio/ui";
 import { api, formatBytes, kindForFile, uploadAsset } from "@/lib/studio/client";
 import { formatClock } from "@/lib/studio/timing";
 import type { AssetKind, StudioAssetDto, StudioAssetFolderDto } from "@/lib/studio/types";
@@ -69,6 +69,7 @@ export function AssetLibrary({
   const [folders, setFolders] = useState<StudioAssetFolderDto[] | null>(null);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const { assets, error, reload, setAssets } = useAssetList(kind, query, open && (kind !== "image" || folders !== null), kind === "image" ? folderId : null);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
@@ -116,7 +117,7 @@ export function AssetLibrary({
   }
 
   async function remove(asset: StudioAssetDto) {
-    if (!window.confirm(`Delete "${asset.name}" from the library?`)) return;
+    if (!(await confirm({ title: `Delete "${asset.name}"?`, message: "It will be removed from the asset library for everyone." }))) return;
     try {
       await api(`/api/studio/assets/${asset.id}`, { method: "DELETE" });
       setAssets((list) => (list ?? []).filter((entry) => entry.id !== asset.id));
@@ -204,6 +205,7 @@ export function AssetLibrary({
           <div className="col-span-full flex items-center justify-center gap-2 p-8 text-sm text-[#6b7c8f]"><Spinner /> Loading assets…</div>
         )}
       </div>
+      {confirmDialog}
     </Drawer>
   );
 }

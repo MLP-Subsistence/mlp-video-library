@@ -1,9 +1,65 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, Trash2, X } from "lucide-react";
 
 /** Small presentational pieces shared across Educator Studio, styled with the MLP tokens. */
+
+type ConfirmRequest = { title: string; message?: ReactNode; confirmLabel?: string };
+
+/**
+ * Styled replacement for window.confirm(). Render `dialog` once in the
+ * component, then `if (!(await confirm({...}))) return;`.
+ */
+export function useConfirm() {
+  const [request, setRequest] = useState<(ConfirmRequest & { resolve: (ok: boolean) => void }) | null>(null);
+  const confirm = useCallback((next: ConfirmRequest) => new Promise<boolean>((resolve) => setRequest({ ...next, resolve })), []);
+  const settle = (ok: boolean) => {
+    request?.resolve(ok);
+    setRequest(null);
+  };
+  const dialog = request ? <ConfirmDialog title={request.title} message={request.message} confirmLabel={request.confirmLabel} onSettle={settle} /> : null;
+  return [confirm, dialog] as const;
+}
+
+function ConfirmDialog({ title, message, confirmLabel = "Delete", onSettle }: ConfirmRequest & { onSettle: (ok: boolean) => void }) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const settleRef = useRef(onSettle);
+  useEffect(() => {
+    settleRef.current = onSettle;
+  });
+  useEffect(() => {
+    cancelRef.current?.focus();
+    // Capture phase + stopPropagation so Escape closes only this dialog, not a drawer or modal underneath it.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      settleRef.current(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <button type="button" aria-label="Cancel" onClick={() => onSettle(false)} className="absolute inset-0 bg-[#243447]/45" />
+      <div role="alertdialog" aria-modal="true" aria-labelledby="mlp-confirm-title" className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-[#e5e7eb]">
+        <div className="flex items-start gap-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-50 text-red-600"><Trash2 className="size-5" /></span>
+          <div className="min-w-0">
+            <h2 id="mlp-confirm-title" className="text-lg font-extrabold text-[#243447]">{title}</h2>
+            {message && <p className="mt-1 text-sm text-[#6b7c8f]">{message}</p>}
+          </div>
+        </div>
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button ref={cancelRef} type="button" onClick={() => onSettle(false)} className="mlp-btn-outline">Cancel</button>
+          <button type="button" onClick={() => onSettle(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-red-600 px-5 font-extrabold text-white hover:bg-red-700">
+            <Trash2 className="size-4" /> {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Modal({ open, onClose, title, description, children, footer, wide }: { open: boolean; onClose: () => void; title: string; description?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   useEffect(() => {

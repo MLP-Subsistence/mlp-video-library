@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, FileAudio, Film, Folder, FolderOpen, ImageIcon, Layers, Search, Trash2, Upload } from "lucide-react";
 import { AssetThumb, useAssetList } from "@/components/studio/asset-library";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
-import { InlineNotice, Spinner } from "@/components/studio/ui";
+import { InlineNotice, Spinner, useConfirm } from "@/components/studio/ui";
 import { api, formatBytes, kindForFile, uploadAsset } from "@/lib/studio/client";
 import { formatClock } from "@/lib/studio/timing";
 import type { AssetKind, StudioAssetDto, StudioAssetFolderDto } from "@/lib/studio/types";
@@ -20,6 +20,7 @@ export function AssetsPage() {
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [foldersOpen, setFoldersOpen] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   // Folders load quietly in the background; the page opens on the full library, not one video's photos,
@@ -80,7 +81,7 @@ export function AssetsPage() {
       setNotice(`"${asset.name}" is currently used in ${asset.usedIn} segment${asset.usedIn === 1 ? "" : "s"}. Replace it there before deleting.`);
       return;
     }
-    if (!window.confirm(`Delete "${asset.name}"? This cannot be undone.`)) return;
+    if (!(await confirm({ title: `Delete "${asset.name}"?`, message: "This cannot be undone." }))) return;
     try {
       await api(`/api/studio/assets/${asset.id}`, { method: "DELETE" });
       setAssets((list) => (list ?? []).filter((entry) => entry.id !== asset.id));
@@ -211,6 +212,7 @@ export function AssetsPage() {
           {!assets && !error && <div className="col-span-full flex items-center justify-center gap-2 p-10 text-sm text-[#6b7c8f]"><Spinner /> Loading…</div>}
         </div>
       </main>
+      {confirmDialog}
     </>
   );
 }

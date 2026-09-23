@@ -62,7 +62,7 @@ export async function addSharedVoice(args: { publicOwnerId: string; voiceId: str
 
 export async function cloneVoice(args: { name: string; description?: string; removeBackgroundNoise?: boolean; files: Array<{ filename: string; bytes: Buffer; contentType: string }> }) {
   const { provider } = await requireProvider();
-  if (!provider.cloneVoice) throw new StudioError("The current voice provider cannot clone voices. Switch the provider to ElevenLabs in /admin/studio first.", 501);
+  if (!provider.cloneVoice) throw new StudioError("Voice cloning needs ElevenLabs. Ask an MLP administrator to connect it.", 501);
   const name = args.name.trim().slice(0, 60);
   if (!name) throw new StudioError("Give the new voice a name.");
   if (args.files.length === 0) throw new StudioError("Add at least one recording of the voice (30 seconds to a few minutes of clear speech).");
@@ -108,7 +108,7 @@ export async function voiceAccountStatus() {
  */
 export async function designVoicePreviews(args: { voiceDescription: string; text?: string }) {
   const { provider } = await requireProvider();
-  if (!provider.designVoice) throw new StudioError("The current voice provider cannot design voices. Switch the provider to ElevenLabs in /admin/studio first.", 501);
+  if (!provider.designVoice) throw new StudioError("Voice Design needs ElevenLabs. Ask an MLP administrator to connect it.", 501);
   const voiceDescription = args.voiceDescription.trim().slice(0, 1000);
   if (voiceDescription.length < 20) throw new StudioError("Describe the voice in a bit more detail (at least 20 characters) — for example the speaker's age, tone and accent.");
   try {

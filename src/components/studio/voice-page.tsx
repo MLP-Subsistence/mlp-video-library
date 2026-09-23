@@ -611,7 +611,7 @@ function SettingsTab({
       <div className="mt-6 border-t border-[#edf0f3] pt-4">
         <h3 className="text-sm font-extrabold text-[#243447]">Provider account</h3>
         <p className="mt-2 text-xs text-[#6b7c8f]">
-          Provider: {provider === "mock" ? "placeholder voice (development)" : "ElevenLabs"} · Model: {activeModelId}.{" "}
+          {provider === "mock" ? "Voices aren't set up yet — narration uses silent placeholder audio until an MLP administrator connects ElevenLabs." : `ElevenLabs · ${activeModel?.name ?? activeModelId}.`}{" "}
           {canManageVoices ? (
             <Link href="/studio/voices" className="font-bold text-[#a64026]">Plan, voice count and cloning limits are on the Voice Library page.</Link>
           ) : (

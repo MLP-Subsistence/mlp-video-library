@@ -8,7 +8,7 @@ import { AssetLibrary } from "@/components/studio/asset-library";
 import { LayoutEditor } from "@/components/studio/layout-editor";
 import { MediaMatchesPanel } from "@/components/studio/media-matches";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
-import { Field, InlineNotice, Spinner, StatusPill, inputClass, textareaClass } from "@/components/studio/ui";
+import { Field, InlineNotice, Spinner, StatusPill, inputClass, textareaClass, useConfirm } from "@/components/studio/ui";
 import { CompositionPreview } from "@/components/studio/workspace/composition-preview";
 import { api, debounce } from "@/lib/studio/client";
 import { compositionHasVisual } from "@/lib/studio/layouts";
@@ -28,6 +28,7 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
   const [musicOpen, setMusicOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "info" | "success" | "warning" | "error"; text: string } | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const active = template.segments.find((segment) => segment.id === activeId) ?? template.segments[0] ?? null;
   const patchTemplate = async (patch: Record<string, unknown>) => {
     const result = await api<{ template: TemplateDto }>(`/api/studio/templates/${template.id}`, { method: "PATCH", json: patch });
@@ -70,8 +71,8 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
       setActiveId(result.template.segments[index]?.id ?? result.template.segments[result.template.segments.length - 1].id);
     });
 
-  const removeSegment = (segment: TemplateSegmentDto) => {
-    if (!window.confirm(`Delete ${segment.key} "${segment.title}"?`)) return;
+  const removeSegment = async (segment: TemplateSegmentDto) => {
+    if (!(await confirm({ title: `Delete ${segment.key} "${segment.title}"?`, message: "The segment's script and visuals will be removed from this template." }))) return;
     void run("remove", async () => {
       const result = await api<{ template: TemplateDto }>(`/api/studio/templates/${template.id}/segments/${segment.id}`, { method: "DELETE" });
       setTemplate(result.template);
@@ -175,7 +176,7 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
                   </ul>
                 </div>
               )}
-              <button type="button" onClick={() => { if (window.confirm("Delete this master template? Only possible when it has no localization projects.")) void run("delete", async () => { await api(`/api/studio/templates/${template.id}`, { method: "DELETE" }); router.push("/studio/templates"); }); }} className="text-xs font-bold text-red-600">Delete template</button>
+              <button type="button" onClick={async () => { if (await confirm({ title: "Delete this master template?", message: "Only possible when it has no localization projects. This cannot be undone.", confirmLabel: "Delete template" })) void run("delete", async () => { await api(`/api/studio/templates/${template.id}`, { method: "DELETE" }); router.push("/studio/templates"); }); }} className="text-xs font-bold text-red-600">Delete template</button>
             </div>
           </aside>
 
@@ -229,6 +230,7 @@ export function TemplateEditor({ initial }: { initial: TemplateDto }) {
           void run("music", () => patchTemplate({ musicAssetId: asset.id }));
         }}
       />
+      {confirmDialog}
     </>
   );
 }

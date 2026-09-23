@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, FolderKanban, Languages, Plus, Trash2 } from "lucide-react";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
-import { EmptyState, Field, InlineNotice, Modal, Spinner, StatusPill, inputClass } from "@/components/studio/ui";
+import { EmptyState, Field, InlineNotice, Modal, Spinner, StatusPill, inputClass, useConfirm } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
 import { studioAudiences, studioLanguages, studioRegisters } from "@/lib/studio/languages";
 import type { LibraryPlaylistDto, ProjectSummaryDto } from "@/lib/studio/types";
@@ -30,9 +30,10 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
   const [projects, setProjects] = useState(initialProjects);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   async function remove(project: ProjectSummaryDto) {
-    if (!window.confirm(`Delete "${project.title} — ${project.targetLanguageName}"? Translations and narration for this localization will be removed.`)) return;
+    if (!(await confirm({ title: `Delete "${project.title} — ${project.targetLanguageName}"?`, message: "Translations and narration for this localization will be removed. This cannot be undone." }))) return;
     try {
       await api(`/api/studio/projects/${project.id}`, { method: "DELETE" });
       setProjects((list) => list.filter((entry) => entry.id !== project.id));
@@ -119,6 +120,7 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
         }}
         canManageTemplates={canManageTemplates}
       />
+      {confirmDialog}
     </>
   );
 }

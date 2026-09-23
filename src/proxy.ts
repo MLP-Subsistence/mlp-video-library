@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (!pathname.startsWith("/studio") || pathname.startsWith("/studio/login")) return NextResponse.next();
+  if (!pathname.startsWith("/studio") || pathname.startsWith("/studio/login") || pathname.startsWith("/studio/logout")) return NextResponse.next();
   if (request.cookies.get("mlp_admin_session")?.value) return NextResponse.next();
   const login = request.nextUrl.clone();
   login.pathname = "/studio/login";

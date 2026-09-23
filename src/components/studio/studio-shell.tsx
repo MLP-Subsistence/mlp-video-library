@@ -159,14 +159,14 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
           ))}
           <span className="flex-1" />
           <RailLink href="/resources" label="Public Library" icon={Images} plain />
-          <RailLink href="/admin/logout" label="Logout" icon={LogOut} plain />
+          <RailLink href="/studio/logout" label="Logout" icon={LogOut} plain />
         </aside>
       ) : (
         <aside className="fixed bottom-0 left-0 top-14 hidden w-[230px] flex-col overflow-y-auto border-r border-[#e5e7eb] bg-white px-5 py-6 lg:flex">
           {nav()}
           <div className="mt-auto space-y-2 border-t border-[#e5e7eb] pt-5">
             <a href="/resources" className="admin-sidebar-link"><Images className="size-4" /> Public Library</a>
-            <a href="/admin/logout" className="admin-sidebar-link"><LogOut className="size-4" /> Logout</a>
+            <a href="/studio/logout" className="admin-sidebar-link"><LogOut className="size-4" /> Logout</a>
           </div>
         </aside>
       )}
@@ -185,7 +185,7 @@ export function StudioShell({ user, children }: { user: StudioShellUser; childre
             {nav(true)}
             <div className="mt-5 space-y-2 border-t border-[#e5e7eb] pt-5">
               <a href="/resources" className="admin-sidebar-link min-h-12"><Images className="size-4" /> Public Library</a>
-              <a href="/admin/logout" className="admin-sidebar-link min-h-12"><LogOut className="size-4" /> Logout</a>
+              <a href="/studio/logout" className="admin-sidebar-link min-h-12"><LogOut className="size-4" /> Logout</a>
             </div>
           </aside>
         </div>

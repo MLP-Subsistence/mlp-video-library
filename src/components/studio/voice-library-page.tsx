@@ -192,11 +192,11 @@ export function VoiceLibraryPage() {
                   <div className="flex justify-between gap-2"><dt className="text-[#6b7c8f]">Voice cloning</dt><dd className="font-extrabold text-[#243447]">{account.status.canCloneVoices ? "Available" : "Not on this plan"}</dd></div>
                 </dl>
               ) : (
-                <p className="mt-2 text-xs text-[#6b7c8f]">Provider: {provider === "mock" ? "placeholder voice (development)" : "ElevenLabs"}</p>
+                <p className="mt-2 text-xs text-[#6b7c8f]">{provider === "mock" ? "Voices aren't set up yet. Ask an MLP administrator to connect ElevenLabs." : "ElevenLabs"}</p>
               )}
             </div>
             <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] text-xs text-[#6b7c8f]">
-              Choosing, previewing, browsing, cloning, designing and removing voices are all free. Only generating narration for a lesson uses that lesson&apos;s AI Voice credits — set per educator in <a href="/admin/studio" className="font-bold text-[#a64026]">Admin → Educator Studio</a>.
+              Choosing, previewing, browsing, cloning, designing and removing voices are all free. Only generating narration for a lesson uses AI Voice credits, which an MLP administrator sets for each educator.
             </div>
           </aside>
         </div>
@@ -297,7 +297,7 @@ function VoiceLibrary({ canManage, provider, onAdded, onNotice }: { canManage: b
       {!connected ? (
         <div className="mt-4">
           <InlineNotice tone="warning">
-            No voice provider is connected yet, so the library is empty. An administrator switches the provider to ElevenLabs in <a href="/admin/studio?tab=settings" className="font-bold underline">/admin/studio</a> once the API key is in place.
+            Voices aren&apos;t set up yet, so there&apos;s nothing to browse. Ask an MLP administrator to connect ElevenLabs.
           </InlineNotice>
         </div>
       ) : (
@@ -514,7 +514,7 @@ function VoiceCloner({ canManage, canClone, provider, onCloned, onNotice }: { ca
       <p className="mt-2 text-sm text-[#6b7c8f]">
         Upload recordings of one speaker — a minute or two of clear speech is plenty — and the provider builds a voice that can narrate any lesson. Cloning itself costs no credits; only generating narration does.
       </p>
-      {provider === "mock" && <div className="mt-4"><InlineNotice tone="warning">No voice provider is connected yet, so cloning is unavailable. An administrator sets ElevenLabs up in /admin/studio.</InlineNotice></div>}
+      {provider === "mock" && <div className="mt-4"><InlineNotice tone="warning">Voices aren&apos;t set up yet, so cloning is unavailable. Ask an MLP administrator to connect ElevenLabs.</InlineNotice></div>}
       {provider !== "mock" && !canClone && <div className="mt-4"><InlineNotice tone="warning">This provider plan does not include instant voice cloning.</InlineNotice></div>}
       {!canManage && <div className="mt-4"><InlineNotice tone="info">Only content managers and administrators can add voices to the shared MLP account.</InlineNotice></div>}
 
@@ -604,7 +604,7 @@ function VoiceDesigner({ canManage, provider, onSaved, onNotice }: { canManage: 
     <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-[#edf0f3] sm:p-6">
       <h3 className="inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-[#6b7c8f]"><Wand2 className="size-4" /> Voice Design</h3>
       <p className="mt-2 text-sm text-[#6b7c8f]">Describe the voice you want — age, tone, accent, pace — and generate a few candidates to listen to. Nothing is added to the account until you save one.</p>
-      {provider === "mock" && <div className="mt-4"><InlineNotice tone="warning">No voice provider is connected yet, so Voice Design is unavailable. An administrator sets ElevenLabs up in /admin/studio.</InlineNotice></div>}
+      {provider === "mock" && <div className="mt-4"><InlineNotice tone="warning">Voices aren&apos;t set up yet, so Voice Design is unavailable. Ask an MLP administrator to connect ElevenLabs.</InlineNotice></div>}
       {!canManage && <div className="mt-4"><InlineNotice tone="info">Only content managers and administrators can add voices to the shared MLP account.</InlineNotice></div>}
 
       <div className="mt-4 space-y-4">

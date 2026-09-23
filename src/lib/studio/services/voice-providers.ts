@@ -79,8 +79,8 @@ export const mockVoiceProvider: VoiceProvider = {
   configured: () => true,
   async listVoices() {
     return [
-      { id: "mock-female", name: "Placeholder Voice A", description: "Silent placeholder audio timed to the script (development only).", languages: ["*"] },
-      { id: "mock-male", name: "Placeholder Voice B", description: "Silent placeholder audio timed to the script (development only).", languages: ["*"] }
+      { id: "mock-female", name: "Placeholder Voice A", description: "Silent placeholder audio timed to the script, until voices are set up.", languages: ["*"] },
+      { id: "mock-male", name: "Placeholder Voice B", description: "Silent placeholder audio timed to the script, until voices are set up.", languages: ["*"] }
     ];
   },
   async synthesize(request) {
@@ -97,16 +97,16 @@ export const mockVoiceProvider: VoiceProvider = {
     return [];
   },
   async listModels() {
-    return [{ id: "eleven_multilingual_v2", name: "Placeholder model", description: "Development only — no provider is connected.", costFactor: 1 }];
+    return [{ id: "eleven_multilingual_v2", name: "Placeholder model", description: "Used until an MLP administrator connects ElevenLabs.", costFactor: 1 }];
   },
   async accountStatus() {
-    return { provider: "mock", tier: "development", characterCount: null, characterLimit: null, canCloneVoices: false, voicesUsed: null, voiceLimit: null };
+    return { provider: "mock", tier: "Not set up yet", characterCount: null, characterLimit: null, canCloneVoices: false, voicesUsed: null, voiceLimit: null };
   },
   async designVoice() {
-    throw new Error("Voice Design needs the ElevenLabs provider. An administrator connects it in /admin/studio.");
+    throw new Error("Voice Design needs ElevenLabs. Ask an MLP administrator to connect it.");
   },
   async saveDesignedVoice() {
-    throw new Error("Voice Design needs the ElevenLabs provider. An administrator connects it in /admin/studio.");
+    throw new Error("Voice Design needs ElevenLabs. Ask an MLP administrator to connect it.");
   }
 };
 
