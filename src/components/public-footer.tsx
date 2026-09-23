@@ -2,12 +2,12 @@ import Link from "next/link";
 import { Circle, Globe, GraduationCap, Play } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 
-export async function PublicFooter({ pushToBottom = true }: { pushToBottom?: boolean } = {}) {
+export async function PublicFooter() {
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   return (
     <>
       {/* Grows to push the footer to the bottom of short pages; 3.5rem gap otherwise. */}
-      {pushToBottom && <div aria-hidden className="min-h-14 flex-1" />}
+      <div aria-hidden className="min-h-14 flex-1" />
       <footer className="bg-[#624237] text-white">
         <div className="mlp-container grid gap-8 py-9 sm:py-10 md:grid-cols-[1.4fr_1fr_1fr] md:gap-10">
           <div>
