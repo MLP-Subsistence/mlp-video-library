@@ -157,14 +157,14 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid grid-cols-3 gap-1 border-b border-[#edf0f3] px-2 py-2">
+      <div className="grid grid-cols-[1.35fr_1fr_1fr] gap-1 border-b border-[#edf0f3] px-2 py-2">
         {tabs.map(({ id, label, icon: Icon, attention }) => (
           <button
             key={id}
             type="button"
             onClick={() => onTabChange(id)}
             aria-pressed={panelTab === id}
-            className={`relative inline-flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-bold ${panelTab === id ? "bg-[#fbeaea] text-[#a64026]" : "text-[#6b7c8f] hover:bg-[#f7f8fa]"}`}
+            className={`relative inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-1 text-xs font-bold sm:text-sm ${panelTab === id ? "bg-[#fbeaea] text-[#a64026]" : "text-[#6b7c8f] hover:bg-[#f7f8fa]"}`}
           >
             <Icon className="size-4" /> {label}
             {attention && <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-[#a64026]" aria-hidden />}
@@ -257,12 +257,6 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
               </div>
             )}
 
-            <div className="mt-3 rounded-xl border border-[#e5ccd0] bg-[#fff8f6] p-3" dir="auto">
-              <p className="text-[11px] font-extrabold uppercase tracking-wide text-[#a64026]">Read this while recording</p>
-              <p className="mt-1 whitespace-pre-wrap text-[1.0625rem] font-semibold leading-relaxed text-[#243447]">
-                {draft.trim() || segment.sourceScript || <span className="font-normal italic text-[#8b9bad]">Add or translate the script above before recording.</span>}
-              </p>
-            </div>
             {segment.narration.status === "needs_update" && (
               <div className="mt-3">
                 <InlineNotice tone="warning">The translation changed after this narration was made. Re-record, upload or regenerate it so the audio matches the text.</InlineNotice>
