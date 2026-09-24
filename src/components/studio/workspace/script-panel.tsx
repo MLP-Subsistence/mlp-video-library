@@ -10,7 +10,6 @@ import { TextControls } from "@/components/studio/workspace/text-controls";
 import type { ProjectController } from "@/components/studio/workspace/use-project";
 import { InlineNotice, Spinner, StatusPill, textareaClass } from "@/components/studio/ui";
 import { api, debounce, kindForFile, uploadAsset } from "@/lib/studio/client";
-import { formatSeconds } from "@/lib/studio/timing";
 import type { Composition, ProjectDto, ProjectSegmentDto, StudioAssetDto, TextOverlay } from "@/lib/studio/types";
 
 type NarrationTab = "record" | "ai" | "upload";
@@ -145,8 +144,6 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
     });
 
   const translationTone = segment.translationStatus === "approved" ? "ready" : segment.translationStatus === "draft" ? "warning" : "muted";
-  const narrationTone = segment.narration.status === "ready" ? "ready" : segment.narration.status === "missing" ? "muted" : "warning";
-  const narrationLabel = { missing: "Missing", ready: "Ready", needs_update: "Needs updating", needs_review: "Needs review" }[segment.narration.status];
   const canGenerateVoice = Boolean(project.defaultVoiceId || segment.voiceIdOverride);
 
   const tabs: Array<{ id: PanelTab; label: string; icon: typeof FileText; attention: boolean }> = [
@@ -239,16 +236,8 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
 
         {panelTab === "script" && (
           <section className={`border-t border-[#edf0f3] pt-4 ${focusTrack === "audio" ? "rounded-xl p-2 ring-2 ring-[#a64026]/40" : ""}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Narration</h3>
-              <div className="flex items-center gap-2">
-                <StatusPill tone={narrationTone}>{narrationLabel}</StatusPill>
-                <span className="text-sm font-extrabold tabular-nums text-[#a64026]">{segment.narration.durationSec > 0 ? formatSeconds(segment.narration.durationSec) : "—"}</span>
-              </div>
-            </div>
-
             {segment.narration.url && (
-              <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#d8dde5] bg-white p-2">
+              <div className="flex items-center gap-2 rounded-lg border border-[#d8dde5] bg-white p-2">
                 <NarrationPlayer url={segment.narration.url} startSec={segment.narration.startSec} endSec={segment.narration.endSec} />
                 <span className="hidden text-xs font-bold text-[#6b7c8f] sm:inline">{sourceLabel(segment.narration.source)}</span>
                 <button type="button" onClick={() => run("remove", () => patchSegment(segment, { narration: null }))} className="grid size-9 shrink-0 place-items-center rounded-md border border-red-200 text-red-600" aria-label="Remove narration" title="Remove narration">
