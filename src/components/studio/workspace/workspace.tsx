@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Settings2, Undo2, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { ArrowRight, AudioLines, Captions, ChevronDown, Download, FileText, Film, ChevronLeft, ChevronRight, ChevronUp, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Settings2, Undo2, Wand2 } from "lucide-react";
 import { AssetLibrary } from "@/components/studio/asset-library";
 import { Flag, projectFlag } from "@/components/studio/language-picker";
 import { LayoutEditor } from "@/components/studio/layout-editor";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { ActionMenu, InlineNotice, MenuItem, Spinner, StatusPill } from "@/components/studio/ui";
 import { CompositionPreview } from "@/components/studio/workspace/composition-preview";
+import { buildSrt, download, fileBaseName, mixNarration } from "@/components/studio/workspace/export";
 import { FullNarrationModal } from "@/components/studio/workspace/full-narration";
+import { rememberMeanings } from "@/components/studio/workspace/meaning-cache";
 import { ScriptPanel, type PanelTab } from "@/components/studio/workspace/script-panel";
 import { SegmentList } from "@/components/studio/workspace/segment-list";
 import { Timeline, type TimelineTrack } from "@/components/studio/workspace/timeline";
@@ -27,6 +29,52 @@ const GRID_COLUMNS: Record<string, string> = {
   "false:true": "lg:grid-cols-[2.75rem_minmax(0,1fr)_21.25rem] xl:grid-cols-[2.75rem_minmax(0,1fr)_25rem]",
   "false:false": "lg:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]"
 };
+
+type SubtitleMode = "off" | "source" | "target";
+const SUBTITLE_KEY = "mlp-studio-subtitles";
+const subtitleListeners = new Set<() => void>();
+
+/** Preview subtitles, remembered per browser. English over foreign narration lets a non-speaker follow along. */
+function useSubtitleMode() {
+  const mode = useSyncExternalStore(
+    (listener) => {
+      subtitleListeners.add(listener);
+      return () => subtitleListeners.delete(listener);
+    },
+    () => {
+      try {
+        const stored = window.localStorage.getItem(SUBTITLE_KEY);
+        return stored === "off" || stored === "target" ? stored : "source";
+      } catch {
+        return "source";
+      }
+    },
+    () => "source" as SubtitleMode
+  ) as SubtitleMode;
+  const set = (next: SubtitleMode) => {
+    try {
+      window.localStorage.setItem(SUBTITLE_KEY, next);
+    } catch {
+      /* private mode */
+    }
+    for (const listener of subtitleListeners) listener();
+  };
+  return [mode, set] as const;
+}
+
+function SubtitleSwitch({ value, onChange, targetLanguage }: { value: SubtitleMode; onChange: (mode: SubtitleMode) => void; targetLanguage: string }) {
+  const options: Array<[SubtitleMode, string]> = [["off", "Off"], ["source", "English"], ["target", targetLanguage]];
+  return (
+    <div className="inline-flex h-10 items-center gap-1 rounded-lg border border-[#d8dde5] bg-white px-1" role="group" aria-label="Preview subtitles">
+      <Captions className="ml-1.5 size-4 text-[#6b7c8f]" aria-hidden />
+      {options.map(([mode, label]) => (
+        <button key={mode} type="button" onClick={() => onChange(mode)} aria-pressed={value === mode} title={mode === "source" ? "Show each segment's English line — useful when you don't speak the narration language" : undefined} className={`h-8 max-w-[8rem] truncate rounded-md px-2 text-xs font-bold ${value === mode ? "bg-[#fbeaea] text-[#a64026]" : "text-[#6b7c8f] hover:bg-[#f7f8fa]"}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** A folded side column: one tall button that reopens it, with the panel name written vertically. */
 function CollapsedRail({ label, badge, icon: Icon, onExpand, className = "" }: { label: string; badge?: string; icon: typeof PanelLeftOpen; onExpand: () => void; className?: string }) {
@@ -68,6 +116,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const [selectedTrack, setSelectedTrack] = useState<TimelineTrack>("video");
   const [translating, setTranslating] = useState<{ done: number; remaining: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [subtitles, setSubtitles] = useSubtitleMode();
   const summary = summarizeProject(project);
 
   // Selecting a segment (from any panel) parks the playhead at its start.
@@ -116,7 +165,8 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
       let remaining = 1;
       let done = 0;
       while (remaining > 0) {
-        const result = await api<{ translated: number; remaining: number; project: ProjectDto }>(`/api/studio/projects/${project.id}/translate`, { method: "POST", json: { mode: "missing" } });
+        const result = await api<{ translated: number; remaining: number; project: ProjectDto; backTranslations?: Record<string, { text: string; english: string }> }>(`/api/studio/projects/${project.id}/translate`, { method: "POST", json: { mode: "missing" } });
+        rememberMeanings(result.backTranslations);
         controller.setProject(result.project);
         done += result.translated;
         remaining = result.remaining;
@@ -128,6 +178,21 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
       setNotice((caught as Error).message);
     } finally {
       setTranslating(null);
+    }
+  };
+
+  const exportSubtitles = (language: "target" | "source") => {
+    const suffix = language === "target" ? "subtitles" : "English subtitles";
+    download(new Blob([buildSrt(project, language)], { type: "application/x-subrip;charset=utf-8" }), `${fileBaseName(project)} - ${suffix}.srt`);
+  };
+
+  const exportNarration = async () => {
+    setNotice("Preparing the narration audio…");
+    try {
+      download(await mixNarration(project), `${fileBaseName(project)} - narration.wav`);
+      setNotice("Narration audio downloaded.");
+    } catch (caught) {
+      setNotice((caught as Error).message || "The narration audio could not be prepared.");
     }
   };
 
@@ -178,8 +243,16 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </button>
             <ActionMenu label="Lesson tools">
               <MenuItem icon={Wand2} onClick={translateLesson} disabled={Boolean(translating)} hint="Fill every empty segment with an AI draft">Translate entire lesson</MenuItem>
-              <MenuItem icon={ListMusic} onClick={() => setFullNarrationOpen(true)} hint="One long recording, split across the segments">Import full narration</MenuItem>
+              <MenuItem icon={ListMusic} onClick={() => setFullNarrationOpen(true)} hint="Split one recording (or a narrated video) into the segments">Use one recording for the whole lesson</MenuItem>
               <MenuItem icon={Settings2} onClick={() => setSettingsOpen(true)} hint="Language, region, dialect, audience, glossary">Translation settings</MenuItem>
+            </ActionMenu>
+            <ActionMenu label="Export" icon={Download} variant="dark">
+              <MenuItem icon={Film} href={project.renderedAssetUrl ?? undefined} download={`${fileBaseName(project)}.mp4`} disabled={!project.renderedAssetUrl} hint={project.renderedAssetUrl ? "The finished lesson" : "Generate it on Review & Generate first"}>Video (MP4)</MenuItem>
+              <MenuItem icon={AudioLines} onClick={() => void exportNarration()} disabled={!project.segments.some((segment) => segment.narration.url)} hint="All narration on one track, timed like the lesson">Narration audio (WAV)</MenuItem>
+              <MenuItem icon={Captions} onClick={() => exportSubtitles("target")} disabled={!project.segments.some((segment) => segment.translation.trim())} hint="Timed to the narration">{`Subtitles — ${project.targetLanguageName} (.srt)`}</MenuItem>
+              <MenuItem icon={Captions} onClick={() => exportSubtitles("source")} hint="The original English lines, same timing">Subtitles — English (.srt)</MenuItem>
+              <MenuItem icon={FileText} href={`/api/studio/projects/${project.id}/export?format=docx&approved=0`} hint="Original and translation side by side">Script (Word)</MenuItem>
+              <MenuItem icon={FileText} href={`/api/studio/projects/${project.id}/export?format=html&print=1&approved=0`} newTab hint="Opens a print page — choose Save as PDF">Script (PDF)</MenuItem>
             </ActionMenu>
             <Link href={`/studio/projects/${project.id}/review`} className="mlp-btn-primary h-10">
               <span className="hidden sm:inline">Review &amp; Generate</span><span className="sm:hidden">Review</span> <ArrowRight className="size-4" />
@@ -246,6 +319,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
                   controller.setLocalComposition(previewSegment.id, composition);
                   void patchSegment(previewSegment, { composition });
                 }}
+                subtitle={subtitles === "source" ? previewSegment.sourceScript : subtitles === "target" ? previewSegment.translation : null}
                 className="mx-auto max-w-4xl shadow-md"
               />
             )}
@@ -256,6 +330,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
               <button type="button" onClick={() => activeSegment && (contextPlaying ? player.pause() : player.playAround(activeSegment.segmentId))} className="mlp-btn-outline h-10 whitespace-nowrap" disabled={!activeSegment || project.segments.length < 2} title="Play the end of the previous segment, this one and the start of the next, to hear how they flow together">
                 {contextPlaying ? <Pause className="size-4" /> : <ListMusic className="size-4" />} {contextPlaying ? "Stop" : "Hear in context"}
               </button>
+              <SubtitleSwitch value={subtitles} onChange={setSubtitles} targetLanguage={project.targetLanguageName} />
               <span className="hidden lg:contents">
                 <button type="button" onClick={() => togglePanel("preview")} className="mlp-btn-outline h-10 whitespace-nowrap" title="Fold the preview away so the timeline gets more room"><ChevronUp className="size-4" /> Hide preview</button>
               </span>
@@ -289,7 +364,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </div>
           )}
           <div className={`flex min-h-0 flex-1 flex-col ${panels.script ? "" : "lg:hidden"}`}>
-          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onChangeVisual={changeVisual} onOpenLayout={openLayout} tab={panelTab} onTabChange={setPanelTab} focusTrack={selectedTrack} />
+          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onOpenFullNarration={() => setFullNarrationOpen(true)} onChangeVisual={changeVisual} onOpenLayout={openLayout} tab={panelTab} onTabChange={setPanelTab} focusTrack={selectedTrack} />
           </div>
         </aside>
       </div>

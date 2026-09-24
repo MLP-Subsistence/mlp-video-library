@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { ok, readJson, requireProjectAccess, requireStudioApiUser, StudioError, studioRoute } from "@/lib/studio/access";
 import { loadProjectDto } from "@/lib/studio/project-state";
 import { scriptHash } from "@/lib/studio/services/credits";
-import { TRANSLATION_BATCH_SIZE, translateSegments, translationConfigured } from "@/lib/studio/services/translation";
+import { TRANSLATION_BATCH_SIZE, translateSegments, translationConfigured, translationModel } from "@/lib/studio/services/translation";
 import { getStudioSettings } from "@/lib/studio/settings";
 
 type Params = { params: Promise<{ id: string }> };
@@ -18,13 +18,17 @@ const languageNames: Record<string, string> = { en: "English", fr: "French", es:
  * mode "regenerate": the given segments, even when they already have text —
  *   this is the explicit "Regenerate" action, so human edits are replaced
  *   only when the educator asked for exactly that segment.
+ * englishOverride: with one segment, translate this English wording instead of
+ *   the master script — how someone who can't read the target language edits.
  */
 export const POST = studioRoute(async (request: Request, { params }: Params) => {
   const user = await requireStudioApiUser();
   const { id } = await params;
   const project = await requireProjectAccess(user, id);
   if (!translationConfigured()) throw new StudioError("Translation is not set up on this server yet. Please contact the MLP administrator.", 503);
-  const body = await readJson<{ segmentIds?: string[]; mode?: "missing" | "regenerate" }>(request);
+  const body = await readJson<{ segmentIds?: string[]; mode?: "missing" | "regenerate"; englishOverride?: string }>(request);
+  const englishOverride = typeof body.englishOverride === "string" ? body.englishOverride.replace(/[<>]/g, "").trim().slice(0, 2000) : "";
+  if (englishOverride && (!Array.isArray(body.segmentIds) || body.segmentIds.length !== 1)) throw new StudioError("Rewrite from English works on one segment at a time.");
   const mode = body.mode === "regenerate" ? "regenerate" : "missing";
 
   const rows = await prisma.studioProjectSegment.findMany({
@@ -34,7 +38,7 @@ export const POST = studioRoute(async (request: Request, { params }: Params) => 
   });
   const requested = new Set(Array.isArray(body.segmentIds) ? body.segmentIds : []);
   const candidates = rows.filter((row) => {
-    if (!row.segment.sourceScript.trim()) return false;
+    if (!row.segment.sourceScript.trim() && !englishOverride) return false;
     if (requested.size && !requested.has(row.id)) return false;
     if (mode === "regenerate") return true;
     // Never overwrite a human edit or an existing AI translation in "missing" mode.
@@ -57,14 +61,15 @@ export const POST = studioRoute(async (request: Request, { params }: Params) => 
       audience: project.audience,
       register: project.register,
       glossary: combinedGlossary,
-      model: settings.translationModel
+      model: translationModel(settings.translationModel),
+      lessonScript: rows.filter((row) => row.segment.sourceScript.trim()).map((row) => ({ key: row.segment.key, text: row.segment.sourceScript }))
     },
     batch.map((row) => {
       const index = byIndex.get(row.id)!;
       return {
         key: row.segment.key,
         title: row.segment.title,
-        sourceScript: row.segment.sourceScript,
+        sourceScript: englishOverride || row.segment.sourceScript,
         before: rows[index - 1]?.segment.sourceScript ?? null,
         after: rows[index + 1]?.segment.sourceScript ?? null
       };
@@ -91,5 +96,7 @@ export const POST = studioRoute(async (request: Request, { params }: Params) => 
       });
     })
   );
-  return ok({ translated: results.length, remaining: Math.max(0, candidates.length - batch.length), project: await loadProjectDto(id, user) });
+  // Keyed by project segment, so the workspace can show "what this says in English" straight away.
+  const backTranslations = Object.fromEntries(results.map((result) => [batch.find((entry) => entry.segment.key === result.key)!.id, { text: result.translation, english: result.backTranslation }]));
+  return ok({ translated: results.length, remaining: Math.max(0, candidates.length - batch.length), backTranslations, project: await loadProjectDto(id, user) });
 });

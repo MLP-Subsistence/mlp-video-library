@@ -151,7 +151,7 @@ export function InlineNotice({ tone = "info", children, onDismiss }: { tone?: "i
  * `<details>` keeps it keyboard accessible without a popover library; it
  * closes on outside click, on Escape and after any item is chosen.
  */
-export function ActionMenu({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
+export function ActionMenu({ label, children, className = "", icon: Icon, variant = "outline" }: { label: string; children: ReactNode; className?: string; icon?: typeof Info; variant?: "outline" | "dark" }) {
   const ref = useRef<HTMLDetailsElement | null>(null);
   useEffect(() => {
     const close = (event: Event) => {
@@ -170,8 +170,8 @@ export function ActionMenu({ label, children, className = "" }: { label: string;
   }, []);
   return (
     <details ref={ref} className={`relative ${className}`}>
-      <summary className="mlp-btn-outline h-10 cursor-pointer list-none [&::-webkit-details-marker]:hidden" aria-label={label}>
-        {label} <ChevronDown className="size-4" />
+      <summary className={`${variant === "dark" ? "mlp-btn-dark rounded-lg" : "mlp-btn-outline"} h-10 cursor-pointer list-none [&::-webkit-details-marker]:hidden`} aria-label={label}>
+        {Icon && <Icon className="size-4" />} {label} <ChevronDown className="size-4" />
       </summary>
       <div className="absolute right-0 z-40 mt-1 w-64 rounded-xl border border-[#e5e7eb] bg-white p-1 shadow-lg" onClick={() => { if (ref.current) ref.current.open = false; }}>
         {children}
@@ -180,7 +180,7 @@ export function ActionMenu({ label, children, className = "" }: { label: string;
   );
 }
 
-export function MenuItem({ icon: Icon, children, onClick, href, disabled, hint }: { icon?: typeof Info; children: ReactNode; onClick?: () => void; href?: string; disabled?: boolean; hint?: string }) {
+export function MenuItem({ icon: Icon, children, onClick, href, download, newTab, disabled, hint }: { icon?: typeof Info; children: ReactNode; onClick?: () => void; href?: string; download?: string; newTab?: boolean; disabled?: boolean; hint?: string }) {
   const className = "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-[#243447] hover:bg-[#f7f8fa] disabled:opacity-40";
   const body = (
     <>
@@ -191,7 +191,7 @@ export function MenuItem({ icon: Icon, children, onClick, href, disabled, hint }
       </span>
     </>
   );
-  if (href) return <a href={href} className={className}>{body}</a>;
+  if (href && !disabled) return <a href={href} download={download} target={newTab ? "_blank" : undefined} rel={newTab ? "noreferrer" : undefined} className={className}>{body}</a>;
   return <button type="button" onClick={onClick} disabled={disabled} className={className}>{body}</button>;
 }
 

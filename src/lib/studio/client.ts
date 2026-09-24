@@ -116,7 +116,7 @@ async function decodeAudioDuration(file: Blob) {
 export type UploadProgress = (fraction: number) => void;
 
 /** Sign → PUT directly to storage → register. Returns the stored asset. */
-export async function uploadAsset(file: File | Blob, options: { kind: AssetKind; name?: string; folder?: string; tags?: string; onProgress?: UploadProgress }): Promise<StudioAssetDto> {
+export async function uploadAsset(file: File | Blob, options: { kind: AssetKind; name?: string; folder?: string; tags?: string; onProgress?: UploadProgress; measured?: { width?: number; height?: number; durationSec?: number } }): Promise<StudioAssetDto> {
   const name = options.name || (file instanceof File ? file.name : `${options.kind}-${Date.now()}`);
   const mimeType = file instanceof File ? mimeForFile(file, options.kind) : file.type.split(";")[0] || "application/octet-stream";
   const signed = await api<{ method: "PUT"; url: string; headers: Record<string, string>; storageKey: string; mimeType: string }>("/api/studio/uploads/sign", {
@@ -124,7 +124,7 @@ export async function uploadAsset(file: File | Blob, options: { kind: AssetKind;
     json: { name, mimeType, size: file.size, kind: options.kind, folder: options.folder }
   });
   await putWithProgress(signed.url, file, signed.headers, options.onProgress);
-  const measured = await measureMedia(file, options.kind);
+  const measured = options.measured ?? (await measureMedia(file, options.kind));
   const registered = await api<{ asset: StudioAssetDto }>("/api/studio/assets", {
     method: "POST",
     json: { storageKey: signed.storageKey, name, mimeType: signed.mimeType, size: file.size, kind: options.kind, tags: options.tags, ...measured }

@@ -18,6 +18,7 @@ export function CompositionPreview({
   timeSec,
   playing,
   caption,
+  subtitle,
   editText = false,
   onTextMove,
   className = ""
@@ -28,6 +29,8 @@ export function CompositionPreview({
   timeSec: number;
   playing: boolean;
   caption?: string;
+  /** Editing aid only (e.g. the English line over foreign narration); never part of the rendered video. */
+  subtitle?: string | null;
   editText?: boolean;
   onTextMove?: (overlay: TextOverlay) => void;
   className?: string;
@@ -36,7 +39,7 @@ export function CompositionPreview({
   const localTime = block ? Math.max(0, timeSec - block.startSec) : 0;
   const duration = block?.durationSec ?? 1;
   return (
-    <div className={`relative aspect-video w-full overflow-hidden rounded-xl bg-black ${className}`}>
+    <div className={`relative aspect-video w-full overflow-hidden rounded-xl bg-black [container-type:inline-size] ${className}`}>
       {composition.slots.map((slot, index) => {
         const rect = layout.slots[index];
         if (!rect) return null;
@@ -86,6 +89,11 @@ export function CompositionPreview({
         );
       })}
       {composition.textOverlay?.text.trim() && <OnScreenText overlay={composition.textOverlay} editable={editText} onChange={onTextMove} />}
+      {subtitle && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[5%] z-30 flex justify-center px-[6%]">
+          <span dir="auto" className="rounded-md bg-black/75 px-[0.6em] py-[0.25em] text-center text-[max(0.8rem,2.3cqw)] font-semibold leading-snug text-white [box-decoration-break:clone]">{subtitle}</span>
+        </div>
+      )}
       {caption && <div className="absolute bottom-3 left-3 rounded bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white/90">{caption}</div>}
     </div>
   );

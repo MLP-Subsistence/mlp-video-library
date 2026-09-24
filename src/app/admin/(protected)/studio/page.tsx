@@ -127,7 +127,7 @@ export default async function AdminStudioPage({ searchParams }: { searchParams: 
               <option value="elevenlabs">ElevenLabs (requires ELEVENLABS_API_KEY)</option>
             </SelectField>
             <TextField label="Voice model" name="voiceModel" defaultValue={settings.voiceModel} />
-            <TextField label="Translation model" name="translationModel" defaultValue={settings.translationModel} />
+            <TextField label="Translation model (gpt-4.1 recommended; the old default gpt-4.1-mini is upgraded to it automatically)" name="translationModel" defaultValue={settings.translationModel} />
             <TextField label="Transcription model (full narration alignment)" name="transcriptionModel" defaultValue={settings.transcriptionModel} />
             <TextField label="Global AI Voice credit pool (0 = no cap)" name="globalCreditPool" type="number" defaultValue={settings.globalCreditPool} />
             <SelectField label="Main lesson playlist (shown first in New Localization)" name="defaultPlaylistId" defaultValue={settings.defaultPlaylistId ?? ""}>

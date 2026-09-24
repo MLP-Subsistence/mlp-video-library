@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "fs/promises";
 import path from "path";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
@@ -33,6 +33,8 @@ export type StorageDriver = {
   signUpload(key: string, contentType: string, maxBytes: number): Promise<SignedUpload>;
   put(key: string, bytes: Buffer | Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<Buffer | null>;
+  /** Whether the object exists, without downloading it. */
+  exists(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
   /** For the worker: an absolute filesystem path when the object is local, otherwise null. */
   localPath(key: string): string | null;
@@ -115,6 +117,14 @@ function createLocalDriver(): StorageDriver {
         return null;
       }
     },
+    async exists(key) {
+      try {
+        await stat(resolve(key));
+        return true;
+      } catch {
+        return false;
+      }
+    },
     async delete(key) {
       await rm(resolve(key), { force: true });
     },
@@ -167,6 +177,14 @@ function createS3Driver(): StorageDriver {
         return null;
       }
     },
+    async exists(key) {
+      try {
+        await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
     async delete(key) {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     },
@@ -182,18 +200,9 @@ export function storage(): StorageDriver {
   return cached;
 }
 
+// Used right after every upload: must not download the object (it can be a 1 GB video).
 export async function storageObjectExists(key: string) {
-  const driver = storage();
-  const local = driver.localPath(key);
-  if (local) {
-    try {
-      await stat(local);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return (await driver.get(key)) !== null;
+  return storage().exists(key);
 }
 
 export const uploadLimits = {

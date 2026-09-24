@@ -7,6 +7,7 @@ import { isAdminRole, normalizeRole, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { cleanOptional, cleanText } from "@/lib/sanitize";
 import { getStudioSettings } from "@/lib/studio/settings";
+import { RECOMMENDED_TRANSLATION_MODEL } from "@/lib/studio/services/translation";
 
 const PAGE = "/admin/studio";
 
@@ -75,7 +76,7 @@ export async function updateStudioSettingsAction(formData: FormData) {
     data: {
       voiceProvider: provider,
       voiceModel: cleanText(formData.get("voiceModel")) || "eleven_multilingual_v2",
-      translationModel: cleanText(formData.get("translationModel")) || "gpt-4.1-mini",
+      translationModel: cleanText(formData.get("translationModel")) || RECOMMENDED_TRANSLATION_MODEL,
       transcriptionModel: cleanText(formData.get("transcriptionModel")) || "whisper-1",
       globalCreditPool: Math.max(0, Math.round(Number(formData.get("globalCreditPool")) || 0)),
       glossary: (cleanOptional(formData.get("glossary")) ?? "").slice(0, 8000),

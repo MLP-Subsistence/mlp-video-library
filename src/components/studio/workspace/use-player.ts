@@ -6,25 +6,47 @@ import { blockAtTime } from "@/lib/studio/timing";
 import type { ProjectDto, TimelineBlock } from "@/lib/studio/types";
 
 /**
- * Browser preview player. The lesson clock runs on requestAnimationFrame;
- * while a segment's narration exists, a hidden <audio> element plays it and
- * the clock follows the audio so lip-sync with the timeline is exact. During
- * educational pauses (and for segments without narration) the clock simply
- * advances. No rendering is needed to preview: visuals are laid out live.
+ * Browser preview player. The lesson clock runs on requestAnimationFrame and
+ * follows the narration audio while a segment speaks, so the timeline and
+ * voice stay in step; during pauses (and segments without narration) the
+ * clock simply advances.
+ *
+ * Each narration file gets its own preloaded <audio> element, and the next
+ * segment's file is loaded ahead of time. When a narration is still loading,
+ * the clock waits for it instead of running on, so the first words of a
+ * segment are never skipped, and every play starts the same way.
  */
 export type PlayRange = { startSec: number; endSec: number; label: string; kind: "segment" | "context" } | null;
+
+const MAX_AUDIO_ELEMENTS = 8;
+/** Give up waiting for a narration that won't load, rather than freezing the preview. */
+const MAX_WAIT_MS = 4000;
+
+type NarrationSpot = { block: TimelineBlock; url: string; startSec: number; durationSec: number; localTime: number; inside: boolean } | null;
+
+function absolute(url: string) {
+  try {
+    return new URL(url, window.location.href).href;
+  } catch {
+    return url;
+  }
+}
 
 export function usePreviewPlayer(project: ProjectDto) {
   const [timeSec, setTimeSec] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [range, setRange] = useState<PlayRange>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [buffering, setBuffering] = useState(false);
+  const [range, setRangeState] = useState<PlayRange>(null);
+  const rangeRef = useRef<PlayRange>(null);
+  const elements = useRef(new Map<string, HTMLAudioElement>());
+  const active = useRef<HTMLAudioElement | null>(null);
   const frame = useRef<number | null>(null);
-  const lastTick = useRef<number>(0);
+  const lastTick = useRef(0);
+  const waitingSince = useRef<number | null>(null);
   const timeRef = useRef(0);
-  const blockRef = useRef<TimelineBlock | null>(null);
-  const projectRef = useRef(project);
+  const playingRef = useRef(false);
   const tickRef = useRef<(now: number) => void>(() => undefined);
+  const projectRef = useRef(project);
   useEffect(() => {
     projectRef.current = project;
   }, [project]);
@@ -32,55 +54,89 @@ export function usePreviewPlayer(project: ProjectDto) {
   const timeline = project.timeline;
   const currentBlock = useMemo(() => blockAtTime(timeline, timeSec), [timeline, timeSec]);
 
-  const ensureAudio = useCallback(() => {
-    if (!audioRef.current && typeof window !== "undefined") {
-      const element = new Audio();
-      element.preload = "auto";
-      audioRef.current = element;
+  const setRange = (next: PlayRange) => {
+    rangeRef.current = next;
+    setRangeState(next);
+  };
+
+  const element = useCallback((url: string) => {
+    const key = absolute(url);
+    const cache = elements.current;
+    let audio = cache.get(key);
+    if (audio) {
+      cache.delete(key);
+      cache.set(key, audio);
+      return audio;
     }
-    return audioRef.current;
+    audio = new Audio();
+    audio.preload = "auto";
+    audio.src = key;
+    cache.set(key, audio);
+    while (cache.size > MAX_AUDIO_ELEMENTS) {
+      const [oldestKey, oldest] = cache.entries().next().value as [string, HTMLAudioElement];
+      if (oldest === active.current) break;
+      oldest.pause();
+      oldest.removeAttribute("src");
+      oldest.load();
+      cache.delete(oldestKey);
+    }
+    return audio;
   }, []);
 
-  /** Point the audio element at the narration that covers `time`, seeking inside it. */
+  const narrationAt = useCallback((time: number): NarrationSpot => {
+    const current = projectRef.current;
+    const block = blockAtTime(current.timeline, time);
+    if (!block) return null;
+    const segment = current.segments.find((entry) => entry.segmentId === block.segmentId);
+    const narration = segment?.narration;
+    if (!narration?.url || narration.durationSec <= 0) return null;
+    const localTime = time - block.startSec - block.pauseBeforeSec;
+    return { block, url: narration.url, startSec: narration.startSec ?? 0, durationSec: narration.durationSec, localTime, inside: localTime >= 0 && localTime < narration.durationSec };
+  }, []);
+
+  /** Load the narration of the block after `block`, so the hand-over is seamless. */
+  const preloadAfter = useCallback(
+    (block: TimelineBlock) => {
+      const next = projectRef.current.timeline.blocks[block.index + 1];
+      if (!next) return;
+      const segment = projectRef.current.segments.find((entry) => entry.segmentId === next.segmentId);
+      if (segment?.narration.url) element(segment.narration.url);
+    },
+    [element]
+  );
+
+  /** Point the right audio element at `time`, and play or pause it. */
   const syncAudio = useCallback(
     (time: number, shouldPlay: boolean) => {
-      const audio = ensureAudio();
-      if (!audio) return;
-      const current = projectRef.current;
-      const block = blockAtTime(current.timeline, time);
-      blockRef.current = block;
-      const segment = block ? current.segments.find((entry) => entry.segmentId === block.segmentId) : null;
-      const narration = segment?.narration;
-      const localTime = block ? time - block.startSec - block.pauseBeforeSec : -1;
-      const withinNarration = block && narration?.url && narration.durationSec > 0 && localTime >= 0 && localTime < narration.durationSec;
-      if (!withinNarration || !narration?.url || !block) {
-        if (!audio.paused) audio.pause();
+      const spot = narrationAt(time);
+      if (!spot || !spot.inside) {
+        active.current?.pause();
+        if (spot) preloadAfter(spot.block);
         return;
       }
-      const offset = (narration.startSec ?? 0) + localTime;
-      if (audio.src !== narration.url) {
-        audio.src = narration.url;
-        audio.load();
-      }
-      const seekTo = Math.max(0, offset);
-      if (Math.abs(audio.currentTime - seekTo) > 0.25) {
-        try {
-          audio.currentTime = seekTo;
-        } catch {
-          audio.addEventListener("loadedmetadata", () => (audio.currentTime = seekTo), { once: true });
-        }
+      const audio = element(spot.url);
+      if (active.current && active.current !== audio) active.current.pause();
+      active.current = audio;
+      const target = spot.startSec + Math.max(0, spot.localTime);
+      if (audio.ended || Math.abs(audio.currentTime - target) > 0.25) {
+        if (audio.readyState >= 1) audio.currentTime = target;
+        else audio.addEventListener("loadedmetadata", () => (audio.currentTime = target), { once: true });
       }
       if (shouldPlay && audio.paused) void audio.play().catch(() => undefined);
       if (!shouldPlay && !audio.paused) audio.pause();
+      preloadAfter(spot.block);
     },
-    [ensureAudio]
+    [element, narrationAt, preloadAfter]
   );
 
   const stop = useCallback(() => {
+    playingRef.current = false;
     setPlaying(false);
+    setBuffering(false);
+    waitingSince.current = null;
     if (frame.current) cancelAnimationFrame(frame.current);
     frame.current = null;
-    audioRef.current?.pause();
+    active.current?.pause();
   }, []);
 
   // Voice samples, recordings and the original clip stop the lesson preview when they start, and vice versa.
@@ -90,26 +146,36 @@ export function usePreviewPlayer(project: ProjectDto) {
     externalStop.current = stopFromOutside;
     return registerExternalPlayer(stopFromOutside);
   }, [stop]);
-  const silenceOthers = useCallback(() => {
-    stopPreview();
-    pauseOtherAudio(null, externalStop.current);
-  }, []);
 
   const tick = useCallback(
     (now: number) => {
+      if (!playingRef.current) return;
       const dt = Math.min(0.25, (now - lastTick.current) / 1000);
       lastTick.current = now;
-      const current = projectRef.current;
-      const audio = audioRef.current;
-      let next = timeRef.current + dt;
-      const block = blockAtTime(current.timeline, timeRef.current);
-      const segment = block ? current.segments.find((entry) => entry.segmentId === block.segmentId) : null;
-      const narration = segment?.narration;
-      if (block && narration?.url && narration.durationSec > 0 && audio && audio.src === narration.url && !audio.paused && !audio.ended) {
-        const audioOffset = audio.currentTime - (narration.startSec ?? 0);
-        if (audioOffset >= 0 && audioOffset <= narration.durationSec + 0.05) next = block.startSec + block.pauseBeforeSec + Math.min(audioOffset, narration.durationSec);
+      const time = timeRef.current;
+      const spot = narrationAt(time);
+      let next = time + dt;
+      let waiting = false;
+      if (spot?.inside) {
+        const audio = active.current;
+        const ours = audio && audio.src === absolute(spot.url);
+        if (ours && !audio.paused && !audio.seeking && audio.readyState >= 3) {
+          const offset = audio.currentTime - spot.startSec;
+          next = spot.block.startSec + spot.block.pauseBeforeSec + Math.max(0, offset);
+          if (offset >= spot.durationSec) audio.pause();
+          waitingSince.current = null;
+        } else if (!(ours && audio.ended)) {
+          // The narration is still loading or seeking: hold the clock so its first words aren't skipped.
+          waitingSince.current ??= now;
+          if (now - waitingSince.current < MAX_WAIT_MS) {
+            next = time;
+            waiting = true;
+          }
+          if (!ours || audio.paused) syncAudio(time, true);
+        }
       }
-      const limit = range ? range.endSec : current.timeline.totalSec;
+      setBuffering(waiting);
+      const limit = rangeRef.current ? rangeRef.current.endSec : projectRef.current.timeline.totalSec;
       if (next >= limit) {
         timeRef.current = limit;
         setTimeSec(limit);
@@ -118,36 +184,52 @@ export function usePreviewPlayer(project: ProjectDto) {
       }
       timeRef.current = next;
       setTimeSec(next);
-      const nextBlock = blockAtTime(current.timeline, next);
-      const nextSegment = nextBlock ? current.segments.find((entry) => entry.segmentId === nextBlock.segmentId) : null;
-      const narrationLocalTime = nextBlock ? next - nextBlock.startSec - nextBlock.pauseBeforeSec : -1;
-      const shouldPlayNarration = Boolean(nextSegment?.narration.url && narrationLocalTime >= 0 && narrationLocalTime < nextSegment.narration.durationSec);
-      if (nextBlock?.segmentId !== blockRef.current?.segmentId || (shouldPlayNarration && (audio?.paused || audio?.src !== nextSegment?.narration.url))) syncAudio(next, true);
-      else if (!shouldPlayNarration && audio && !audio.paused) audio.pause();
-      frame.current = requestAnimationFrame((next) => tickRef.current(next));
+      if (!waiting) {
+        const upcoming = narrationAt(next);
+        if (upcoming?.inside) {
+          const audio = active.current;
+          // A narration that already played to its end stays finished (play() would restart it from 0).
+          if (!audio || audio.src !== absolute(upcoming.url) || (audio.paused && !audio.ended)) syncAudio(next, true);
+        } else if (active.current && !active.current.paused) {
+          active.current.pause();
+          if (upcoming) preloadAfter(upcoming.block);
+        }
+      }
+      frame.current = requestAnimationFrame((stamp) => tickRef.current(stamp));
     },
-    [range, stop, syncAudio]
+    [narrationAt, preloadAfter, stop, syncAudio]
   );
-
   useEffect(() => {
     tickRef.current = tick;
   }, [tick]);
 
-  const play = useCallback(
-    (from?: number) => {
-      const start = from ?? timeRef.current;
-      const limit = range ? range.endSec : projectRef.current.timeline.totalSec;
-      const time = start >= limit - 0.01 ? (range ? range.startSec : 0) : start;
+  const start = useCallback(
+    (time: number) => {
+      stopPreview();
+      pauseOtherAudio(null, externalStop.current);
       timeRef.current = time;
       setTimeSec(time);
-      silenceOthers();
+      waitingSince.current = null;
+      playingRef.current = true;
       setPlaying(true);
-      lastTick.current = performance.now();
       syncAudio(time, true);
       if (frame.current) cancelAnimationFrame(frame.current);
-      frame.current = requestAnimationFrame(tick);
+      frame.current = requestAnimationFrame((stamp) => {
+        lastTick.current = stamp;
+        frame.current = requestAnimationFrame((next) => tickRef.current(next));
+      });
     },
-    [range, silenceOthers, syncAudio, tick]
+    [syncAudio]
+  );
+
+  const play = useCallback(
+    (from?: number) => {
+      const current = rangeRef.current;
+      const limit = current ? current.endSec : projectRef.current.timeline.totalSec;
+      const requested = from ?? timeRef.current;
+      start(requested >= limit - 0.01 ? (current ? current.startSec : 0) : requested);
+    },
+    [start]
   );
 
   const seek = useCallback(
@@ -155,28 +237,18 @@ export function usePreviewPlayer(project: ProjectDto) {
       const clamped = Math.max(0, Math.min(projectRef.current.timeline.totalSec, time));
       timeRef.current = clamped;
       setTimeSec(clamped);
-      syncAudio(clamped, playing);
+      waitingSince.current = null;
+      syncAudio(clamped, playingRef.current);
     },
-    [playing, syncAudio]
+    [syncAudio]
   );
 
   const playRange = useCallback(
     (startSec: number, endSec: number, label: string, kind: "segment" | "context") => {
       setRange({ startSec, endSec, label, kind });
-      timeRef.current = startSec;
-      setTimeSec(startSec);
-      silenceOthers();
-      setPlaying(true);
-      lastTick.current = performance.now();
-      blockRef.current = null;
-      syncAudio(startSec, true);
-      if (frame.current) cancelAnimationFrame(frame.current);
-      frame.current = requestAnimationFrame((now) => {
-        lastTick.current = now;
-        frame.current = requestAnimationFrame(tick);
-      });
+      start(startSec);
     },
-    [silenceOthers, syncAudio, tick]
+    [start]
   );
 
   const playSegment = useCallback(
@@ -192,21 +264,40 @@ export function usePreviewPlayer(project: ProjectDto) {
       const blocks = projectRef.current.timeline.blocks;
       const index = blocks.findIndex((entry) => entry.segmentId === segmentId);
       if (index < 0) return;
-      const start = blocks[Math.max(0, index - 1)].startSec;
-      const end = blocks[Math.min(blocks.length - 1, index + 1)].endSec;
-      playRange(start, end, `In context: ${blocks[index].title}`, "context");
+      const from = blocks[Math.max(0, index - 1)].startSec;
+      const to = blocks[Math.min(blocks.length - 1, index + 1)].endSec;
+      playRange(from, to, `In context: ${blocks[index].title}`, "context");
     },
     [playRange]
   );
 
   const playFull = useCallback(() => {
     setRange(null);
-    play(0);
-  }, [play]);
+    start(0);
+  }, [start]);
 
   const pause = useCallback(() => stop(), [stop]);
 
-  useEffect(() => () => stop(), [stop]);
+  useEffect(() => {
+    const cache = elements.current;
+    return () => {
+      stop();
+      for (const audio of cache.values()) {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      }
+      cache.clear();
+    };
+  }, [stop]);
+
+  // Warm up the first segments' narration so the first press of Play starts promptly.
+  useEffect(() => {
+    for (const block of project.timeline.blocks.slice(0, 2)) {
+      const segment = project.segments.find((entry) => entry.segmentId === block.segmentId);
+      if (segment?.narration.url) element(segment.narration.url);
+    }
+  }, [element, project.segments, project.timeline.blocks]);
 
   // Keep the clock sane when narration lengths change underneath us.
   useEffect(() => {
@@ -216,7 +307,7 @@ export function usePreviewPlayer(project: ProjectDto) {
     }
   }, [project.timeline.totalSec]);
 
-  return { timeSec, playing, range, currentBlock, play, pause, seek, playSegment, playAround, playFull, clearRange: () => setRange(null) };
+  return { timeSec, playing, buffering, range, currentBlock, play, pause, seek, playSegment, playAround, playFull, clearRange: () => setRange(null) };
 }
 
 export type PreviewPlayer = ReturnType<typeof usePreviewPlayer>;

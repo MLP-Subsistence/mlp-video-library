@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, AudioLines, Check, ChevronDown, Clock, FileAudio, FileText, Grid2X2, ImagePlus, Mic, Pause, Play, RefreshCw, Sparkles, Trash2, Type, Upload, Wand2 } from "lucide-react";
+import { ArrowRight, AudioLines, Check, ChevronDown, Scissors, Clock, FileAudio, FileText, Grid2X2, ImagePlus, Mic, Pause, Play, RefreshCw, Sparkles, Trash2, Type, Upload, Wand2 } from "lucide-react";
 import { AssetThumb } from "@/components/studio/asset-library";
 import { pauseOtherAudio, stopPreview } from "@/components/studio/audio-preview";
 import { Flag, projectFlag } from "@/components/studio/language-picker";
+import { MeaningCheck } from "@/components/studio/workspace/meaning-check";
+import { rememberMeanings } from "@/components/studio/workspace/meaning-cache";
 import { SegmentRecorder } from "@/components/studio/workspace/recorder";
 import { TextControls } from "@/components/studio/workspace/text-controls";
 import type { ProjectController } from "@/components/studio/workspace/use-project";
@@ -20,7 +22,7 @@ export type PanelTab = "script" | "visuals" | "timing";
  * Voice, Visuals, Timing. Script and narration deliberately share one page
  * so an educator can read the words while recording.
  */
-export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings, onChangeVisual, onOpenLayout, tab: panelTab, onTabChange, focusTrack }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void; onChangeVisual: () => void; onOpenLayout: () => void; tab: PanelTab; onTabChange: (tab: PanelTab) => void; focusTrack: "text" | "video" | "audio" }) {
+export function ScriptPanel({ controller, onNext, onTranslateLesson, translating, onOpenSettings, onOpenFullNarration, onChangeVisual, onOpenLayout, tab: panelTab, onTabChange, focusTrack }: { controller: ProjectController; onNext: () => void; onTranslateLesson: () => void; translating: boolean; onOpenSettings: () => void; onOpenFullNarration: () => void; onChangeVisual: () => void; onOpenLayout: () => void; tab: PanelTab; onTabChange: (tab: PanelTab) => void; focusTrack: "text" | "video" | "audio" }) {
   const { project, activeSegment, patchSegment, setLocalTranslation, setLocalComposition, saving, savedAt } = controller;
   const [tab, setTab] = useState<NarrationTab>(() => (activeSegment?.narration.source === "ai" ? "ai" : activeSegment?.narration.source === "upload" ? "upload" : "record"));
   const [busy, setBusy] = useState<string | null>(null);
@@ -96,7 +98,8 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
   const regenerate = () =>
     run("regenerate", async () => {
       save.cancel();
-      const result = await api<{ project: ProjectDto }>(`/api/studio/projects/${project.id}/translate`, { method: "POST", json: { segmentIds: [segment.id], mode: "regenerate" } });
+      const result = await api<{ project: ProjectDto; backTranslations?: Record<string, { text: string; english: string }> }>(`/api/studio/projects/${project.id}/translate`, { method: "POST", json: { segmentIds: [segment.id], mode: "regenerate" } });
+      rememberMeanings(result.backTranslations);
       controller.setProject(result.project);
       setDraft(result.project.segments.find((entry) => entry.id === segment.id)?.translation ?? "");
     });
@@ -211,6 +214,17 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
                 placeholder={`Write the ${project.targetLanguageName} narration here, or use Translate.`}
                 className={`${textareaClass} mt-2 text-[1.0625rem] leading-relaxed`}
               />
+              <MeaningCheck
+                project={project}
+                segment={segment}
+                text={draft}
+                disabled={busy !== null}
+                onBeforeRewrite={() => save.cancel()}
+                onProject={(next, translation) => {
+                  controller.setProject(next);
+                  setDraft(translation);
+                }}
+              />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#6b7c8f]">
                 <span>{saving ? "Saving…" : savedAt ? `Saved ${relative(savedAt)}` : "Autosaves as you type"}</span>
                 <div className="flex items-center gap-2">
@@ -299,6 +313,11 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
                   <span className="text-xs text-[#6b7c8f]">WAV, MP3, M4A, OGG or WebM. Duration is measured automatically.</span>
                   <input type="file" accept="audio/*" className="hidden" disabled={busy !== null} onChange={(event) => void handleUpload(event.target.files)} />
                 </label>
+              )}
+              {tab === "upload" && (
+                <button type="button" onClick={onOpenFullNarration} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-[#a64026]">
+                  <Scissors className="size-3.5" /> Have one recording for the whole lesson? Split it into segments
+                </button>
               )}
             </div>
           </section>

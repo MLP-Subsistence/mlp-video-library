@@ -167,6 +167,54 @@ For everything to scale together, the Studio's fixed pixel sizes became rem (px/
 
 Checked with iframes at 1024/1280/1366/1536/1714/1920 px on the workspace, projects, Voice Library, AI Voice and Review pages: no horizontal scroll, and the workspace fills the window exactly.
 
+## Translation quality, English meaning checks, recording, playback, full-recording splitter, Export (24 September 2026)
+
+Owner feedback: GPT translations were poor ("…kumenya ibyerekeye marketplace"), no obvious export, preview playback inconsistent, "Test microphone" every segment, slow recording saves, no path for people who already have one recording for the whole video, and no way for someone who doesn't speak the target language to work on it. **No database changes in this batch** (live schema updates need `RUN_DATABASE_SETUP=true`, see `scripts/netlify-build.mjs`).
+
+- **Translation** (`services/translation.ts`, `translate/route.ts`):
+  - `translationModel()` upgrades the stored old default `gpt-4.1-mini` to `gpt-4.1`; any other admin-typed model is used as given.
+  - Every request carries the whole lesson's English script.
+  - The prompt forbids leftover English ("marketplace literacy" is an idea to translate, not a brand; only proper names stay English).
+  - One call per batch returns a literal draft → final → `englishWordsLeft` self-check → English back-translation.
+  - Batch size is 5 (from 8) to stay within function time limits.
+  - Measured locally on the Youth Africa lesson: before, "marketplace literacy", "marketplace" and "entrepreneur" were left in English; after, it uses "gusobanukirwa isoko", "amasoko", "umucuruzi". A native speaker still needs to judge fluency.
+  - `englishOverride` (single segment) translates the educator's own English wording.
+- **English meaning check** (`workspace/meaning-check.tsx`, `meaning-cache.ts`, `api/.../back-translate`):
+  - Under each translation: "In English", with matches/differs-from-original and the differences listed.
+  - "Check what this says in English" re-checks edited text on demand.
+  - "Change it in English" / "Write it in English and translate" lets a non-speaker edit.
+  - Back-translations are cached in `localStorage`, keyed by segment and exact text, so any edit invalidates them.
+- **Preview subtitles:** Off / English / target language, under the preview (`useSubtitleMode` in `workspace.tsx`, `subtitle` prop on `CompositionPreview`). Default is English; it's an editing aid only and never rendered into the video.
+- **Recording** (`workspace/recorder.tsx`, `workspace/microphone.ts`):
+  - One "Record" button; no mic test, no 1.5s wait.
+  - The level meter shows while recording; silent/quiet/clipped takes are flagged after Stop.
+  - One shared microphone stream stays warm across segments and is released 90s after no recorder is on screen.
+  - Blocked mic, missing device and busy device each get a plain message.
+- **Saving speed:**
+  - `storageObjectExists()` now uses S3 `HeadObject` (`StorageDriver.exists`). Previously it did a full `GetObject` download of every upload just to check it existed — the main cost on the live site, which uses S3.
+  - `uploadAsset({ measured })` skips decoding the recording a second time. Server-side project reload measured at ~4ms locally, so it isn't the bottleneck.
+- **Preview playback** (`use-player.ts` rewrite):
+  - Each narration file gets its own preloaded `<audio>`, and the next segment's file is preloaded.
+  - The clock waits (up to 4s) for audio to actually play instead of running ahead. Before, it seeked into the file late, skipping each segment's first words by a varying amount.
+  - A finished narration isn't `play()`ed again (that restarts it from 0).
+  - `rangeRef` fixes stale range closures.
+  - Verified: per-file lesson plays one `play()` per segment, each at 0.00; full-recording slices play from each cut and pause within ~30ms of the end.
+- **Full-recording splitter** (`workspace/full-narration.tsx`, `lib/studio/narration-split.ts`, `api/.../full-narration/split`):
+  - Replaces the worker/transcription import in the UI. That flow queued a job the live site has no worker to run, and depended on speech recognition that's weak for Kinyarwanda/Darija; its API route is still there.
+  - Accepts an audio file, or a video (sound extracted in the browser to 24 kHz mono WAV).
+  - First split "At the pauses" (loudness envelope → pauses → ordered DP choosing one cut per boundary near script-length expectations) or "Like the original video" (the master's `source` timing, scaled).
+  - Coloured draggable bands on a waveform, ±0.1s nudges, per-segment and "play all" playback with the English line as a subtitle.
+  - Saving sets every segment to `narrationSource: "full"`, ready, with its slice. `narrationScriptHash` is null when there's no text yet, so typing it later doesn't flag the audio.
+  - Reached from Lesson tools → "Use one recording for the whole lesson" and from the Upload tab.
+  - Tests: `__tests__/narration-split.test.ts`.
+- **Export** menu (dark button, workspace header):
+  - Video MP4 (when rendered).
+  - Narration WAV (mixed in the browser with `OfflineAudioContext` at timeline positions).
+  - Subtitles `.srt` in the target language and in English (cues timed to narration; `workspace/export.ts`, tested).
+  - Script Word/PDF (existing route, `approved=0`).
+
+Verified locally with a throwaway Arabic project (created, split a synthetic 4-part recording, saved, previewed, deleted). Real microphone recording was not possible in the browser pane (mic blocked there), so the Record flow needs a manual try in a normal browser.
+
 ## Remaining work and manual/operational gates
 
 1. **Production worker:** identify a persistent host with Node/FFmpeg/FFprobe, production DB and bucket configuration; start `npm.cmd run worker` (or an equivalent managed service), then verify an actual queued render and full-narration alignment. Netlify itself cannot do FFmpeg work. `C:\ffmpeg\bin\ffmpeg.exe` was available locally, but local availability is not production worker availability.
