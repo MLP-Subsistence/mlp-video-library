@@ -25,6 +25,24 @@ type Progress = (progress: number, stage: string) => Promise<void>;
 
 const even = (value: number) => Math.max(2, Math.round(value / 2) * 2);
 
+/** Two concurrent x264 jobs measured faster than wider fan-out on the Studio worker. */
+function segmentConcurrency() {
+  const configured = Number(process.env.STUDIO_RENDER_CONCURRENCY);
+  if (Number.isFinite(configured) && configured >= 1) return Math.floor(configured);
+  return 2;
+}
+
+async function inParallel<T>(items: T[], limit: number, work: (item: T, index: number) => Promise<void>) {
+  let next = 0;
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      await work(items[index], index);
+    }
+  });
+  await Promise.all(lanes);
+}
+
 export async function renderProject(options: { projectId: string; userId: string | null; quality: RenderQuality; progress: Progress }) {
   const owner = await prisma.studioProject.findUnique({ where: { id: options.projectId }, select: { createdById: true, createdBy: { select: { role: true } } } });
   if (!owner) throw new Error("Project not found");
@@ -46,17 +64,22 @@ export async function renderProject(options: { projectId: string; userId: string
   try {
     await options.progress(3, "Preparing media assets");
     const localPaths = new Map<string, string>();
-    for (const asset of assetRows) localPaths.set(asset.id, await materializeAsset(asset, workDir));
+    await inParallel(assetRows, 6, async (asset) => {
+      localPaths.set(asset.id, await materializeAsset(asset, workDir));
+    });
 
-    const segmentFiles: string[] = [];
-    for (let index = 0; index < project.timeline.blocks.length; index++) {
-      const block = project.timeline.blocks[index];
+    // Segments are independent, so several encode at once; each FFmpeg run alone leaves most cores idle.
+    const stills = new Map<string, Promise<string>>();
+    const blocks = project.timeline.blocks;
+    const segmentFiles = blocks.map((_, index) => path.join(workDir, `segment-${String(index + 1).padStart(3, "0")}.mp4`));
+    let finished = 0;
+    await options.progress(5, `Building ${blocks.length} segments`);
+    await inParallel(blocks, segmentConcurrency(), async (block, index) => {
       const segment = project.segments.find((entry) => entry.segmentId === block.segmentId)!;
-      const file = path.join(workDir, `segment-${String(index + 1).padStart(3, "0")}.mp4`);
-      await options.progress(5 + Math.round((index / project.timeline.blocks.length) * 80), `Building segment ${index + 1} of ${project.timeline.blocks.length}: ${segment.title}`);
-      await renderSegment({ segment, block, width, height, fps, assetsById, localPaths, output: file, project });
-      segmentFiles.push(file);
-    }
+      await renderSegment({ segment, block, width, height, fps, assetsById, localPaths, output: segmentFiles[index], project, stills });
+      finished += 1;
+      await options.progress(5 + Math.round((finished / blocks.length) * 80), `Built ${finished} of ${blocks.length} segments`);
+    });
 
     await options.progress(86, "Joining segments");
     const listFile = path.join(workDir, "segments.txt");
@@ -121,6 +144,30 @@ export async function renderProject(options: { projectId: string; userId: string
   }
 }
 
+/** An image resized to exactly `width`×`height` (cover = centre crop, contain = black bars), shared across segments. */
+function preparedStill(cache: Map<string, Promise<string>>, file: string, width: number, height: number, fit: "cover" | "contain", workDir: string) {
+  const key = `${file}|${width}x${height}|${fit}`;
+  let pending = cache.get(key);
+  if (!pending) {
+    const target = path.join(workDir, `still-${cache.size + 1}-${width}x${height}.png`);
+    pending = sharp(file)
+      .rotate()
+      .resize(width, height, { fit, position: "centre", background: { r: 0, g: 0, b: 0, alpha: 1 } })
+      .flatten({ background: { r: 0, g: 0, b: 0 } })
+      .png({ compressionLevel: 1 })
+      .toFile(target)
+      .then(() => target);
+    cache.set(key, pending);
+  }
+  return pending;
+}
+
+/** Repeat one decoded still frame for the requested duration instead of decoding it once per output frame. */
+function heldFrame(durationSec: number, fps: number) {
+  const frames = Math.max(1, Math.ceil(durationSec * fps));
+  return `loop=loop=${frames - 1}:size=1:start=0,setpts=N/${fps}/TB,fps=${fps},trim=duration=${durationSec.toFixed(3)},setpts=PTS-STARTPTS`;
+}
+
 /** White polygon on black: FFmpeg's `alphamerge` turns this into the slot's alpha. */
 async function writePolygonMask(file: string, points: Array<[number, number]>, width: number, height: number) {
   const path2d = points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${(x * width).toFixed(2)},${(y * height).toFixed(2)}`).join(" ");
@@ -142,6 +189,7 @@ async function renderSegment(options: {
   assetsById: Map<string, StudioAsset>;
   localPaths: Map<string, string>;
   output: string;
+  stills: Map<string, Promise<string>>;
 }) {
   const { segment, block, width, height, fps, assetsById, localPaths } = options;
   const duration = Math.max(0.5, block.durationSec);
@@ -150,12 +198,38 @@ async function renderSegment(options: {
   const filters: string[] = [];
   let inputIndex = 0;
 
-  filters.push(`color=c=black:s=${width}x${height}:r=${fps}:d=${duration.toFixed(3)}[base]`);
-  let current = "base";
+  const activeSlots = segment.composition.slots
+    .map((slot, slotIndex) => ({ slot, rect: layout.slots[slotIndex] }))
+    .filter(({ slot, rect }) => slot.items.length > 0 && Boolean(rect));
+  const soleRect = activeSlots.length === 1 ? activeSlots[0].rect : null;
+  const skipsBase = Boolean(
+    soleRect
+    && Math.round(soleRect.x * width) === 0
+    && Math.round(soleRect.y * height) === 0
+    && even(soleRect.w * width) === width
+    && even(soleRect.h * height) === height
+    && !soleRect.clip?.length
+    && soleRect.shape !== "circle"
+  );
+  if (!skipsBase) filters.push(`color=c=black:s=${width}x${height}:r=${fps}:d=${duration.toFixed(3)}[base]`);
+  let current: string | null = skipsBase ? null : "base";
   let slotCounter = 0;
   // Alpha masks for clipped slots are written before FFmpeg runs.
   const maskJobs: Array<{ file: string; points: Array<[number, number]>; width: number; height: number }> = [];
   const maskFiles = segment.composition.slots.map((_, index) => path.join(path.dirname(options.output), `${segment.id}-mask-${index}.png`));
+
+  // Stills are resized to their slot once, up front; fed raw, FFmpeg would decode and scale the full-size original on every frame.
+  const preparedStills = new Map<string, string>();
+  for (const [slotIndex, slot] of segment.composition.slots.entries()) {
+    const rect = layout.slots[slotIndex];
+    if (!rect) continue;
+    for (const [itemIndex, item] of slot.items.entries()) {
+      const asset = assetsById.get(item.assetId);
+      const file = asset ? localPaths.get(asset.id) : null;
+      if (!asset || !file || asset.kind !== "image" || asset.mimeType === "image/gif") continue;
+      preparedStills.set(`${slotIndex}:${itemIndex}`, await preparedStill(options.stills, file, even(rect.w * width), even(rect.h * height), slot.fit === "contain" ? "contain" : "cover", path.dirname(options.output)));
+    }
+  }
 
   segment.composition.slots.forEach((slot, slotIndex) => {
     if (slot.items.length === 0) return;
@@ -177,8 +251,8 @@ async function renderSegment(options: {
       if (!asset || !file) {
         filters.push(`color=c=0x243447:s=${sw}x${sh}:r=${fps}:d=${itemDuration.toFixed(3)}[${label}]`);
       } else if (asset.kind === "image" && asset.mimeType !== "image/gif") {
-        args.push("-loop", "1", "-framerate", String(fps), "-t", itemDuration.toFixed(3), "-i", file);
-        filters.push(`[${inputIndex}:v]${fit},setsar=1,fps=${fps},format=yuv420p,trim=0:${itemDuration.toFixed(3)},setpts=PTS-STARTPTS[${label}]`);
+        args.push("-i", preparedStills.get(`${slotIndex}:${itemIndex}`)!);
+        filters.push(`[${inputIndex}:v]${heldFrame(itemDuration, fps)},setsar=1,format=yuv420p[${label}]`);
         inputIndex += 1;
       } else {
         // Video (or animated GIF): trim to the slot, hold the last frame when the clip is shorter.
@@ -201,8 +275,8 @@ async function renderSegment(options: {
       // Pie slices: cut the polygon out with an alpha mask built from the same
       // points the browser preview clips with.
       maskJobs.push({ file: maskFiles[slotCounter], points: rect.clip, width: sw, height: sh });
-      args.push("-loop", "1", "-framerate", String(fps), "-t", duration.toFixed(3), "-i", maskFiles[slotCounter]);
-      filters.push(`[${inputIndex}:v]format=gray,scale=${sw}:${sh},fps=${fps}[mask${slotCounter}]`);
+      args.push("-i", maskFiles[slotCounter]);
+      filters.push(`[${inputIndex}:v]format=gray,scale=${sw}:${sh},${heldFrame(duration, fps)}[mask${slotCounter}]`);
       inputIndex += 1;
       filters.push(`[${joinedSlotLabel}]format=rgba[rgba${slotCounter}];[rgba${slotCounter}][mask${slotCounter}]alphamerge[${slotLabel}]`);
     } else if (rect.shape === "circle") {
@@ -212,7 +286,9 @@ async function renderSegment(options: {
       filters.push(`[${joinedSlotLabel}]null[${slotLabel}]`);
     }
     const next = `v${slotCounter}`;
-    filters.push(`[${current}][${slotLabel}]overlay=${sx}:${sy}:eof_action=repeat[${next}]`);
+    // One slot covering the whole frame needs no black background under it (compositing every frame is wasted work).
+    if (current === null) filters.push(`[${slotLabel}]null[${next}]`);
+    else filters.push(`[${current}][${slotLabel}]overlay=${sx}:${sy}:eof_action=repeat[${next}]`);
     current = next;
     slotCounter += 1;
   });
@@ -222,10 +298,15 @@ async function renderSegment(options: {
   if (onScreenText?.text.trim()) {
     const overlayFile = path.join(path.dirname(options.output), `${segment.id}-text.png`);
     await writeTextOverlay(onScreenText, width, height, overlayFile);
-    args.push("-loop", "1", "-framerate", String(fps), "-t", duration.toFixed(3), "-i", overlayFile);
-    filters.push(`[${current}][${inputIndex}:v]overlay=0:0:format=auto:shortest=1[texted]`);
+    args.push("-i", overlayFile);
+    filters.push(`[${inputIndex}:v]${heldFrame(duration, fps)},format=rgba[textoverlay]`);
+    filters.push(`[${current}][textoverlay]overlay=0:0:format=auto:shortest=1[texted]`);
     current = "texted";
     inputIndex += 1;
+  }
+  if (current === null) {
+    filters.push(`color=c=black:s=${width}x${height}:r=${fps}:d=${duration.toFixed(3)}[empty]`);
+    current = "empty";
   }
   filters.push(`[${current}]format=yuv420p,trim=0:${duration.toFixed(3)}[vout]`);
 
@@ -247,7 +328,7 @@ async function renderSegment(options: {
   args.push(
     "-filter_complex", filters.join(";"),
     "-map", "[vout]", "-map", "[aout]",
-    "-c:v", "libx264", "-preset", process.env.STUDIO_X264_PRESET || "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(fps),
+    "-c:v", "libx264", "-preset", process.env.STUDIO_X264_PRESET || "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(fps),
     "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
     "-t", duration.toFixed(3),
     "-movflags", "+faststart",

@@ -60,7 +60,9 @@ export NEXT_PUBLIC_SITE_URL=https://marketplaceliteracyapp.org
 npm run worker
 ```
 
-Options: `FFMPEG_PATH`/`FFPROBE_PATH` when FFmpeg is not on PATH, `STUDIO_WORKER_POLL_MS` (default 4000), `STUDIO_WORK_DIR` (scratch), `STUDIO_X264_PRESET` (`medium` default; `veryfast` on small machines).
+Options: `FFMPEG_PATH`/`FFPROBE_PATH` when FFmpeg is not on PATH, `STUDIO_WORKER_POLL_MS` (default 4000), `STUDIO_WORK_DIR` (scratch), `STUDIO_X264_PRESET` (`veryfast` default; use `medium` when a smaller file matters more than render time), and `STUDIO_RENDER_CONCURRENCY` (default `2`; tune only after measuring on the worker host).
+
+The renderer downloads independent assets in parallel, caches slot-sized still images, decodes each still once, and renders independent segments concurrently. On the development PC, the 56.6-second 1080p Introduction lesson rendered in 6.9 seconds with the default settings (H.264/AAC, 1920×1080 at 30 fps). Treat this as a local benchmark rather than a hosting guarantee.
 
 Suitable hosts: a small VPS, Fly.io/Railway/Render background service, or the MLP office Windows machine (FFmpeg is already installed at `C:\ffmpeg\bin`). Several workers may run at once; jobs are claimed atomically and stale jobs are re-queued after 30 minutes.
 
