@@ -316,7 +316,7 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
               )}
               {tab === "upload" && (
                 <button type="button" onClick={onOpenFullNarration} className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-[#a64026]">
-                  <Scissors className="size-3.5" /> Have one recording for the whole lesson? Split it into segments
+                  <Scissors className="size-3.5" /> Have the whole voice-over in one file? Add it here and we cut it into segments
                 </button>
               )}
             </div>

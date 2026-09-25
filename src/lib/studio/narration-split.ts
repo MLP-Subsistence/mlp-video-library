@@ -40,7 +40,7 @@ export function voicedMask(envelope: Float32Array) {
   return Array.from(envelope, (value) => value > threshold);
 }
 
-type Pause = { startSec: number; endSec: number; midSec: number; lengthSec: number };
+export type Pause = { startSec: number; endSec: number; midSec: number; lengthSec: number };
 
 /** Quiet stretches between the first and last speech, long enough to be a pause rather than a gap between words. */
 export function findPauses(voiced: boolean[], windowSec = WINDOW_SEC): Pause[] {
@@ -109,10 +109,14 @@ export function chooseCuts(pauses: Pause[], expectedCuts: number[], spanSec: num
 export function slicesFromCuts(voiced: boolean[], cuts: number[], windowSec = WINDOW_SEC): Slice[] {
   const first = Math.max(0, voiced.indexOf(true));
   const last = Math.max(first, voiced.lastIndexOf(true));
-  const edges = [first * windowSec, ...cuts, (last + 1) * windowSec];
+  return slicesFromEdges(voiced, [first * windowSec, ...cuts, (last + 1) * windowSec], windowSec);
+}
+
+/** `edges` has one more entry than there are segments: segment i lies between edges i and i + 1. */
+export function slicesFromEdges(voiced: boolean[], edges: number[], windowSec = WINDOW_SEC): Slice[] {
   const slices: Slice[] = [];
   for (let i = 0; i < edges.length - 1; i++) {
-    const regionStart = edges[i];
+    const regionStart = Math.max(0, edges[i]);
     const regionEnd = Math.max(regionStart + 0.2, edges[i + 1]);
     let from = -1;
     let to = -1;
@@ -126,6 +130,46 @@ export function slicesFromCuts(voiced: boolean[], cuts: number[], windowSec = WI
     slices.push({ startSec: round(startSec), endSec: round(Math.max(startSec + 0.2, endSec)) });
   }
   return slices;
+}
+
+/**
+ * Move each cut into the nearest pause within `before` seconds earlier or
+ * `after` seconds later, so it never lands in the middle of a word. Cuts stay
+ * in order; one with no pause nearby is kept where it is.
+ */
+export function snapCutsToPauses(cuts: number[], pauses: Pause[], before = 1, after = 0.5, prefer: "nearest" | "before" = "nearest") {
+  const snapped: number[] = [];
+  for (const cut of cuts) {
+    let best: Pause | null = null;
+    for (const pause of pauses) {
+      if (pause.endSec < cut - before || pause.startSec > cut + after) continue;
+      if (snapped.length && pause.midSec <= snapped[snapped.length - 1]) continue;
+      if (!best) best = pause;
+      // A tap comes a moment after the line starts, so its pause is one that ended just before the tap — and of
+      // those, the longest: the pause between two lines is longer than the little ones inside a line's first words.
+      else if (prefer === "before") {
+        const endedBefore = pause.endSec <= cut + 0.15;
+        const bestEndedBefore = best.endSec <= cut + 0.15;
+        if ((endedBefore && !bestEndedBefore) || (endedBefore === bestEndedBefore && (endedBefore ? pause.lengthSec > best.lengthSec : Math.abs(pause.midSec - cut) < Math.abs(best.midSec - cut)))) best = pause;
+      } else if (Math.abs(pause.midSec - cut) < Math.abs(best.midSec - cut)) best = pause;
+    }
+    const value = best ? best.midSec : cut;
+    snapped.push(snapped.length && value <= snapped[snapped.length - 1] ? snapped[snapped.length - 1] + 0.2 : value);
+  }
+  return snapped;
+}
+
+/**
+ * Slices from known segment boundaries (from matching the words, or from
+ * taps while listening): each boundary is snapped into its pause and every
+ * slice trimmed to its speech.
+ */
+export function slicesAtBoundaries(envelope: Float32Array, boundaries: { firstStartSec?: number; cuts: number[]; lastEndSec?: number }, snap: { before: number; after: number }, windowSec = WINDOW_SEC): Slice[] {
+  const voiced = voicedMask(envelope);
+  const cuts = snapCutsToPauses(boundaries.cuts, findPauses(voiced, windowSec), snap.before, snap.after);
+  const first = Math.max(0, voiced.indexOf(true)) * windowSec;
+  const last = (Math.max(0, voiced.lastIndexOf(true)) + 1) * windowSec;
+  return slicesFromEdges(voiced, [boundaries.firstStartSec ?? first, ...cuts, boundaries.lastEndSec ?? last], windowSec);
 }
 
 /** Boundaries expected from how long each segment's text is. */

@@ -215,6 +215,32 @@ Owner feedback: GPT translations were poor ("…kumenya ibyerekeye marketplace")
 
 Verified locally with a throwaway Arabic project (created, split a synthetic 4-part recording, saved, previewed, deleted). Real microphone recording was not possible in the browser pane (mic blocked there), so the Record flow needs a manual try in a normal browser.
 
+## Whole-lesson voice-overs in any language (25 September 2026)
+
+For educators who already have the whole lesson narrated in their language (e.g. an Arabic dub of "Introduction to Marketplace Literacy") and want the template's images to follow it. The template's segment count doesn't change with language; only where each segment starts in the recording has to be found, and the images then follow the audio automatically (each segment's image stays up for however long its line takes). **No database changes.**
+
+- **Entry points:**
+  - New Localization step 4, "Voice-over": *Segment by segment* or *I already have the whole voice-over*, optionally with the file picked right there. The file is handed over in memory (`workspace/pending-voiceover.ts`); the page opens with `?voiceover=1` → `Workspace openVoiceover`.
+  - A workspace banner while no segment has narration ("Already have the whole voice-over in one file? Add whole voice-over").
+  - Lesson tools → "Add whole voice-over".
+  - The Upload tab link.
+- **Four ways to find the segments** (`workspace/full-narration.tsx`):
+  1. **Match the words** — default when OpenAI is configured and the language is in `speech-languages.ts` (Whisper's reliable list; Arabic, French, Spanish, Swahili, Hindi… but not Kinyarwanda/Luganda).
+     - The browser sends ~2-minute 16 kHz WAV chunks, cut at pauses, to `POST /full-narration/listen?offset=` (under Netlify's body limit). That returns word timings.
+     - `POST /full-narration/match` gets the words plus the pauses measured in the browser. `buildPhrasesFromPauses` cuts phrases at the measured pauses (Whisper's word times smear across pauses and rarely carry punctuation, so its own phrases straddled lines). The AI (`matchLinesToPhrases`, translation model) then picks the phrase each English line starts at, told the silence before each phrase. `repairStarts` enforces order.
+  2. **At the pauses** (instant, any language).
+  3. **Like the original video** (a dub recorded to the English timing).
+  4. **Mark while listening:** one tap (or Space) per segment, starting with segment 1 so a spoken intro is excluded. Each tap snaps back to the longest pause that ended just before it (`snapCutsToPauses(…, "before")`), since taps come late and lines have micro-pauses in their first words.
+- **Save:** optionally fills each *empty* segment text box with what was heard, as an AI draft (`heardText` on `full-narration/split`; existing text is never overwritten). The Script panel remounts after whole-lesson updates (`panelRevision` in `workspace.tsx`), which also fixes "Translate entire lesson" leaving the current segment's box stale.
+- **Verified with a real Arabic voice-over, not synthetic tones.** 13 lines were translated and voiced with OpenAI TTS at varied speeds, with uneven pauses including two run-together lines and a spoken intro not in the script; true line starts were recorded.
+  - Match the words: all 13 starts within 0.07s (identical on two runs); ~12s for 84s of audio in the app.
+  - The first version (Whisper-gap phrases) missed 3 boundaries by 1.9–3.6s, which is what led to the measured-pause phrases.
+  - Mark while listening, with taps 0.3–0.9s late: all 13 within 0.11s.
+  - Save filled the right Arabic text per segment, and lesson preview in headless Chromium played each slice from its start to its end.
+  - The throwaway project, test audio and served test file were removed.
+- **New Localization wizard:** the lesson column now shrinks (`minmax(0,1fr)` + `min-w-0`) instead of widening the dialog so it scrolled sideways and cut off the playlists.
+- **Cost:** matching the words calls Whisper (about $0.006 a minute) plus one AI call each time a voice-over is opened. It runs automatically on open for supported languages.
+
 ## Remaining work and manual/operational gates
 
 1. **Production worker:** identify a persistent host with Node/FFmpeg/FFprobe, production DB and bucket configuration; start `npm.cmd run worker` (or an equivalent managed service), then verify an actual queued render and full-narration alignment. Netlify itself cannot do FFmpeg work. `C:\ffmpeg\bin\ffmpeg.exe` was available locally, but local availability is not production worker availability.

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { ArrowRight, AudioLines, Captions, ChevronDown, Download, FileText, Film, ChevronLeft, ChevronRight, ChevronUp, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Settings2, Undo2, Wand2 } from "lucide-react";
+import { ArrowRight, AudioLines, Captions, ChevronDown, Download, FileAudio, FileText, Film, ChevronLeft, ChevronRight, ChevronUp, ListMusic, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pause, Play, PlayCircle, Settings2, Undo2, Wand2 } from "lucide-react";
 import { AssetLibrary } from "@/components/studio/asset-library";
 import { Flag, projectFlag } from "@/components/studio/language-picker";
 import { LayoutEditor } from "@/components/studio/layout-editor";
@@ -11,6 +11,7 @@ import { ActionMenu, InlineNotice, MenuItem, Spinner, StatusPill } from "@/compo
 import { CompositionPreview } from "@/components/studio/workspace/composition-preview";
 import { buildSrt, download, fileBaseName, mixNarration } from "@/components/studio/workspace/export";
 import { FullNarrationModal } from "@/components/studio/workspace/full-narration";
+import { clearPendingVoiceover, pendingVoiceoverFile } from "@/components/studio/workspace/pending-voiceover";
 import { rememberMeanings } from "@/components/studio/workspace/meaning-cache";
 import { ScriptPanel, type PanelTab } from "@/components/studio/workspace/script-panel";
 import { SegmentList } from "@/components/studio/workspace/segment-list";
@@ -92,7 +93,7 @@ function CollapsedRail({ label, badge, icon: Icon, onExpand, className = "" }: {
  * the synchronized timeline along the bottom. One `activeSegmentId` drives
  * every panel; timing always comes from the server-computed timeline.
  */
-export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; initialSegmentId?: string | null }) {
+export function Workspace({ initial, initialSegmentId, openVoiceover }: { initial: ProjectDto; initialSegmentId?: string | null; openVoiceover?: boolean }) {
   const controller = useProject(initial, initialSegmentId);
   const { project, activeSegment, activeIndex, setActiveSegmentId, patchSegment, patchProject } = controller;
   const { canUndo, undo } = controller;
@@ -102,7 +103,15 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const lessonPlaying = player.playing && !player.range;
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [visualPickerOpen, setVisualPickerOpen] = useState(false);
-  const [fullNarrationOpen, setFullNarrationOpen] = useState(false);
+  const [fullNarrationOpen, setFullNarrationOpen] = useState(Boolean(openVoiceover));
+  const [voiceoverFile, setVoiceoverFile] = useState<File | null>(() => (openVoiceover ? pendingVoiceoverFile(initial.id) : null));
+  const [voiceoverHintHidden, setVoiceoverHintHidden] = useState(false);
+  // Bumped when a whole-lesson action rewrites segments, so the open Script panel reloads its text.
+  const [panelRevision, setPanelRevision] = useState(0);
+  const applyLessonUpdate = (next: ProjectDto) => {
+    controller.setProject(next);
+    setPanelRevision((value) => value + 1);
+  };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   // Desktop columns fold away so the timeline can take the width (and, without the preview, the height).
@@ -118,6 +127,14 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
   const [notice, setNotice] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useSubtitleMode();
   const summary = summarizeProject(project);
+
+  // Arriving from New Localization's "I already have the whole voice-over": the splitter opened itself; tidy the address.
+  useEffect(() => {
+    if (!openVoiceover) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("voiceover");
+    window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+  }, [openVoiceover]);
 
   // Selecting a segment (from any panel) parks the playhead at its start.
   const selectSegment = useCallback(
@@ -167,7 +184,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
       while (remaining > 0) {
         const result = await api<{ translated: number; remaining: number; project: ProjectDto; backTranslations?: Record<string, { text: string; english: string }> }>(`/api/studio/projects/${project.id}/translate`, { method: "POST", json: { mode: "missing" } });
         rememberMeanings(result.backTranslations);
-        controller.setProject(result.project);
+        applyLessonUpdate(result.project);
         done += result.translated;
         remaining = result.remaining;
         setTranslating({ done, remaining });
@@ -243,7 +260,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </button>
             <ActionMenu label="Lesson tools">
               <MenuItem icon={Wand2} onClick={translateLesson} disabled={Boolean(translating)} hint="Fill every empty segment with an AI draft">Translate entire lesson</MenuItem>
-              <MenuItem icon={ListMusic} onClick={() => setFullNarrationOpen(true)} hint="Split one recording (or a narrated video) into the segments">Use one recording for the whole lesson</MenuItem>
+              <MenuItem icon={ListMusic} onClick={() => setFullNarrationOpen(true)} hint="One audio or video file of the whole lesson, cut into the segments">Add whole voice-over</MenuItem>
               <MenuItem icon={Settings2} onClick={() => setSettingsOpen(true)} hint="Language, region, dialect, audience, glossary">Translation settings</MenuItem>
             </ActionMenu>
             <ActionMenu label="Export" icon={Download} variant="dark">
@@ -260,6 +277,17 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
           </>
         }
       />
+
+      {!voiceoverHintHidden && !project.segments.some((segment) => segment.narration.url) && (
+        <div className="px-3 pt-3 sm:px-5">
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#e5ccd0] bg-[#fbeaea]/50 px-4 py-2.5 text-sm">
+            <FileAudio className="size-4 shrink-0 text-[#a64026]" />
+            <span className="min-w-0 flex-1 text-[#243447]"><strong>Already have the whole voice-over in one file?</strong> <span className="text-[#6b7c8f]">We&apos;ll cut it into the {project.segments.length} segments for you — any language.</span></span>
+            <button type="button" onClick={() => setFullNarrationOpen(true)} className="mlp-btn-primary h-9 px-3 text-xs">Add whole voice-over</button>
+            <button type="button" onClick={() => setVoiceoverHintHidden(true)} className="text-xs font-bold text-[#6b7c8f]">Not now</button>
+          </div>
+        </div>
+      )}
 
       {(notice || controller.error || translating) && (
         <div className="px-3 pt-3 sm:px-5">
@@ -364,7 +392,7 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
             </div>
           )}
           <div className={`flex min-h-0 flex-1 flex-col ${panels.script ? "" : "lg:hidden"}`}>
-          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onOpenFullNarration={() => setFullNarrationOpen(true)} onChangeVisual={changeVisual} onOpenLayout={openLayout} tab={panelTab} onTabChange={setPanelTab} focusTrack={selectedTrack} />
+          <ScriptPanel key={`${activeSegment?.id ?? "none"}:${controller.undoVersion}:${panelRevision}`} controller={controller} onNext={() => goTo(activeIndex + 1)} onTranslateLesson={translateLesson} translating={Boolean(translating)} onOpenSettings={() => setSettingsOpen(true)} onOpenFullNarration={() => setFullNarrationOpen(true)} onChangeVisual={changeVisual} onOpenLayout={openLayout} tab={panelTab} onTabChange={setPanelTab} focusTrack={selectedTrack} />
           </div>
         </aside>
       </div>
@@ -404,7 +432,17 @@ export function Workspace({ initial, initialSegmentId }: { initial: ProjectDto; 
         />
       )}
       <TranslationSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} project={project} onSave={patchProject} />
-      <FullNarrationModal open={fullNarrationOpen} onClose={() => setFullNarrationOpen(false)} project={project} onProject={controller.setProject} />
+      <FullNarrationModal
+        open={fullNarrationOpen}
+        onClose={() => {
+          setFullNarrationOpen(false);
+          setVoiceoverFile(null);
+          clearPendingVoiceover();
+        }}
+        project={project}
+        onProject={applyLessonUpdate}
+        initialFile={voiceoverFile}
+      />
     </div>
   );
 }

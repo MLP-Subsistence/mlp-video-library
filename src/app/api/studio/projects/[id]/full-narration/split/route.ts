@@ -16,7 +16,7 @@ export const POST = studioRoute(async (request: Request, { params }: Params) => 
   const user = await requireStudioApiUser();
   const { id } = await params;
   await requireProjectAccess(user, id);
-  const body = await readJson<{ assetId?: string; slices?: Array<{ projectSegmentId?: string; startSec?: number; endSec?: number }> }>(request);
+  const body = await readJson<{ assetId?: string; slices?: Array<{ projectSegmentId?: string; startSec?: number; endSec?: number; heardText?: string }> }>(request);
   const asset = await prisma.studioAsset.findUnique({ where: { id: String(body.assetId || "") } });
   if (!asset || asset.kind !== "audio") throw new StudioError("Upload the recording first.");
   const slices = Array.isArray(body.slices) ? body.slices : [];
@@ -31,7 +31,8 @@ export const POST = studioRoute(async (request: Request, { params }: Params) => 
     const startSec = Math.max(0, Number(slice.startSec));
     const endSec = Math.min(limit, Number(slice.endSec));
     if (!Number.isFinite(startSec) || !Number.isFinite(endSec) || endSec - startSec < 0.2) throw new StudioError("Every segment needs at least 0.2 seconds of the recording.");
-    return { row, startSec: Math.round(startSec * 1000) / 1000, endSec: Math.round(endSec * 1000) / 1000 };
+    const heardText = typeof slice.heardText === "string" ? slice.heardText.replace(/[<>]/g, "").trim().slice(0, 4000) : "";
+    return { row, startSec: Math.round(startSec * 1000) / 1000, endSec: Math.round(endSec * 1000) / 1000, heardText };
   });
   if (new Set(cleaned.map((entry) => entry.row.id)).size !== cleaned.length) throw new StudioError("A segment was placed twice.");
 
@@ -40,10 +41,14 @@ export const POST = studioRoute(async (request: Request, { params }: Params) => 
     prisma.studioFullNarration.create({
       data: { projectId: id, assetId: asset.id, status: "aligned", result: JSON.stringify({ method: "manual", segments: cleaned.map((entry) => ({ segmentId: entry.row.id, startSec: entry.startSec, endSec: entry.endSec })) }) }
     }),
-    ...cleaned.map((entry) =>
-      prisma.studioProjectSegment.update({
+    ...cleaned.map((entry) => {
+      // What speech recognition heard fills in only a segment that has no text yet, as a draft to check.
+      const fillText = !entry.row.translation.trim() && entry.heardText ? entry.heardText : null;
+      const text = fillText ?? entry.row.translation;
+      return prisma.studioProjectSegment.update({
         where: { id: entry.row.id },
         data: {
+          ...(fillText ? { translation: fillText, translationSource: "ai", translationStatus: "draft", translationUpdatedAt: now, approvedAt: null } : {}),
           narrationAssetId: asset.id,
           narrationSource: "full",
           narrationStartSec: entry.startSec,
@@ -52,11 +57,11 @@ export const POST = studioRoute(async (request: Request, { params }: Params) => 
           narrationStatus: "ready",
           narrationUpdatedAt: now,
           // No text yet means nothing to fall out of date with; typing it later must not flag the audio.
-          narrationScriptHash: entry.row.translation.trim() ? scriptHash(entry.row.translation) : null,
+          narrationScriptHash: text.trim() ? scriptHash(text) : null,
           alignmentConfidence: 1
         }
-      })
-    )
+      });
+    })
   ]);
   return ok({ project: await loadProjectDto(id, user) });
 });

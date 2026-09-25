@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, FolderKanban, Languages, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, FileAudio, FolderKanban, Languages, ListOrdered, Plus, Trash2, Upload } from "lucide-react";
 import { Flag, LanguagePicker, RegionPicker, projectFlag, suggestedCountries } from "@/components/studio/language-picker";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
+import { setPendingVoiceover } from "@/components/studio/workspace/pending-voiceover";
 import { EmptyState, Field, InlineNotice, Modal, Spinner, StatusPill, inputClass, useConfirm } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
 import { studioAudiences, studioLanguages, studioRegisters } from "@/lib/studio/languages";
@@ -116,9 +117,10 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
       <NewLocalizationModal
         open={creating}
         onClose={() => setCreating(false)}
-        onCreated={(id) => {
+        onCreated={(id, voiceover) => {
           setCreating(false);
-          router.push(`/studio/projects/${id}`);
+          if (voiceover) setPendingVoiceover(id, voiceover.file);
+          router.push(`/studio/projects/${id}${voiceover ? "?voiceover=1" : ""}`);
         }}
         canManageTemplates={canManageTemplates}
       />
@@ -128,7 +130,7 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
 }
 
 
-function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: { open: boolean; onClose: () => void; onCreated: (id: string) => void; canManageTemplates: boolean }) {
+function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: { open: boolean; onClose: () => void; onCreated: (id: string, voiceover: { file: File | null } | null) => void; canManageTemplates: boolean }) {
   const [playlists, setPlaylists] = useState<LibraryPlaylistDto[] | null>(null);
   const [playlistId, setPlaylistId] = useState("");
   const [videoId, setVideoId] = useState("");
@@ -137,6 +139,8 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
   const [variety, setVariety] = useState("");
   const [audience, setAudience] = useState("Adult learners");
   const [register, setRegister] = useState(studioRegisters[0]);
+  const [voiceMode, setVoiceMode] = useState<"segments" | "whole">("segments");
+  const [voiceoverFile, setVoiceoverFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,7 +169,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
         method: "POST",
         json: { templateId: video.templateId, languageCode: language.code, languageName: language.name, region: region || null, variety: variety || null, audience: audience || null, register: register || null }
       });
-      onCreated(result.id);
+      onCreated(result.id, voiceMode === "whole" ? { file: voiceoverFile } : null);
     } catch (caught) {
       setError((caught as Error).message);
     } finally {
@@ -202,8 +206,8 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
       )}
 
       {step === 1 && (
-        <div className="grid gap-5 lg:grid-cols-[17.5rem_1fr]">
-          <div>
+        <div className="grid gap-5 lg:grid-cols-[17.5rem_minmax(0,1fr)]">
+          <div className="min-w-0">
             <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">1 · Playlist</h3>
             {playlists === null ? (
               <div className="flex items-center gap-2 text-sm text-[#6b7c8f]"><Spinner /> Loading playlists…</div>
@@ -223,7 +227,7 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
               </div>
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">2 · Lesson{playlist ? ` in ${playlist.title}` : ""}</h3>
             {!playlist ? (
               <p className="text-sm text-[#6b7c8f]">Choose a playlist first.</p>
@@ -310,6 +314,27 @@ function NewLocalizationModal({ open, onClose, onCreated, canManageTemplates }: 
               </Field>
             </section>
           </details>
+          <h3 className="mb-2 mt-5 text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">4 · Voice-over</h3>
+          <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="How will you add the voice-over?">
+            <button type="button" role="radio" aria-checked={voiceMode === "segments"} onClick={() => setVoiceMode("segments")} className={`rounded-xl border p-4 text-left ${voiceMode === "segments" ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+              <span className="flex items-center gap-2 text-sm font-extrabold text-[#243447]"><ListOrdered className="size-4 text-[#a64026]" /> Segment by segment</span>
+              <span className="mt-1 block text-xs text-[#6b7c8f]">Translate each of the {video.segmentCount} lines, then record, generate with AI or upload each one.</span>
+            </button>
+            <button type="button" role="radio" aria-checked={voiceMode === "whole"} onClick={() => setVoiceMode("whole")} className={`rounded-xl border p-4 text-left ${voiceMode === "whole" ? "border-[#a64026] bg-[#fbeaea]/60 ring-2 ring-[#a64026]/15" : "border-[#d8dde5] hover:border-[#c9d0da]"}`}>
+              <span className="flex items-center gap-2 text-sm font-extrabold text-[#243447]"><FileAudio className="size-4 text-[#a64026]" /> I already have the whole voice-over</span>
+              <span className="mt-1 block text-xs text-[#6b7c8f]">One audio or video file of the whole lesson. We cut it into the {video.segmentCount} segments for you, and the pictures follow it.</span>
+            </button>
+          </div>
+          {voiceMode === "whole" && (
+            <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-[#d8dde5] bg-[#f7f8fa] p-4 hover:border-[#a64026]/50">
+              <Upload className="size-5 shrink-0 text-[#a64026]" />
+              <span className="min-w-0 text-sm">
+                <span className="block truncate font-bold text-[#243447]">{voiceoverFile ? voiceoverFile.name : "Choose the voice-over file now (optional)"}</span>
+                <span className="block text-xs text-[#6b7c8f]">{voiceoverFile ? "It opens as soon as the lesson is created." : "MP3, WAV, M4A… or the video it's in. You can also choose it on the next screen."}</span>
+              </span>
+              <input type="file" accept="audio/*,video/*" className="hidden" onChange={(event) => setVoiceoverFile(event.target.files?.[0] ?? null)} />
+            </label>
+          )}
           <p className="mt-5 text-sm text-[#6b7c8f]">
             You will localize <strong className="text-[#243447]">{video.title}</strong> ({video.segmentCount} segments) into <strong className="text-[#243447]">{language.name}</strong>. The original visuals and pacing come with it; you replace the narration.
           </p>
