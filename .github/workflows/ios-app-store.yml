@@ -6,7 +6,7 @@ on:
       build_number:
         description: "App Store build number"
         required: true
-        default: "8"
+        default: "9"
       upload_to_app_store:
         description: "Upload archive to App Store Connect"
         required: true

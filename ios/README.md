@@ -1,12 +1,12 @@
-# Marketplace Literacy iOS Shell
+# Marketplace Literacy native iOS app
 
-This folder contains the App Store-ready iOS wrapper source for Marketplace Literacy App.
+This folder contains the native SwiftUI learning app for Marketplace Literacy.
 
-It is intentionally a small native SwiftUI app that loads the public production site:
-
-```text
-https://marketplaceliteracyapp.org/
-```
+The app provides a guided 12-step learning path, lesson reflections, a native
+market field workbook, daily goals, learning streaks, completion history,
+search and filters, saved lessons, and offline persistence. The public website
+is not embedded. WebKit is used only for inline YouTube playback inside a native
+lesson screen.
 
 ## App Store identifiers
 
@@ -14,7 +14,7 @@ https://marketplaceliteracyapp.org/
 - Apple ID: `6797343611`
 - Bundle ID: `org.marketplaceliteracy.app`
 - Version: `1.0.0`
-- Next prepared build number: `8` (verify against App Store Connect before upload)
+- Next prepared build number: `9` (verify against App Store Connect before upload)
 
 ## Why this uses XcodeGen
 
