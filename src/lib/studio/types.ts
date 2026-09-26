@@ -331,6 +331,11 @@ export type ProjectSummaryDto = {
   title: string;
   targetLanguageName: string;
   region: string | null;
+  /** The source-library playlist this lesson belongs to. */
+  playlistId: string | null;
+  playlistTitle: string | null;
+  /** Position of the lesson inside its source playlist. */
+  playlistOrder: number | null;
   status: string;
   narrationReady: number;
   segmentCount: number;

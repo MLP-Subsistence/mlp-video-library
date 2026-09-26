@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, FileAudio, FolderKanban, Languages, ListOrdered, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowRight, ChevronDown, FileAudio, Folder, FolderKanban, Languages, ListOrdered, Plus, Trash2, Upload, Video } from "lucide-react";
 import { Flag, LanguagePicker, RegionPicker, projectFlag, suggestedCountries } from "@/components/studio/language-picker";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { setPendingVoiceover } from "@/components/studio/workspace/pending-voiceover";
 import { EmptyState, Field, InlineNotice, Modal, Spinner, StatusPill, inputClass, useConfirm } from "@/components/studio/ui";
 import { api } from "@/lib/studio/client";
 import { studioAudiences, studioLanguages, studioRegisters } from "@/lib/studio/languages";
+import { groupProjects } from "@/lib/studio/project-groups";
 import type { LibraryPlaylistDto, ProjectSummaryDto } from "@/lib/studio/types";
 
 export function projectStatusLabel(status: string) {
@@ -33,6 +34,7 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
+  const projectGroups = useMemo(() => groupProjects(projects), [projects]);
 
   async function remove(project: ProjectSummaryDto) {
     if (!(await confirm({ title: `Delete "${project.title} — ${project.targetLanguageName}"?`, message: "Translations and narration for this localization will be removed. This cannot be undone." }))) return;
@@ -61,7 +63,10 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
             <InlineNotice tone="error" onDismiss={() => setError(null)}>{error}</InlineNotice>
           </div>
         )}
-        <h2 className="mb-4 text-xl font-extrabold text-[#243447]">Your Projects</h2>
+        <div className="mb-4">
+          <h2 className="text-xl font-extrabold text-[#243447]">Your Projects</h2>
+          {projects.length > 0 && <p className="mt-1 text-sm text-[#6b7c8f]">Open a language, then a playlist, to find the video you want to continue.</p>}
+        </div>
         {projects.length === 0 ? (
           <EmptyState
             icon={FolderKanban}
@@ -76,41 +81,69 @@ export function ProjectsPage({ initialProjects, canManageTemplates }: { initialP
             {canManageTemplates && " Content managers prepare lessons under Master Templates first."}
           </EmptyState>
         ) : (
-          <div className="grid gap-3">
-            {projects.map((project) => {
-              const status = projectStatusLabel(project.status);
-              const pct = project.segmentCount ? Math.round((project.narrationReady / project.segmentCount) * 100) : 0;
-              return (
-                <article key={project.id} className="flex flex-col gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#edf0f3] sm:flex-row sm:items-center sm:p-5">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-lg font-extrabold text-[#243447]">{project.title}</h3>
-                      <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                    </div>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-[#6b7c8f]">
-                      <Flag code={projectFlag("", project.targetLanguageName, project.region)} className="h-3 w-4" />
-                      {project.targetLanguageName}
-                      {project.region ? ` · ${project.region}` : ""}
-                      {!canManageTemplates ? "" : ` · ${project.createdByName}`}
-                    </p>
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="h-2 w-40 overflow-hidden rounded-full bg-[#f2f4f7]">
-                        <div className="h-full rounded-full bg-[#a64026]" style={{ width: `${pct}%` }} />
+          <div className="space-y-4">
+            {projectGroups.map((language) => (
+              <details key={language.name} open className="group/language overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#e4e8ed]">
+                <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-4 transition hover:bg-[#fbf7f6] sm:px-5">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#fbeaea]">
+                    <Flag code={projectFlag("", language.name, language.regions.length === 1 ? language.regions[0] : null)} className="h-4 w-6" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-base font-extrabold text-[#243447] sm:text-lg">{language.name}</span>
+                    <span className="block text-xs font-semibold text-[#6b7c8f]">{language.projectCount} video{language.projectCount === 1 ? "" : "s"} · {language.readyCount} ready</span>
+                  </span>
+                  <span className="hidden rounded-full bg-[#f2f4f7] px-3 py-1 text-xs font-extrabold text-[#526579] sm:inline">Language</span>
+                  <ChevronDown className="size-5 shrink-0 text-[#6b7c8f] transition-transform group-open/language:rotate-180" />
+                </summary>
+
+                <div className="space-y-3 border-t border-[#edf0f3] bg-[#f7f8fa] p-3 sm:p-4">
+                  {language.playlists.map((playlist) => (
+                    <details key={playlist.id} open className="group/playlist overflow-hidden rounded-xl border border-[#dde2e8] bg-white">
+                      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 hover:bg-[#fbfcfd]">
+                        <Folder className="size-5 shrink-0 fill-[#f3d9d3] text-[#a64026]" />
+                        <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-[#243447]">{playlist.title}</span>
+                        <span className="text-xs font-bold text-[#6b7c8f]">{playlist.projects.length} video{playlist.projects.length === 1 ? "" : "s"}</span>
+                        <ChevronDown className="size-4 shrink-0 text-[#8b9bad] transition-transform group-open/playlist:rotate-180" />
+                      </summary>
+
+                      <div className="divide-y divide-[#edf0f3] border-t border-[#edf0f3]">
+                        {playlist.projects.map((project) => {
+                          const status = projectStatusLabel(project.status);
+                          const pct = project.segmentCount ? Math.round((project.narrationReady / project.segmentCount) * 100) : 0;
+                          return (
+                            <article key={project.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
+                              <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f2f4f7] text-[#526579]"><Video className="size-5" /></span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h3 className="truncate text-sm font-extrabold text-[#243447] sm:text-base">{project.title}</h3>
+                                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                  <div className="h-1.5 w-28 overflow-hidden rounded-full bg-[#e9edf1]">
+                                    <div className="h-full rounded-full bg-[#a64026]" style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <span className="text-xs font-bold text-[#526579]">Narration {project.narrationReady}/{project.segmentCount}</span>
+                                  {project.region && <span className="text-xs text-[#8b9bad]">{project.region}</span>}
+                                  {canManageTemplates && <span className="text-xs text-[#8b9bad]">{project.createdByName}</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 self-end sm:self-auto">
+                                <button type="button" onClick={() => remove(project)} className="mlp-btn-outline h-9 border-red-200 px-3 text-red-700" title="Delete project" aria-label={`Delete ${project.title}`}>
+                                  <Trash2 className="size-4" />
+                                </button>
+                                <Link href={`/studio/projects/${project.id}`} className="mlp-btn-primary h-9 px-4 text-sm">
+                                  Continue <ArrowRight className="size-4" />
+                                </Link>
+                              </div>
+                            </article>
+                          );
+                        })}
                       </div>
-                      <span className="text-xs font-bold text-[#526579]">Narration: {project.narrationReady} / {project.segmentCount}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => remove(project)} className="mlp-btn-outline h-10 border-red-200 px-3 text-red-700" title="Delete project">
-                      <Trash2 className="size-4" />
-                    </button>
-                    <Link href={`/studio/projects/${project.id}`} className="mlp-btn-primary h-10">
-                      Continue <ArrowRight className="size-4" />
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
+                    </details>
+                  ))}
+                </div>
+              </details>
+            ))}
           </div>
         )}
       </main>
