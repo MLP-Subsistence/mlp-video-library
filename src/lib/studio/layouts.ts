@@ -234,7 +234,10 @@ export function normalizeComposition(input: Partial<Composition> | null | undefi
     };
   });
   const textOverlay = normalizeTextOverlay(input?.textOverlay);
-  const transition = input?.transition === "fade" ? "fade" : "none";
+  // The short-lived `fade` value is upgraded to a dissolve so projects saved
+  // before the transition change never return to a fade-through-black.
+  const storedTransition = (input as { transition?: string } | null | undefined)?.transition;
+  const transition = storedTransition === "dissolve" || storedTransition === "fade" ? "dissolve" : "none";
   const motion = input?.motion === "zoom-in" || input?.motion === "zoom-out" ? input.motion : "none";
   return { layout: layout.id, slots, transition, motion, ...(textOverlay ? { textOverlay } : {}) };
 }

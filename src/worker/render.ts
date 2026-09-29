@@ -82,9 +82,31 @@ export async function renderProject(options: { projectId: string; userId: string
       await options.progress(5 + Math.round((finished / blocks.length) * 80), `Built ${finished} of ${blocks.length} segments`);
     });
 
+    // A dissolve belongs to the incoming segment. Blend the outgoing clip's
+    // last frames over the incoming clip's first frames, while keeping the
+    // incoming audio and full duration intact. This is a true cross-dissolve,
+    // not a fade through black, and it does not move narration timing.
+    const finalSegmentFiles = [...segmentFiles];
+    for (let index = 1; index < blocks.length; index += 1) {
+      const segment = project.segments.find((entry) => entry.segmentId === blocks[index].segmentId);
+      if (segment?.composition.transition !== "dissolve") continue;
+      const transitionDuration = Math.min(0.35, blocks[index - 1].durationSec / 3, blocks[index].durationSec / 3);
+      const dissolved = path.join(workDir, `segment-${String(index + 1).padStart(3, "0")}-dissolve.mp4`);
+      await run("ffmpeg", [
+        "-y", "-hide_banner", "-loglevel", "error",
+        "-sseof", `-${transitionDuration.toFixed(3)}`, "-i", segmentFiles[index - 1],
+        "-i", segmentFiles[index],
+        "-filter_complex", `[0:v]trim=duration=${transitionDuration.toFixed(3)},setpts=PTS-STARTPTS[previous];[1:v]setpts=PTS-STARTPTS[current];[previous][current]xfade=transition=dissolve:duration=${transitionDuration.toFixed(3)}:offset=0,format=yuv420p[v]`,
+        "-map", "[v]", "-map", "1:a:0?",
+        "-c:v", "libx264", "-preset", process.env.STUDIO_X264_PRESET || "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(fps),
+        "-c:a", "copy", "-t", blocks[index].durationSec.toFixed(3), "-movflags", "+faststart", dissolved
+      ]);
+      finalSegmentFiles[index] = dissolved;
+    }
+
     await options.progress(86, "Joining segments");
     const listFile = path.join(workDir, "segments.txt");
-    await writeFile(listFile, segmentFiles.map((file) => `file '${file.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`).join("\n"));
+    await writeFile(listFile, finalSegmentFiles.map((file) => `file '${file.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`).join("\n"));
     const joined = path.join(workDir, "joined.mp4");
     await run("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", "-movflags", "+faststart", joined]);
 
@@ -333,9 +355,7 @@ async function renderSegment(options: {
     filters.push(`color=c=black:s=${width}x${height}:r=${fps}:d=${duration.toFixed(3)}[empty]`);
     current = "empty";
   }
-  const fadeDuration = Math.min(0.35, duration / 3);
-  const fade = segment.composition.transition === "fade" ? `,fade=t=in:st=0:d=${fadeDuration.toFixed(3)},fade=t=out:st=${Math.max(0, duration - fadeDuration).toFixed(3)}:d=${fadeDuration.toFixed(3)}` : "";
-  filters.push(`[${current}]format=yuv420p,trim=0:${duration.toFixed(3)}${fade}[vout]`);
+  filters.push(`[${current}]format=yuv420p,trim=0:${duration.toFixed(3)}[vout]`);
 
   const narrationAsset = segment.narration.assetId ? assetsById.get(segment.narration.assetId) : null;
   const narrationFile = narrationAsset ? localPaths.get(narrationAsset.id) : null;

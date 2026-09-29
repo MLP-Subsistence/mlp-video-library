@@ -80,7 +80,7 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
     run(effect, () => patchSegment(segment, {
       composition: {
         ...segment.composition,
-        [effect]: enabled ? (effect === "transition" ? "fade" : "zoom-in") : "none"
+        [effect]: enabled ? (effect === "transition" ? "dissolve" : "zoom-in") : "none"
       }
     }));
 
@@ -460,7 +460,7 @@ function VisualSection({ segment, assets, disabled, focusTrack, onChangeVisual, 
           <Wand2 className="mt-0.5 size-4 shrink-0 text-[#a64026]" />
           <div><p className="text-sm font-extrabold text-[#243447]">Motion</p><p className="text-xs text-[#6b7c8f]">Add gentle movement without learning video-editing tools.</p></div>
         </div>
-        <EffectRow label="Fade between clips" help="A short fade at this clip's edges." enabled={segment.composition.transition === "fade"} disabled={disabled} onToggle={(enabled) => onSetEffect("transition", enabled)} onAll={(enabled) => onSetEffectForLesson("transition", enabled)} />
+        <EffectRow label="Dissolve from previous clip" help="Softly blends the previous clip into this one; the first clip starts normally." enabled={segment.composition.transition === "dissolve"} disabled={disabled} onToggle={(enabled) => onSetEffect("transition", enabled)} onAll={(enabled) => onSetEffectForLesson("transition", enabled)} />
         <EffectRow label="Gentle motion on photos" help="Slowly zooms still images; videos are unchanged." enabled={segment.composition.motion !== "none"} disabled={disabled} onToggle={(enabled) => onSetEffect("motion", enabled)} onAll={(enabled) => onSetEffectForLesson("motion", enabled)} />
       </div>
       {children}

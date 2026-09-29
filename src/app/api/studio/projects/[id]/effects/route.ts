@@ -16,7 +16,7 @@ export const PATCH = studioRoute(async (request: Request, { params }: Params) =>
   await prisma.$transaction([
     ...rows.map((row) => {
       const composition = parseComposition(row.compositionOverride ?? row.segment.composition);
-      if (body.effect === "transition") composition.transition = body.enabled ? "fade" : "none";
+      if (body.effect === "transition") composition.transition = body.enabled ? "dissolve" : "none";
       else composition.motion = body.enabled ? "zoom-in" : "none";
       return prisma.studioProjectSegment.update({ where: { id: row.id }, data: { compositionOverride: serializeComposition(composition) } });
     }),

@@ -7,7 +7,7 @@ export type AssetKind = "image" | "video" | "audio";
 
 export type SlotFit = "cover" | "contain";
 
-export type VisualTransition = "none" | "fade";
+export type VisualTransition = "none" | "dissolve";
 export type ImageMotion = "none" | "zoom-in" | "zoom-out";
 
 /** Non-destructive positioning inside a visual slot. Values are normalized for preview and render. */

@@ -223,8 +223,8 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
             <div className="mb-4 rounded-lg border border-[#d8dde5] bg-white p-3">
               <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Clip effects</h3>
               <label className="mt-3 block text-xs font-bold text-[#243447]">Transition
-                <select value={composition.transition ?? "none"} onChange={(event) => setComposition((current) => ({ ...current, transition: event.target.value === "fade" ? "fade" : "none" }))} className="mt-1 h-9 w-full rounded-lg border border-[#d8dde5] bg-white px-2 text-sm font-semibold">
-                  <option value="none">None</option><option value="fade">Short fade</option>
+                <select value={composition.transition ?? "none"} onChange={(event) => setComposition((current) => ({ ...current, transition: event.target.value === "dissolve" ? "dissolve" : "none" }))} className="mt-1 h-9 w-full rounded-lg border border-[#d8dde5] bg-white px-2 text-sm font-semibold">
+                  <option value="none">None</option><option value="dissolve">Cross-dissolve</option>
                 </select>
               </label>
               <label className="mt-3 block text-xs font-bold text-[#243447]">Photo motion
