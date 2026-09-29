@@ -7,6 +7,17 @@ export type AssetKind = "image" | "video" | "audio";
 
 export type SlotFit = "cover" | "contain";
 
+export type VisualTransition = "none" | "fade";
+export type ImageMotion = "none" | "zoom-in" | "zoom-out";
+
+/** Non-destructive positioning inside a visual slot. Values are normalized for preview and render. */
+export type VisualFrame = {
+  scale: number;
+  x: number;
+  y: number;
+  rotation: number;
+};
+
 export type CompositionItem = {
   assetId: string;
   /** Proportion of the segment duration this item occupies inside its slot (sequential items). */
@@ -18,13 +29,23 @@ export type CompositionItem = {
 export type CompositionSlot = {
   id: string;
   fit: SlotFit;
+  frame?: VisualFrame;
   items: CompositionItem[];
 };
 
 export type Composition = {
   layout: string;
   slots: CompositionSlot[];
+  transition?: VisualTransition;
+  motion?: ImageMotion;
   textOverlay?: TextOverlay;
+};
+
+export type RenderSubtitles = {
+  mode: "none" | "source" | "target" | "custom";
+  languageCode?: string;
+  languageName?: string;
+  lines?: Record<string, string>;
 };
 
 export type TextFont = "Arial" | "Georgia" | "Verdana" | "Trebuchet MS" | "Tahoma" | "Times New Roman" | "Courier New" | "Impact" | "Comic Sans MS";

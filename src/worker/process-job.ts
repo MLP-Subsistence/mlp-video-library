@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { alignFullNarration } from "@/worker/align";
 import { renderProject, type RenderQuality } from "@/worker/render";
+import type { RenderSubtitles } from "@/lib/studio/types";
 
 /**
  * Claim and run one StudioJob. Safe to call from the standalone worker loop
@@ -27,7 +28,8 @@ export async function processJob(jobId: string, workerId: string) {
     const payload = JSON.parse(job.payload || "{}") as Record<string, unknown>;
     if (job.type === "render") {
       const quality: RenderQuality = payload.quality === "720p" ? "720p" : "1080p";
-      const asset = await renderProject({ projectId: job.projectId, userId: job.createdById, quality, progress });
+      const subtitles = payload.subtitles && typeof payload.subtitles === "object" ? payload.subtitles as RenderSubtitles : undefined;
+      const asset = await renderProject({ projectId: job.projectId, userId: job.createdById, quality, subtitles, progress });
       await prisma.$transaction([
         prisma.studioJob.update({ where: { id: job.id }, data: { status: "complete", progress: 100, stage: "Video ready", outputAssetId: asset.id, finishedAt: new Date(), error: null, errorDetail: null } }),
         prisma.studioProject.update({ where: { id: job.projectId }, data: { renderedAssetId: asset.id, status: "ready", renderQuality: quality } })

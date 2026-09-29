@@ -1,4 +1,4 @@
-import type { Composition, CompositionSlot, LayoutDefinition, LayoutSlotRect } from "@/lib/studio/types";
+import type { Composition, CompositionSlot, LayoutDefinition, LayoutSlotRect, VisualFrame } from "@/lib/studio/types";
 import { normalizeTextOverlay } from "@/lib/studio/text-overlay";
 
 /**
@@ -196,7 +196,9 @@ export function emptyComposition(layoutId = "full"): Composition {
   const layout = getLayout(layoutId);
   return {
     layout: layout.id,
-    slots: layout.slots.map((_, index) => ({ id: `slot_${index + 1}`, fit: "cover", items: [] }))
+    slots: layout.slots.map((_, index) => ({ id: `slot_${index + 1}`, fit: "cover", frame: defaultVisualFrame(), items: [] })),
+    transition: "none",
+    motion: "none"
   };
 }
 
@@ -227,11 +229,28 @@ export function normalizeComposition(input: Partial<Composition> | null | undefi
     return {
       id: provided?.id || `slot_${index + 1}`,
       fit: provided?.fit === "contain" ? "contain" : "cover",
+      frame: normalizeVisualFrame(provided?.frame),
       items: balanceShares(items)
     };
   });
   const textOverlay = normalizeTextOverlay(input?.textOverlay);
-  return { layout: layout.id, slots, ...(textOverlay ? { textOverlay } : {}) };
+  const transition = input?.transition === "fade" ? "fade" : "none";
+  const motion = input?.motion === "zoom-in" || input?.motion === "zoom-out" ? input.motion : "none";
+  return { layout: layout.id, slots, transition, motion, ...(textOverlay ? { textOverlay } : {}) };
+}
+
+export function defaultVisualFrame(): VisualFrame {
+  return { scale: 1, x: 0, y: 0, rotation: 0 };
+}
+
+export function normalizeVisualFrame(input: Partial<VisualFrame> | null | undefined): VisualFrame {
+  const finite = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return {
+    scale: Math.min(2.5, Math.max(1, finite(input?.scale, 1))),
+    x: Math.min(1, Math.max(-1, finite(input?.x, 0))),
+    y: Math.min(1, Math.max(-1, finite(input?.y, 0))),
+    rotation: Math.min(180, Math.max(-180, finite(input?.rotation, 0)))
+  };
 }
 
 function clampShare(value: unknown) {
@@ -257,7 +276,7 @@ export function replaceMainVisual(composition: Composition, assetId: string): Co
   if (!compositionHasVisual(base)) {
     const next = emptyComposition("full");
     next.slots[0].items = [{ assetId, share: 1 }];
-    return { ...next, ...(base.textOverlay ? { textOverlay: base.textOverlay } : {}) };
+    return { ...next, transition: base.transition, motion: base.motion, ...(base.textOverlay ? { textOverlay: base.textOverlay } : {}) };
   }
   const slotIndex = base.slots.findIndex((slot) => slot.items.length > 0);
   return {

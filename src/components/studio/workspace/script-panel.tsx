@@ -75,6 +75,20 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
       saveText.flush(segment, composition);
     } else saveText(segment, composition);
   };
+
+  const setEffect = (effect: "transition" | "motion", enabled: boolean) =>
+    run(effect, () => patchSegment(segment, {
+      composition: {
+        ...segment.composition,
+        [effect]: enabled ? (effect === "transition" ? "fade" : "zoom-in") : "none"
+      }
+    }));
+
+  const setEffectForLesson = (effect: "transition" | "motion", enabled: boolean) =>
+    run(`all-${effect}`, async () => {
+      const result = await api<{ project: ProjectDto }>(`/api/studio/projects/${project.id}/effects`, { method: "PATCH", json: { effect, enabled } });
+      controller.setProject(result.project);
+    }, `${effect === "transition" ? "Transitions" : "Photo motion"} ${enabled ? "applied to" : "removed from"} the whole lesson.`);
   const flushText = () => {
     const waiting = pendingText.current;
     if (!waiting) return;
@@ -324,7 +338,7 @@ export function ScriptPanel({ controller, onNext, onTranslateLesson, translating
         )}
 
         {panelTab === "visuals" && (
-          <VisualSection segment={segment} assets={project.assets} disabled={busy !== null} focusTrack={focusTrack} onChangeVisual={onChangeVisual} onOpenLayout={onOpenLayout} onResetToTemplate={segment.compositionIsOverride ? () => void run("visual", () => patchSegment(segment, { composition: segment.composition.textOverlay ? { ...segment.templateComposition, textOverlay: segment.composition.textOverlay } : null }), "Back to the master template visual; your on-screen text was kept.") : undefined}>
+          <VisualSection segment={segment} assets={project.assets} disabled={busy !== null} focusTrack={focusTrack} onChangeVisual={onChangeVisual} onOpenLayout={onOpenLayout} onSetEffect={setEffect} onSetEffectForLesson={setEffectForLesson} onResetToTemplate={segment.compositionIsOverride ? () => void run("visual", () => patchSegment(segment, { composition: segment.composition.textOverlay ? { ...segment.templateComposition, textOverlay: segment.composition.textOverlay } : null }), "Back to the master template visual; your on-screen text was kept.") : undefined}>
             <TextControls segment={segment} disabled={busy !== null} highlighted={focusTrack === "text"} onChange={onTextOverlayChange} onFlush={flushText} />
           </VisualSection>
         )}
@@ -415,7 +429,7 @@ function AlignmentCorrection({ segment, busy, onSave, onConfirm }: { segment: Pr
 }
 
 /** What is on the video track for this segment, with the same "swap it" affordance the narration has. */
-function VisualSection({ segment, assets, disabled, focusTrack, onChangeVisual, onOpenLayout, onResetToTemplate, children }: { segment: ProjectSegmentDto; assets: ProjectDto["assets"]; disabled: boolean; focusTrack: "text" | "video" | "audio"; onChangeVisual: () => void; onOpenLayout: () => void; onResetToTemplate?: () => void; children?: React.ReactNode }) {
+function VisualSection({ segment, assets, disabled, focusTrack, onChangeVisual, onOpenLayout, onSetEffect, onSetEffectForLesson, onResetToTemplate, children }: { segment: ProjectSegmentDto; assets: ProjectDto["assets"]; disabled: boolean; focusTrack: "text" | "video" | "audio"; onChangeVisual: () => void; onOpenLayout: () => void; onSetEffect: (effect: "transition" | "motion", enabled: boolean) => void; onSetEffectForLesson: (effect: "transition" | "motion", enabled: boolean) => void; onResetToTemplate?: () => void; children?: React.ReactNode }) {
   const items = segment.composition.slots.flatMap((slot) => slot.items.map((item) => assets[item.assetId]).filter((asset): asset is StudioAssetDto => Boolean(asset)));
   const first = items[0] ?? null;
   const summary = !first ? "No visual yet" : items.length > 1 ? `${items.length} visuals · ${segment.composition.layout === "full" ? "in sequence" : "split screen"}` : first.kind === "video" ? "Video clip" : "Picture";
@@ -436,13 +450,33 @@ function VisualSection({ segment, assets, disabled, focusTrack, onChangeVisual, 
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onChangeVisual} disabled={disabled} className="mlp-btn-primary h-10"><ImagePlus className="size-4" /> Change visual</button>
-        <button type="button" onClick={onOpenLayout} disabled={disabled} className="mlp-btn-outline h-10"><Grid2X2 className="size-4" /> Layout</button>
+        <button type="button" onClick={onOpenLayout} disabled={disabled} className="mlp-btn-outline h-10"><Grid2X2 className="size-4" /> Layout & reframe</button>
         {onResetToTemplate && (
           <button type="button" onClick={onResetToTemplate} disabled={disabled} className="inline-flex items-center gap-1 text-xs font-bold text-[#a64026]"><RefreshCw className="size-3.5" /> Use template visual</button>
         )}
       </div>
+      <div className="mt-4 rounded-xl border border-[#e5e7eb] bg-[#f7f8fa] p-3">
+        <div className="flex items-start gap-2">
+          <Wand2 className="mt-0.5 size-4 shrink-0 text-[#a64026]" />
+          <div><p className="text-sm font-extrabold text-[#243447]">Motion</p><p className="text-xs text-[#6b7c8f]">Add gentle movement without learning video-editing tools.</p></div>
+        </div>
+        <EffectRow label="Fade between clips" help="A short fade at this clip's edges." enabled={segment.composition.transition === "fade"} disabled={disabled} onToggle={(enabled) => onSetEffect("transition", enabled)} onAll={(enabled) => onSetEffectForLesson("transition", enabled)} />
+        <EffectRow label="Gentle motion on photos" help="Slowly zooms still images; videos are unchanged." enabled={segment.composition.motion !== "none"} disabled={disabled} onToggle={(enabled) => onSetEffect("motion", enabled)} onAll={(enabled) => onSetEffectForLesson("motion", enabled)} />
+      </div>
       {children}
     </section>
+  );
+}
+
+function EffectRow({ label, help, enabled, disabled, onToggle, onAll }: { label: string; help: string; enabled: boolean; disabled: boolean; onToggle: (enabled: boolean) => void; onAll: (enabled: boolean) => void }) {
+  return (
+    <div className="mt-3 border-t border-[#e5e7eb] pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <div><p className="text-xs font-extrabold text-[#243447]">{label}</p><p className="text-[11px] text-[#6b7c8f]">{help}</p></div>
+        <button type="button" disabled={disabled} onClick={() => onToggle(!enabled)} aria-pressed={enabled} className={`relative h-7 w-12 shrink-0 rounded-full transition ${enabled ? "bg-[#a64026]" : "bg-[#c9d0da]"}`}><span className={`absolute top-1 size-5 rounded-full bg-white shadow transition-all ${enabled ? "left-6" : "left-1"}`} /></button>
+      </div>
+      <div className="mt-2 flex gap-3 text-[11px] font-bold"><button type="button" disabled={disabled} onClick={() => onAll(true)} className="text-[#a64026]">Apply to all clips</button><button type="button" disabled={disabled} onClick={() => onAll(false)} className="text-[#6b7c8f]">Remove from all</button></div>
+    </div>
   );
 }
 

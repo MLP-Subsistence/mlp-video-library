@@ -4,9 +4,10 @@ import sharp from "sharp";
 import type { StudioAsset } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getLayout } from "@/lib/studio/layouts";
+import { DEFAULT_TEXT_OVERLAY } from "@/lib/studio/text-overlay";
 import { loadProjectDto } from "@/lib/studio/project-state";
 import { buildStorageKey, storage } from "@/lib/studio/storage";
-import type { ProjectDto, ProjectSegmentDto, TimelineBlock } from "@/lib/studio/types";
+import type { ProjectDto, ProjectSegmentDto, RenderSubtitles, TimelineBlock, VisualFrame } from "@/lib/studio/types";
 import { cleanupWorkDir, makeWorkDir, materializeAsset, parseProgressSeconds, probe, run } from "@/worker/ffmpeg";
 import { writeTextOverlay } from "@/worker/text-overlay";
 
@@ -43,7 +44,7 @@ async function inParallel<T>(items: T[], limit: number, work: (item: T, index: n
   await Promise.all(lanes);
 }
 
-export async function renderProject(options: { projectId: string; userId: string | null; quality: RenderQuality; progress: Progress }) {
+export async function renderProject(options: { projectId: string; userId: string | null; quality: RenderQuality; subtitles?: RenderSubtitles; progress: Progress }) {
   const owner = await prisma.studioProject.findUnique({ where: { id: options.projectId }, select: { createdById: true, createdBy: { select: { role: true } } } });
   if (!owner) throw new Error("Project not found");
   const project = await loadProjectDto(options.projectId, { id: owner.createdById, role: owner.createdBy.role });
@@ -76,7 +77,7 @@ export async function renderProject(options: { projectId: string; userId: string
     await options.progress(5, `Building ${blocks.length} segments`);
     await inParallel(blocks, segmentConcurrency(), async (block, index) => {
       const segment = project.segments.find((entry) => entry.segmentId === block.segmentId)!;
-      await renderSegment({ segment, block, width, height, fps, assetsById, localPaths, output: segmentFiles[index], project, stills });
+      await renderSegment({ segment, block, width, height, fps, assetsById, localPaths, output: segmentFiles[index], project, stills, subtitle: options.subtitles?.lines?.[segment.id] ?? options.subtitles?.lines?.[segment.segmentId] ?? "" });
       finished += 1;
       await options.progress(5 + Math.round((finished / blocks.length) * 80), `Built ${finished} of ${blocks.length} segments`);
     });
@@ -125,7 +126,7 @@ export async function renderProject(options: { projectId: string; userId: string
     const asset = await prisma.studioAsset.create({
       data: {
         kind: "video",
-        name: `${project.title} — ${project.targetLanguageName} (${options.quality})`,
+        name: `${project.title} — ${project.targetLanguageName} (${options.quality}${options.subtitles?.mode && options.subtitles.mode !== "none" ? `, ${options.subtitles.languageName ?? "subtitles"}` : ""})`,
         storageKey: videoKey,
         url: storage().publicUrl(videoKey),
         mimeType: "video/mp4",
@@ -134,7 +135,7 @@ export async function renderProject(options: { projectId: string; userId: string
         height: info.height,
         durationSec: info.durationSec,
         thumbnailUrl,
-        tags: `render, ${project.targetLanguageCode}, ${options.quality}`,
+        tags: `render, ${project.targetLanguageCode}, ${options.quality}${options.subtitles?.mode && options.subtitles.mode !== "none" ? ", subtitles" : ""}`,
         uploadedById: options.userId
       }
     });
@@ -145,15 +146,23 @@ export async function renderProject(options: { projectId: string; userId: string
 }
 
 /** An image resized to exactly `width`×`height` (cover = centre crop, contain = black bars), shared across segments. */
-function preparedStill(cache: Map<string, Promise<string>>, file: string, width: number, height: number, fit: "cover" | "contain", workDir: string) {
-  const key = `${file}|${width}x${height}|${fit}`;
+function preparedStill(cache: Map<string, Promise<string>>, file: string, width: number, height: number, fit: "cover" | "contain", frame: VisualFrame, workDir: string) {
+  const key = `${file}|${width}x${height}|${fit}|${frame.scale}|${frame.x}|${frame.y}|${frame.rotation}`;
   let pending = cache.get(key);
   if (!pending) {
     const target = path.join(workDir, `still-${cache.size + 1}-${width}x${height}.png`);
+    const scaledWidth = even(width * frame.scale);
+    const scaledHeight = even(height * frame.scale);
+    const maxX = Math.max(0, scaledWidth - width);
+    const maxY = Math.max(0, scaledHeight - height);
+    const left = Math.round(maxX * (0.5 - frame.x * 0.5));
+    const top = Math.round(maxY * (0.5 - frame.y * 0.5));
     pending = sharp(file)
-      .rotate()
-      .resize(width, height, { fit, position: "centre", background: { r: 0, g: 0, b: 0, alpha: 1 } })
+      .autoOrient()
+      .rotate(frame.rotation, { background: { r: 0, g: 0, b: 0, alpha: 1 } })
+      .resize(scaledWidth, scaledHeight, { fit, position: "centre", background: { r: 0, g: 0, b: 0, alpha: 1 } })
       .flatten({ background: { r: 0, g: 0, b: 0 } })
+      .extract({ left: Math.min(maxX, Math.max(0, left)), top: Math.min(maxY, Math.max(0, top)), width, height })
       .png({ compressionLevel: 1 })
       .toFile(target)
       .then(() => target);
@@ -190,6 +199,7 @@ async function renderSegment(options: {
   localPaths: Map<string, string>;
   output: string;
   stills: Map<string, Promise<string>>;
+  subtitle: string;
 }) {
   const { segment, block, width, height, fps, assetsById, localPaths } = options;
   const duration = Math.max(0.5, block.durationSec);
@@ -227,7 +237,7 @@ async function renderSegment(options: {
       const asset = assetsById.get(item.assetId);
       const file = asset ? localPaths.get(asset.id) : null;
       if (!asset || !file || asset.kind !== "image" || asset.mimeType === "image/gif") continue;
-      preparedStills.set(`${slotIndex}:${itemIndex}`, await preparedStill(options.stills, file, even(rect.w * width), even(rect.h * height), slot.fit === "contain" ? "contain" : "cover", path.dirname(options.output)));
+      preparedStills.set(`${slotIndex}:${itemIndex}`, await preparedStill(options.stills, file, even(rect.w * width), even(rect.h * height), slot.fit === "contain" ? "contain" : "cover", slot.frame ?? { scale: 1, x: 0, y: 0, rotation: 0 }, path.dirname(options.output)));
     }
   }
 
@@ -252,7 +262,13 @@ async function renderSegment(options: {
         filters.push(`color=c=0x243447:s=${sw}x${sh}:r=${fps}:d=${itemDuration.toFixed(3)}[${label}]`);
       } else if (asset.kind === "image" && asset.mimeType !== "image/gif") {
         args.push("-i", preparedStills.get(`${slotIndex}:${itemIndex}`)!);
-        filters.push(`[${inputIndex}:v]${heldFrame(itemDuration, fps)},setsar=1,format=yuv420p[${label}]`);
+        if (segment.composition.motion === "zoom-in" || segment.composition.motion === "zoom-out") {
+          const frames = Math.max(1, Math.ceil(itemDuration * fps));
+          const zoom = segment.composition.motion === "zoom-out" ? `1.08-0.08*on/${Math.max(1, frames - 1)}` : `1+0.08*on/${Math.max(1, frames - 1)}`;
+          filters.push(`[${inputIndex}:v]zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${sw}x${sh}:fps=${fps},trim=duration=${itemDuration.toFixed(3)},setsar=1,format=yuv420p[${label}]`);
+        } else {
+          filters.push(`[${inputIndex}:v]${heldFrame(itemDuration, fps)},setsar=1,format=yuv420p[${label}]`);
+        }
         inputIndex += 1;
       } else {
         // Video (or animated GIF): trim to the slot, hold the last frame when the clip is shorter.
@@ -304,11 +320,22 @@ async function renderSegment(options: {
     current = "texted";
     inputIndex += 1;
   }
+  if (options.subtitle.trim()) {
+    const subtitleFile = path.join(path.dirname(options.output), `${segment.id}-subtitle.png`);
+    await writeTextOverlay({ ...DEFAULT_TEXT_OVERLAY, text: options.subtitle.trim(), x: 0.07, y: 0.76, w: 0.86, h: 0.2, fontSize: 42, align: "center", verticalAlign: "bottom", background: true, backgroundColor: "#000000", backgroundOpacity: 0.78, backgroundRadius: 8, shadow: true }, width, height, subtitleFile);
+    args.push("-i", subtitleFile);
+    filters.push(`[${inputIndex}:v]${heldFrame(duration, fps)},format=rgba[subtitleoverlay]`);
+    filters.push(`[${current}][subtitleoverlay]overlay=0:0:format=auto:shortest=1[subtitled]`);
+    current = "subtitled";
+    inputIndex += 1;
+  }
   if (current === null) {
     filters.push(`color=c=black:s=${width}x${height}:r=${fps}:d=${duration.toFixed(3)}[empty]`);
     current = "empty";
   }
-  filters.push(`[${current}]format=yuv420p,trim=0:${duration.toFixed(3)}[vout]`);
+  const fadeDuration = Math.min(0.35, duration / 3);
+  const fade = segment.composition.transition === "fade" ? `,fade=t=in:st=0:d=${fadeDuration.toFixed(3)},fade=t=out:st=${Math.max(0, duration - fadeDuration).toFixed(3)}:d=${fadeDuration.toFixed(3)}` : "";
+  filters.push(`[${current}]format=yuv420p,trim=0:${duration.toFixed(3)}${fade}[vout]`);
 
   const narrationAsset = segment.narration.assetId ? assetsById.get(segment.narration.assetId) : null;
   const narrationFile = narrationAsset ? localPaths.get(narrationAsset.id) : null;

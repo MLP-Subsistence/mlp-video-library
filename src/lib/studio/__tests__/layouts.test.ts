@@ -84,3 +84,19 @@ test("on-screen text survives saved layout normalization and visual changes", ()
   assert.equal(hostile.textOverlay?.color, "#ffffff");
   assert.equal(hostile.textOverlay?.fontSize, 200, "font size is clamped to the largest the renderer supports");
 });
+
+test("motion, transitions and image framing survive normalization", () => {
+  const composition = normalizeComposition({
+    ...emptyComposition(),
+    transition: "fade",
+    motion: "zoom-out",
+    slots: [{ id: "slot_1", fit: "cover", frame: { scale: 3, x: -2, y: 0.25, rotation: 240 }, items: [{ assetId: "photo", share: 1 }] }]
+  });
+  assert.equal(composition.transition, "fade");
+  assert.equal(composition.motion, "zoom-out");
+  assert.deepEqual(composition.slots[0].frame, { scale: 2.5, x: -1, y: 0.25, rotation: 180 });
+  const replaced = replaceMainVisual(composition, "replacement");
+  assert.equal(replaced.transition, "fade");
+  assert.equal(replaced.motion, "zoom-out");
+  assert.deepEqual(replaced.slots[0].frame, composition.slots[0].frame);
+});

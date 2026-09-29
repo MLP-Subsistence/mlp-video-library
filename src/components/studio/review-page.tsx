@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, Clapperboard, Download, FileText, Globe2, PlayCircle, RotateCcw } from "lucide-react";
 import { RenderProgress, useJobPolling } from "@/components/studio/job-progress";
+import { LanguagePicker, type LanguageChoice } from "@/components/studio/language-picker";
 import { StudioPageHeader } from "@/components/studio/studio-shell";
 import { InlineNotice, Spinner, StatusPill } from "@/components/studio/ui";
 import { summarizeProject } from "@/components/studio/workspace/use-project";
@@ -24,6 +25,8 @@ export function ReviewPage({ initial, activeJob }: { initial: ProjectDto; active
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "info" | "success" | "warning" | "error"; text: string } | null>(null);
   const [confirmIncomplete, setConfirmIncomplete] = useState(false);
+  const [subtitleMode, setSubtitleMode] = useState<"none" | "target" | "source" | "custom">("none");
+  const [subtitleLanguage, setSubtitleLanguage] = useState({ code: "fr", name: "French" });
   const summary = summarizeProject(project);
   const needReview = project.segments.filter((segment) => segment.warnings.length > 0);
 
@@ -36,7 +39,7 @@ export function ReviewPage({ initial, activeJob }: { initial: ProjectDto; active
     setBusy("render");
     setNotice(null);
     try {
-      const result = await api<{ job: JobDto; project: ProjectDto; reused: boolean }>(`/api/studio/projects/${project.id}/render`, { method: "POST", json: { quality, allowIncomplete } });
+      const result = await api<{ job: JobDto; project: ProjectDto; reused: boolean }>(`/api/studio/projects/${project.id}/render`, { method: "POST", json: { quality, allowIncomplete, subtitleMode, subtitleLanguageCode: subtitleLanguage.code, subtitleLanguageName: subtitleLanguage.name } });
       setProject(result.project);
       setJobId(result.job.id);
       setShowProgress(true);
@@ -122,6 +125,10 @@ export function ReviewPage({ initial, activeJob }: { initial: ProjectDto; active
                   <StatusPill tone={project.status === "published" ? "ready" : isApproved ? "ready" : "accent"}>{project.status === "published" ? "Published" : isApproved ? "Approved" : project.renderQuality}</StatusPill>
                 </div>
                 <video src={project.renderedAssetUrl} controls playsInline preload="metadata" className="mt-4 aspect-video w-full rounded-xl bg-black" />
+                <details className="mt-4 rounded-xl border border-[#d8dde5] bg-[#f7f8fa] p-3">
+                  <summary className="cursor-pointer text-sm font-extrabold text-[#243447]">Generate another version or add subtitles</summary>
+                  <div className="mt-3"><SubtitleOptions project={project} mode={subtitleMode} onMode={setSubtitleMode} language={subtitleLanguage} onLanguage={setSubtitleLanguage} /></div>
+                </details>
                 <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
                   {!isApproved ? (
                     <button type="button" onClick={() => act("approve")} disabled={busy !== null} className="mlp-btn-primary">{busy === "approve" ? <Spinner /> : <Check className="size-4" />} Approve video</button>
@@ -160,6 +167,7 @@ export function ReviewPage({ initial, activeJob }: { initial: ProjectDto; active
                     </label>
                   ))}
                 </fieldset>
+                <div className="mt-5"><SubtitleOptions project={project} mode={subtitleMode} onMode={setSubtitleMode} language={subtitleLanguage} onLanguage={setSubtitleLanguage} /></div>
                 {confirmIncomplete && (
                   <div className="mt-4"><InlineNotice tone="warning">Some segments are incomplete. You can still generate a draft video (missing visuals show as blank, missing narration as silence).</InlineNotice></div>
                 )}
@@ -214,6 +222,22 @@ export function ReviewPage({ initial, activeJob }: { initial: ProjectDto; active
         />
       )}
     </>
+  );
+}
+
+function SubtitleOptions({ project, mode, onMode, language, onLanguage }: { project: ProjectDto; mode: "none" | "target" | "source" | "custom"; onMode: (mode: "none" | "target" | "source" | "custom") => void; language: { code: string; name: string }; onLanguage: (language: { code: string; name: string }) => void }) {
+  return (
+    <fieldset>
+      <legend className="text-sm font-extrabold text-[#243447]">Subtitles in the video</legend>
+      <p className="mt-1 text-xs text-[#6b7c8f]">Optional. These words are permanently visible in the exported MP4.</p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {([ ["none", "No subtitles"], ["target", project.targetLanguageName], ["source", "English"], ["custom", "Another language"] ] as const).map(([value, label]) => (
+          <button key={value} type="button" onClick={() => onMode(value)} aria-pressed={mode === value} className={`min-h-10 rounded-lg border px-3 py-2 text-left text-xs font-bold ${mode === value ? "border-[#a64026] bg-[#fbeaea] text-[#a64026]" : "border-[#d8dde5] bg-white text-[#526579]"}`}>{label}</button>
+        ))}
+      </div>
+      {mode === "custom" && <div className="mt-3"><LanguagePicker value={language} onChange={(choice: LanguageChoice) => onLanguage({ code: choice.code, name: choice.name })} /></div>}
+      {mode === "custom" && <p className="mt-2 text-xs text-amber-700">The additional subtitle translation is created when you generate the video. Review the exported video before publishing.</p>}
+    </fieldset>
   );
 }
 

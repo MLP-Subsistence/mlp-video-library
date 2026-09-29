@@ -38,6 +38,10 @@ export function CompositionPreview({
   const layout = getLayout(composition.layout);
   const localTime = block ? Math.max(0, timeSec - block.startSec) : 0;
   const duration = block?.durationSec ?? 1;
+  const transitionSec = Math.min(0.35, duration / 3);
+  const transitionOpacity = composition.transition === "fade"
+    ? Math.min(1, localTime / transitionSec, Math.max(0, (duration - localTime) / transitionSec))
+    : 1;
   return (
     <div className={`relative aspect-video w-full overflow-hidden rounded-xl bg-black [container-type:inline-size] ${className}`}>
       {composition.slots.map((slot, index) => {
@@ -59,6 +63,13 @@ export function CompositionPreview({
           activeStart = offset - itemDuration;
         }
         const asset = active ? assets[active.assetId] : null;
+        const frame = slot.frame ?? { scale: 1, x: 0, y: 0, rotation: 0 };
+        const itemDuration = Math.max(0.1, duration * (active?.share ?? 1));
+        const itemProgress = Math.min(1, Math.max(0, (localTime - activeStart) / itemDuration));
+        const motionScale = asset?.kind === "image" && composition.motion !== "none"
+          ? composition.motion === "zoom-out" ? 1.08 - itemProgress * 0.08 : 1 + itemProgress * 0.08
+          : 1;
+        const mediaTransform = `translate(${frame.x * 20}%, ${frame.y * 20}%) scale(${frame.scale * motionScale}) rotate(${frame.rotation}deg)`;
         return (
           <div
             key={slot.id}
@@ -74,10 +85,10 @@ export function CompositionPreview({
           >
             {asset ? (
               asset.kind === "video" ? (
-                <SlotVideo url={asset.url} fit={slot.fit} timeSec={(active?.startSec ?? 0) + (localTime - activeStart)} playing={playing} />
+                <div className="h-full w-full" style={{ transform: mediaTransform }}><SlotVideo url={asset.url} fit={slot.fit} timeSec={(active?.startSec ?? 0) + (localTime - activeStart)} playing={playing} /></div>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={asset.url} alt="" className="h-full w-full" style={{ objectFit: slot.fit === "contain" ? "contain" : "cover" }} draggable={false} />
+                <img src={asset.url} alt="" className="h-full w-full" style={{ objectFit: slot.fit === "contain" ? "contain" : "cover", transform: mediaTransform }} draggable={false} />
               )
             ) : (
               <div className="grid h-full w-full place-items-center text-white/40">
@@ -95,6 +106,7 @@ export function CompositionPreview({
         </div>
       )}
       {caption && <div className="absolute bottom-3 left-3 rounded bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white/90">{caption}</div>}
+      {transitionOpacity < 1 && <div className="pointer-events-none absolute inset-0 z-40 bg-black" style={{ opacity: 1 - transitionOpacity }} aria-hidden />}
     </div>
   );
 }

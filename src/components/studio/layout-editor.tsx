@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronUp, ImagePlus, Minus, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { AssetLibrary, AssetThumb } from "@/components/studio/asset-library";
 import { Modal } from "@/components/studio/ui";
-import { PIE_MAX_SLICES, PIE_MIN_SLICES, balanceShares, clipPathForSlot, emptyComposition, getLayout, layouts, normalizeComposition, pieCountForLayout } from "@/lib/studio/layouts";
+import { PIE_MAX_SLICES, PIE_MIN_SLICES, balanceShares, clipPathForSlot, defaultVisualFrame, emptyComposition, getLayout, layouts, normalizeComposition, pieCountForLayout } from "@/lib/studio/layouts";
 import type { Composition, StudioAssetDto } from "@/lib/studio/types";
 
 /**
@@ -53,8 +53,10 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
   const changeLayout = (layoutId: string) => {
     const next = emptyComposition(layoutId);
     // Keep already chosen visuals in the same slot positions where possible.
-    next.slots = next.slots.map((emptySlot, index) => composition.slots[index] ? { ...emptySlot, fit: composition.slots[index].fit, items: composition.slots[index].items } : emptySlot);
+    next.slots = next.slots.map((emptySlot, index) => composition.slots[index] ? { ...emptySlot, fit: composition.slots[index].fit, frame: composition.slots[index].frame, items: composition.slots[index].items } : emptySlot);
     next.textOverlay = composition.textOverlay;
+    next.transition = composition.transition;
+    next.motion = composition.motion;
     // Extra visuals from removed slots flow into the last slot rather than vanishing.
     const overflow = composition.slots.slice(next.slots.length).flatMap((entry) => entry.items);
     if (overflow.length) next.slots[next.slots.length - 1].items = balanceShares([...next.slots[next.slots.length - 1].items, ...overflow]);
@@ -120,8 +122,8 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
       <Modal
         open={open}
         onClose={onClose}
-        title="Layout Editor"
-        description={`Choose a visual composition for ${segmentLabel}`}
+        title="Layout & Reframe"
+        description={`Arrange, crop and position the visuals for ${segmentLabel}`}
         wide
         footer={
           <>
@@ -131,7 +133,7 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
               </button>
             )}
             <button type="button" onClick={onClose} className="mlp-btn-outline">Cancel</button>
-            <button type="button" onClick={apply} disabled={busy} className="mlp-btn-primary"><Check className="size-4" /> Apply Layout</button>
+            <button type="button" onClick={apply} disabled={busy} className="mlp-btn-primary"><Check className="size-4" /> Apply changes</button>
           </>
         }
       >
@@ -208,7 +210,7 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
                     }}
                     aria-label={`${entry.items.length ? "Edit" : "Add media to"} ${rect.shape === "wedge" ? "slice" : "screen"} ${index + 1}`}
                   >
-                    {first ? <AssetThumb asset={first} /> : <span className="grid h-full w-full place-items-center gap-1 text-center text-white/75"><span><ImagePlus className="mx-auto size-5" />{rect.shape !== "wedge" && <span className="mt-1 block text-[10px] font-extrabold">Add image/video</span>}</span></span>}
+                    {first ? <span className="block h-full w-full" style={{ transform: `translate(${(entry.frame?.x ?? 0) * 20}%, ${(entry.frame?.y ?? 0) * 20}%) scale(${entry.frame?.scale ?? 1}) rotate(${entry.frame?.rotation ?? 0}deg)` }}><AssetThumb asset={first} /></span> : <span className="grid h-full w-full place-items-center gap-1 text-center text-white/75"><span><ImagePlus className="mx-auto size-5" />{rect.shape !== "wedge" && <span className="mt-1 block text-[10px] font-extrabold">Add image/video</span>}</span></span>}
                     <span className={`absolute rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-extrabold text-white ${rect.shape === "wedge" ? "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" : "left-2 top-2"}`}>{rect.shape === "wedge" ? index + 1 : `Screen ${index + 1}`}{slotSummary[index] > 1 ? ` · ${slotSummary[index]} in sequence` : ""}</span>
                   </button>
                 );
@@ -218,6 +220,19 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
           </div>
 
           <aside className="rounded-xl bg-[#f7f8fa] p-4 ring-1 ring-[#edf0f3]">
+            <div className="mb-4 rounded-lg border border-[#d8dde5] bg-white p-3">
+              <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">Clip effects</h3>
+              <label className="mt-3 block text-xs font-bold text-[#243447]">Transition
+                <select value={composition.transition ?? "none"} onChange={(event) => setComposition((current) => ({ ...current, transition: event.target.value === "fade" ? "fade" : "none" }))} className="mt-1 h-9 w-full rounded-lg border border-[#d8dde5] bg-white px-2 text-sm font-semibold">
+                  <option value="none">None</option><option value="fade">Short fade</option>
+                </select>
+              </label>
+              <label className="mt-3 block text-xs font-bold text-[#243447]">Photo motion
+                <select value={composition.motion ?? "none"} onChange={(event) => setComposition((current) => ({ ...current, motion: event.target.value === "zoom-in" || event.target.value === "zoom-out" ? event.target.value : "none" }))} className="mt-1 h-9 w-full rounded-lg border border-[#d8dde5] bg-white px-2 text-sm font-semibold">
+                  <option value="none">None</option><option value="zoom-in">Gentle zoom in</option><option value="zoom-out">Gentle zoom out</option>
+                </select>
+              </label>
+            </div>
             <h3 className="text-xs font-extrabold uppercase tracking-wide text-[#6b7c8f]">{slotNoun} Settings</h3>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {composition.slots.map((entry, index) => (
@@ -276,10 +291,33 @@ function LayoutEditorDialog({ open, onClose, onApply, initial, assets, segmentLa
                 </label>
               ))}
             </div>
+
+            <div className="mt-5 border-t border-[#e5e7eb] pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-extrabold text-[#243447]">Reframe</p>
+                  <p className="text-xs text-[#6b7c8f]">Zoom, position or straighten this visual.</p>
+                </div>
+                <button type="button" onClick={() => updateSlot(activeSlot, (entry) => ({ ...entry, frame: defaultVisualFrame() }))} className="text-xs font-bold text-[#a64026]">Reset</button>
+              </div>
+              <FrameSlider label="Zoom" value={slot?.frame?.scale ?? 1} min={1} max={2.5} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateSlot(activeSlot, (entry) => ({ ...entry, frame: { ...(entry.frame ?? defaultVisualFrame()), scale: value } }))} />
+              <FrameSlider label="Left / right" value={slot?.frame?.x ?? 0} min={-1} max={1} step={0.01} format={(value) => `${Math.round(value * 100)}`} onChange={(value) => updateSlot(activeSlot, (entry) => ({ ...entry, frame: { ...(entry.frame ?? defaultVisualFrame()), x: value } }))} />
+              <FrameSlider label="Up / down" value={slot?.frame?.y ?? 0} min={-1} max={1} step={0.01} format={(value) => `${Math.round(value * 100)}`} onChange={(value) => updateSlot(activeSlot, (entry) => ({ ...entry, frame: { ...(entry.frame ?? defaultVisualFrame()), y: value } }))} />
+              <FrameSlider label="Rotate" value={slot?.frame?.rotation ?? 0} min={-180} max={180} step={1} format={(value) => `${Math.round(value)}°`} onChange={(value) => updateSlot(activeSlot, (entry) => ({ ...entry, frame: { ...(entry.frame ?? defaultVisualFrame()), rotation: value } }))} />
+            </div>
           </aside>
         </div>
       </Modal>
       <AssetLibrary open={Boolean(picking)} onClose={() => setPicking(null)} onSelect={selectAsset} kinds={["image", "video"]} description={`Select an image or video for ${segmentLabel}`} selectedIds={slotItems.map((item) => item.assetId)} preferredFolderId={preferredFolderId} />
     </>
+  );
+}
+
+function FrameSlider({ label, value, min, max, step, format, onChange }: { label: string; value: number; min: number; max: number; step: number; format: (value: number) => string; onChange: (value: number) => void }) {
+  return (
+    <label className="mt-3 block text-xs text-[#526579]">
+      <span className="flex justify-between gap-2"><span className="font-bold text-[#243447]">{label}</span><span className="tabular-nums">{format(value)}</span></span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} className="mt-1 w-full accent-[#a64026]" />
+    </label>
   );
 }

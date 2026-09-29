@@ -1,6 +1,6 @@
 import type { StudioJob } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { JobDto } from "@/lib/studio/types";
+import type { JobDto, RenderSubtitles } from "@/lib/studio/types";
 
 /**
  * RenderService / job queue. Jobs are rows in StudioJob; a separate worker
@@ -26,7 +26,7 @@ export async function jobToDto(job: StudioJob): Promise<JobDto> {
   };
 }
 
-export async function enqueueRenderJob(options: { projectId: string; userId: string; quality: "1080p" | "720p" }) {
+export async function enqueueRenderJob(options: { projectId: string; userId: string; quality: "1080p" | "720p"; subtitles?: RenderSubtitles }) {
   // Duplicate protection: reuse an active render for the same project.
   const active = await prisma.studioJob.findFirst({
     where: { projectId: options.projectId, type: "render", status: { in: [...JOB_ACTIVE_STATUSES] } },
@@ -38,7 +38,7 @@ export async function enqueueRenderJob(options: { projectId: string; userId: str
       type: "render",
       status: "queued",
       projectId: options.projectId,
-      payload: JSON.stringify({ quality: options.quality }),
+      payload: JSON.stringify({ quality: options.quality, subtitles: options.subtitles }),
       createdById: options.userId,
       stage: "Waiting for the render worker"
     }
