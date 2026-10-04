@@ -1,0 +1,12 @@
+{
+  "info": {
+    "version": 1,
+    "author": "xcode"
+  },
+  "images": [
+    {
+      "filename": "swahili-b4g.jpg",
+      "idiom": "universal"
+    }
+  ]
+}

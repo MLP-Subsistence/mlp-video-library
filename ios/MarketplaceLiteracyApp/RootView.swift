@@ -10,34 +10,35 @@ struct RootView: View {
     var body: some View {
         TabView {
             NavigationStack {
-                LearnView(store: store)
-                    .navigationDestination(for: Lesson.self) { LessonDetailView(lesson: $0, store: store) }
-            }
-            .tabItem { Label("Learn", systemImage: "graduationcap.fill") }
-
-            NavigationStack {
-                LibraryView(store: store)
+                LibraryHomeView(store: store)
                     .navigationDestination(for: Lesson.self) { LessonDetailView(lesson: $0, store: store) }
             }
             .tabItem { Label("Library", systemImage: "books.vertical.fill") }
 
             NavigationStack {
-                WorkbookView(store: store)
-            }
-            .tabItem { Label("Workbook", systemImage: "briefcase.fill") }
-
-            NavigationStack {
-                LearningProgressView(store: store)
+                LibraryView(store: store)
                     .navigationDestination(for: Lesson.self) { LessonDetailView(lesson: $0, store: store) }
             }
-            .tabItem { Label("Progress", systemImage: "chart.bar.fill") }
+            .tabItem { Label("Search", systemImage: "magnifyingglass") }
+
+            NavigationStack {
+                LearnView(store: store)
+                    .navigationDestination(for: Lesson.self) { LessonDetailView(lesson: $0, store: store) }
+            }
+            .tabItem { Label("Practice", systemImage: "graduationcap.fill") }
+
+            NavigationStack {
+                SavedResourcesView(store: store)
+                    .navigationDestination(for: Lesson.self) { LessonDetailView(lesson: $0, store: store) }
+            }
+            .tabItem { Label("Saved", systemImage: "bookmark.fill") }
         }
         .tint(brandColor)
         .task { await store.refresh() }
     }
 }
 
-private struct LearnView: View {
+struct LearnView: View {
     @ObservedObject var store: LearningStore
 
     var body: some View {
@@ -114,8 +115,21 @@ private struct LearnView: View {
             } footer: {
                 Text("Your path selects a varied sequence of lessons in your chosen language. Reflections and actions are saved privately on this device.")
             }
+
+            Section("Field practice") {
+                NavigationLink {
+                    WorkbookView(store: store)
+                } label: {
+                    Label("Field Workbook", systemImage: "briefcase.fill")
+                }
+                NavigationLink {
+                    LearningProgressView(store: store)
+                } label: {
+                    Label("My Progress", systemImage: "chart.bar.fill")
+                }
+            }
         }
-        .navigationTitle("Learn")
+        .navigationTitle("Practice")
         .refreshable { await store.refresh() }
         .toolbar { if store.isLoading { ProgressView() } }
     }
@@ -226,7 +240,7 @@ private struct LibraryView: View {
                 }
             }
         }
-        .navigationTitle("Lesson Library")
+        .navigationTitle("Search Resources")
         .searchable(text: $searchText, prompt: "Search lessons and topics")
         .refreshable { await store.refresh() }
         .toolbar { if store.isLoading { ProgressView() } }
@@ -317,6 +331,8 @@ private struct LessonDetailView: View {
                     }
                 }
 
+                ReflectionActivity(lesson: lesson, store: store, reflection: reflectionBinding)
+
                 if let transcript = lesson.transcript, !transcript.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Transcript", systemImage: "text.alignleft").font(.headline)
@@ -325,7 +341,6 @@ private struct LessonDetailView: View {
                     .cardStyle()
                 }
 
-                ReflectionActivity(lesson: lesson, store: store, reflection: reflectionBinding)
             }
             .padding()
         }
@@ -364,6 +379,13 @@ private struct ReflectionActivity: View {
                 Text("Add a useful idea and a next action to complete this lesson.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+
+            NavigationLink {
+                WorkbookView(store: store)
+            } label: {
+                Label("Continue in Field Workbook", systemImage: "briefcase.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .cardStyle()
     }
@@ -384,7 +406,7 @@ private struct PromptEditor: View {
     }
 }
 
-private struct WorkbookView: View {
+struct WorkbookView: View {
     @ObservedObject var store: LearningStore
     @State private var showNewPlan = false
 
@@ -486,7 +508,7 @@ private struct FieldPlanEditor: View {
     }
 }
 
-private struct LearningProgressView: View {
+struct LearningProgressView: View {
     @ObservedObject var store: LearningStore
 
     var body: some View {
