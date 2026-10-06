@@ -4,6 +4,15 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>fr</string>
+		<string>hi</string>
+		<string>es</string>
+		<string>sw</string>
+		<string>te</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Marketplace Literacy</string>
 	<key>CFBundleExecutable</key>

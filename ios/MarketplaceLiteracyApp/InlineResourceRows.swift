@@ -32,13 +32,13 @@ struct InlineResourceRows: View {
                     InlineResourcePlayer(lesson: lesson) { advance(after: lesson.id) }
                         .id(lesson.id)
                     HStack {
-                        Text(playlistFinished ? "Playlist complete" : positionText(for: lesson.id))
+                        Text(playlistFinished ? LibraryLocalization(language: lesson.language).text("playlistComplete") : positionText(for: lesson.id))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("playlist-position")
                         Spacer()
                         Button { advance(after: lesson.id) } label: {
-                            Label("Next Clip", systemImage: "forward.end.fill")
+                            Label(LibraryLocalization(language: lesson.language).text("nextClip"), systemImage: "forward.end.fill")
                         }
                         .buttonStyle(.bordered)
                         .disabled(nextLesson(after: lesson.id) == nil)
@@ -75,7 +75,7 @@ struct InlineResourceRows: View {
 
     private func positionText(for id: String) -> String {
         guard let index = lessons.firstIndex(where: { $0.id == id }) else { return "" }
-        return "Clip \(index + 1) of \(lessons.count)"
+        return LibraryLocalization(language: lessons[index].language).text("clipPosition", index + 1, lessons.count)
     }
 }
 
@@ -87,12 +87,13 @@ private struct InlineResourcePlayer: View {
         Group {
             if let videoID = lesson.youtubeVideoID, !videoID.isEmpty {
                 YouTubeResourcePlayer(videoID: videoID, onEnded: onEnded)
+                    .environment(\.libraryLanguage, lesson.language)
             } else if let url = lesson.directVideoURL {
                 DirectResourcePlayer(url: url, onEnded: onEnded)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .frame(minHeight: 200)
             } else {
-                Label("This resource does not currently have a video link.", systemImage: "video.slash")
+                Label(LibraryLocalization(language: lesson.language).text("noVideo"), systemImage: "video.slash")
             }
         }
         .accessibilityIdentifier("inline-player-\(lesson.id)")

@@ -78,13 +78,15 @@ private struct LibraryEyebrow: View {
 struct LibraryHomeView: View {
     @ObservedObject var store: LearningStore
     @State private var showingStudio = false
+    @Environment(\.libraryLanguage) private var uiLanguage
+    private var ui: LibraryLocalization { LibraryLocalization(language: uiLanguage) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(spacing: 14) {
-                    LibraryEyebrow(text: "MARKETPLACE LITERACY PROJECT")
-                    Text("A facilitator resource library for organized Marketplace Literacy resources by language and resource format.")
+                    LibraryEyebrow(text: ui.text("project"))
+                    Text(ui.text("caption"))
                         .font(.body)
                         .foregroundStyle(LibraryStyle.ink)
                         .multilineTextAlignment(.center)
@@ -100,10 +102,10 @@ struct LibraryHomeView: View {
                             .font(.title3)
                             .foregroundStyle(LibraryStyle.rust)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Educator Studio")
+                            Text(ui.text("studio"))
                                 .font(.headline)
                                 .foregroundStyle(LibraryStyle.ink)
-                            Text("Create and translate Marketplace Literacy videos")
+                            Text(ui.text("studioCaption"))
                                 .font(.caption)
                                 .foregroundStyle(LibraryStyle.ink)
                         }
@@ -125,13 +127,13 @@ struct LibraryHomeView: View {
                 .padding(.bottom, 28)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    LibraryEyebrow(text: "CHOOSE A LANGUAGE")
-                    Text("Select a Language")
+                    LibraryEyebrow(text: ui.text("chooseLanguage"))
+                    Text(ui.text("selectLanguage"))
                         .font(.title.bold())
                         .foregroundStyle(LibraryStyle.ink)
 
-                    if let error = store.errorMessage, store.lessons.isEmpty {
-                        Label(error, systemImage: "wifi.exclamationmark")
+                    if store.errorMessage != nil, store.lessons.isEmpty {
+                        Label(ui.text("connectRefresh"), systemImage: "wifi.exclamationmark")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -139,6 +141,8 @@ struct LibraryHomeView: View {
                     ForEach(LibraryLanguage.all) { language in
                         NavigationLink {
                             LanguageFormatsView(store: store, language: language)
+                                .environment(\.libraryLanguage, language.name)
+                                .onAppear { store.selectedLanguage = language.name }
                         } label: {
                             LibraryLanguageCard(
                                 language: language,
@@ -170,6 +174,7 @@ struct LibraryHomeView: View {
 private struct LibraryLanguageCard: View {
     let language: LibraryLanguage
     let count: Int
+    private var ui: LibraryLocalization { LibraryLocalization(language: language.name) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -188,14 +193,14 @@ private struct LibraryLanguageCard: View {
                     .padding(.vertical, 5)
                     .background(LibraryStyle.rust.opacity(0.09), in: RoundedRectangle(cornerRadius: 5))
                 HStack {
-                    Text(language.name)
+                    Text(language.nativeName)
                         .font(.title3.bold())
                         .foregroundStyle(LibraryStyle.ink)
                     Spacer()
                     Image(systemName: "arrow.right")
                         .foregroundStyle(LibraryStyle.rust)
                 }
-                Text(count > 0 ? "\(count) resources" : "Browse resources")
+                Text(count > 0 ? ui.resourceCount(count) : ui.text("browseResources"))
                     .font(.subheadline)
                     .foregroundStyle(LibraryStyle.ink)
             }
@@ -211,6 +216,7 @@ private struct LibraryLanguageCard: View {
 private struct LanguageFormatsView: View {
     @ObservedObject var store: LearningStore
     let language: LibraryLanguage
+    private var ui: LibraryLocalization { LibraryLocalization(language: language.name) }
 
     private var formatNames: [String] {
         let available = Set(store.lessons.filter { $0.language == language.name }.map(\.format))
@@ -221,14 +227,14 @@ private struct LanguageFormatsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("\(language.name) Resources")
+                Text(ui.text("languageResources"))
                     .font(.largeTitle.bold())
                     .foregroundStyle(LibraryStyle.ink)
-                LibraryEyebrow(text: "SELECT RESOURCE FORMAT")
+                LibraryEyebrow(text: ui.text("selectFormat"))
 
                 if formatNames.isEmpty {
-                    ContentUnavailableView("Resources unavailable", systemImage: "wifi.exclamationmark",
-                                           description: Text("Connect and pull down to load the \(language.name) library."))
+                    ContentUnavailableView(ui.text("unavailable"), systemImage: "wifi.exclamationmark",
+                                           description: Text(ui.text("connectRefresh")))
                 } else {
                     ForEach(formatNames, id: \.self) { name in
                         NavigationLink {
@@ -254,6 +260,8 @@ private struct LanguageFormatsView: View {
 private struct FormatCard: View {
     let format: LibraryFormat
     let count: Int
+    @Environment(\.libraryLanguage) private var uiLanguage
+    private var ui: LibraryLocalization { LibraryLocalization(language: uiLanguage) }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -262,8 +270,8 @@ private struct FormatCard: View {
                 .scaledToFit()
                 .frame(width: 46, height: 46)
             VStack(alignment: .leading, spacing: 4) {
-                Text(format.name).font(.headline).foregroundStyle(LibraryStyle.ink)
-                Text("\(count) resources").font(.caption).foregroundStyle(LibraryStyle.rust)
+                Text(ui.formatName(format.name)).font(.headline).foregroundStyle(LibraryStyle.ink)
+                Text(ui.resourceCount(count)).font(.caption).foregroundStyle(LibraryStyle.rust)
             }
             Spacer(minLength: 0)
             Image(systemName: "arrow.right").foregroundStyle(LibraryStyle.rust)
@@ -282,6 +290,7 @@ private struct FormatResourcesView: View {
     let format: String
     @State private var searchText = ""
     @State private var selectedID: String?
+    private var ui: LibraryLocalization { LibraryLocalization(language: language.name) }
 
     private var formatLessons: [Lesson] {
         store.lessons.filter { $0.language == language.name && $0.format == format }
@@ -299,18 +308,18 @@ private struct FormatResourcesView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    LibraryEyebrow(text: "\(language.name.uppercased()) / \(format.uppercased())")
-                    Text(format).font(.title.bold()).foregroundStyle(LibraryStyle.ink)
-                    Text("\(formatLessons.count) published resources")
+                    LibraryEyebrow(text: "\(language.nativeName) / \(ui.formatName(format))")
+                    Text(ui.formatName(format)).font(.title.bold()).foregroundStyle(LibraryStyle.ink)
+                    Text(ui.text("publishedResources", formatLessons.count))
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 8)
             }
 
-            Section("Resources (\(visibleLessons.count))") {
+            Section(ui.resourceHeading(visibleLessons.count)) {
                 if visibleLessons.isEmpty {
-                    ContentUnavailableView("No matching resources", systemImage: "books.vertical",
-                                           description: Text("Try another search term."))
+                    ContentUnavailableView(ui.text("noMatches"), systemImage: "books.vertical",
+                                           description: Text(ui.text("trySearch")))
                 } else {
                     InlineResourceRows(lessons: visibleLessons, selectedID: $selectedID)
                 }
@@ -318,7 +327,7 @@ private struct FormatResourcesView: View {
         }
         .scrollContentBackground(.hidden)
         .background(LibraryStyle.canvas)
-        .searchable(text: $searchText, prompt: "Search \(format) resources")
+        .searchable(text: $searchText, prompt: ui.text("searchFormat", ui.formatName(format)))
         .refreshable { await store.refresh() }
         .toolbar { ToolbarItem(placement: .principal) { LibraryBrand() } }
         .navigationBarTitleDisplayMode(.inline)

@@ -4,23 +4,26 @@ import WebKit
 struct YouTubeResourcePlayer: View {
     let videoID: String
     var onEnded: () -> Void = {}
-    @State private var status = "Loading video…"
+    @State private var status = "loading"
+    @State private var errorCode = 0
     @State private var failed = false
     @State private var attempt = UUID()
     @State private var visible = false
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.libraryLanguage) private var uiLanguage
+    private var ui: LibraryLocalization { LibraryLocalization(language: uiLanguage) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            YouTubeWebPlayer(videoID: videoID, isActive: visible && scenePhase == .active, onEnded: onEnded, status: $status, failed: $failed)
+            YouTubeWebPlayer(videoID: videoID, languageCode: ui.localeID, isActive: visible && scenePhase == .active, onEnded: onEnded, status: $status, failed: $failed, errorCode: $errorCode)
                 .id(attempt)
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .frame(minHeight: 200)
                 .accessibilityIdentifier("youtube-player")
 
             if !status.isEmpty {
-                Text(status)
+                Text(ui.text(status, errorCode))
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .accessibilityIdentifier("playback-status")
@@ -28,13 +31,13 @@ struct YouTubeResourcePlayer: View {
 
             if failed {
                 HStack {
-                    Button("Retry video") {
+                    Button(ui.text("retryVideo")) {
                         failed = false
-                        status = "Loading video…"
+                        status = "loading"
                         attempt = UUID()
                     }
                     .buttonStyle(.bordered)
-                    Button("Open on YouTube") {
+                    Button(ui.text("openYouTube")) {
                         if let url = URL(string: "https://www.youtube.com/watch?v=\(videoID)") {
                             openURL(url)
                         }
@@ -50,10 +53,12 @@ struct YouTubeResourcePlayer: View {
 
 private struct YouTubeWebPlayer: UIViewRepresentable {
     let videoID: String
+    let languageCode: String
     let isActive: Bool
     let onEnded: () -> Void
     @Binding var status: String
     @Binding var failed: Bool
+    @Binding var errorCode: Int
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -92,7 +97,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
           window.player = new YT.Player('player', {
             host:'https://www.youtube-nocookie.com',
             videoId:'\(safeID)',
-            playerVars:{autoplay:0,playsinline:1,controls:1,rel:0,origin:'\(origin)',widget_referrer:'\(origin)'},
+            playerVars:{autoplay:0,playsinline:1,controls:1,rel:0,hl:'\(languageCode)',origin:'\(origin)',widget_referrer:'\(origin)'},
             events:{
               onReady:function(event){report('ready');if(window.playbackActive)event.target.playVideo();},
               onStateChange:function(event){
@@ -140,7 +145,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
         func beginLoadingTimeout() {
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
-                self.parent.status = "The video is taking too long to load. Check your connection and retry."
+                self.parent.status = "slowVideo"
                 self.parent.failed = true
             }
             timeout = work
@@ -153,7 +158,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
             parent.failed = false
             switch state {
             case "ready":
-                parent.status = "Starting video…"
+                parent.status = "starting"
                 if parent.isActive {
                     webView?.evaluateJavaScript("window.playbackActive=true; window.player.playVideo();", completionHandler: nil)
                 }
@@ -166,16 +171,17 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
                 guard parent.isActive, !didHandleEnd else { return }
                 didHandleEnd = true
                 parent.onEnded()
-            case "blocked": parent.status = "Tap Play in the video to start."
+            case "blocked": parent.status = "tapPlay"
             case "error":
                 parent.failed = true
                 let code = event["code"] as? Int ?? 0
+                parent.errorCode = code
                 parent.status = [101, 150].contains(code)
-                    ? "This video cannot play inside the app. You can open it on YouTube."
-                    : "YouTube could not load this video (\(code)). Retry or open it on YouTube."
+                    ? "embedBlocked"
+                    : "youtubeError"
             default:
                 parent.failed = true
-                parent.status = "The video could not load. Check your connection and retry."
+                parent.status = "videoFailed"
             }
         }
 
@@ -196,13 +202,13 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
             guard (error as NSError).code != NSURLErrorCancelled else { return }
             timeout?.cancel()
             parent.failed = true
-            parent.status = "The video could not load. Check your connection and retry."
+            parent.status = "videoFailed"
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             timeout?.cancel()
             parent.failed = true
-            parent.status = "The video player stopped. Tap Retry video to reopen it."
+            parent.status = "playerStopped"
         }
     }
 }

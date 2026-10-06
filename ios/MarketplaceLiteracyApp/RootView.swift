@@ -8,20 +8,23 @@ private let brandColor = Color(uiColor: UIColor { traits in
 
 struct RootView: View {
     @StateObject private var store = LearningStore()
+    private var ui: LibraryLocalization { LibraryLocalization(language: store.selectedLanguage) }
 
     var body: some View {
         TabView {
             NavigationStack {
                 LibraryHomeView(store: store)
             }
-            .tabItem { Label("Library", systemImage: "books.vertical.fill") }
+            .tabItem { Label(ui.text("library"), systemImage: "books.vertical.fill") }
 
             NavigationStack {
                 ResourceSearchView(store: store)
             }
-            .tabItem { Label("Search", systemImage: "magnifyingglass") }
+            .tabItem { Label(ui.text("search"), systemImage: "magnifyingglass") }
         }
         .tint(brandColor)
+        .environment(\.libraryLanguage, store.selectedLanguage)
+        .environment(\.locale, Locale(identifier: ui.localeID))
         .task { await store.refresh() }
     }
 }
@@ -32,6 +35,8 @@ private struct ResourceSearchView: View {
     @State private var language = "All languages"
     @State private var format = "All formats"
     @State private var selectedID: String?
+    @Environment(\.libraryLanguage) private var uiLanguage
+    private var ui: LibraryLocalization { LibraryLocalization(language: uiLanguage) }
 
     private var formats: [String] {
         Array(Set(store.lessons.filter { language == "All languages" || $0.language == language }.map(\.format))).sorted()
@@ -49,37 +54,40 @@ private struct ResourceSearchView: View {
     var body: some View {
         ScrollViewReader { proxy in
         List {
-            if let message = store.errorMessage {
-                Label(message, systemImage: "wifi.exclamationmark")
+            if store.errorMessage != nil {
+                Label(ui.text("connectRefresh"), systemImage: "wifi.exclamationmark")
             } else if store.isUsingCachedCatalog {
-                Label("Cached library · Connect to play videos", systemImage: "square.and.arrow.down")
+                Label(ui.text("cached"), systemImage: "square.and.arrow.down")
             }
 
-            Section("Find resources") {
-                Picker("Language", selection: $language) {
-                    Text("All languages").tag("All languages")
-                    ForEach(store.availableLanguages, id: \.self) { Text($0).tag($0) }
+            Section(ui.text("findResources")) {
+                Picker(ui.text("language"), selection: $language) {
+                    Text(ui.text("allLanguages")).tag("All languages")
+                    ForEach(store.availableLanguages, id: \.self) { Text(LibraryLocalization.nativeName(for: $0)).tag($0) }
                 }
-                Picker("Format", selection: $format) {
-                    Text("All formats").tag("All formats")
-                    ForEach(formats, id: \.self) { Text($0).tag($0) }
+                Picker(ui.text("format"), selection: $format) {
+                    Text(ui.text("allFormats")).tag("All formats")
+                    ForEach(formats, id: \.self) { Text(ui.formatName($0)).tag($0) }
                 }
             }
 
-            Section("Resources (\(visibleLessons.count))") {
+            Section(ui.resourceHeading(visibleLessons.count)) {
                 if visibleLessons.isEmpty {
-                    ContentUnavailableView(store.lessons.isEmpty ? "Resources unavailable" : "No matching resources",
+                    ContentUnavailableView(ui.text(store.lessons.isEmpty ? "unavailable" : "noMatches"),
                                            systemImage: "books.vertical",
-                                           description: Text("Pull down to refresh, or try another search."))
+                                           description: Text(ui.text("refreshOrSearch")))
                 } else {
                     InlineResourceRows(lessons: visibleLessons, selectedID: $selectedID)
                 }
             }
         }
-        .navigationTitle("Search Resources")
-        .searchable(text: $searchText, prompt: "Search resources and topics")
+        .navigationTitle(ui.text("searchResources"))
+        .searchable(text: $searchText, prompt: ui.text("searchTopics"))
         .refreshable { await store.refresh() }
-        .onChange(of: language) { _, _ in format = "All formats" }
+        .onChange(of: language) { _, value in
+            format = "All formats"
+            if value != "All languages" { store.selectedLanguage = value }
+        }
         .onChange(of: selectedID) { _, id in
             guard let id else { return }
             DispatchQueue.main.async {
