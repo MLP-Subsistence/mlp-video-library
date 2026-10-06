@@ -1,7 +1,11 @@
 import AVKit
 import SwiftUI
 
-private let brandColor = Color(red: 0.65, green: 0.25, blue: 0.15)
+private let brandColor = Color(uiColor: UIColor { traits in
+    traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.96, green: 0.59, blue: 0.43, alpha: 1)
+        : UIColor(red: 0.65, green: 0.25, blue: 0.15, alpha: 1)
+})
 
 struct RootView: View {
     @StateObject private var store = LearningStore()

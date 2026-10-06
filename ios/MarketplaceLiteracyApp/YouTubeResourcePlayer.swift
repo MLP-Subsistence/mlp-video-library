@@ -6,11 +6,13 @@ struct YouTubeResourcePlayer: View {
     @State private var status = "Loading video…"
     @State private var failed = false
     @State private var attempt = UUID()
+    @State private var visible = false
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            YouTubeWebPlayer(videoID: videoID, status: $status, failed: $failed)
+            YouTubeWebPlayer(videoID: videoID, isActive: visible && scenePhase == .active, status: $status, failed: $failed)
                 .id(attempt)
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .frame(minHeight: 200)
@@ -40,11 +42,14 @@ struct YouTubeResourcePlayer: View {
                 }
             }
         }
+        .onAppear { visible = true }
+        .onDisappear { visible = false }
     }
 }
 
 private struct YouTubeWebPlayer: UIViewRepresentable {
     let videoID: String
+    let isActive: Bool
     @Binding var status: String
     @Binding var failed: Bool
 
@@ -62,6 +67,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
         view.scrollView.isScrollEnabled = false
         view.isOpaque = false
         view.backgroundColor = .black
+        context.coordinator.wasActive = isActive
 
         let appID = (Bundle.main.bundleIdentifier ?? "org.marketplaceliteracy.app").lowercased()
         let origin = "https://\(appID)"
@@ -75,6 +81,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
         <style>html,body{margin:0;width:100%;height:100%;background:#000}#player{width:100%;height:100%}</style>
         </head><body><div id="player"></div>
         <script>
+        window.playbackActive = \(isActive ? "true" : "false");
         function report(state, code) {
           window.webkit.messageHandlers.playback.postMessage({state:state,code:code||0});
         }
@@ -82,9 +89,9 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
           window.player = new YT.Player('player', {
             host:'https://www.youtube-nocookie.com',
             videoId:'\(safeID)',
-            playerVars:{autoplay:1,playsinline:1,controls:1,rel:0,origin:'\(origin)',widget_referrer:'\(origin)'},
+            playerVars:{autoplay:0,playsinline:1,controls:1,rel:0,origin:'\(origin)',widget_referrer:'\(origin)'},
             events:{
-              onReady:function(event){report('ready');event.target.playVideo();},
+              onReady:function(event){report('ready');if(window.playbackActive)event.target.playVideo();},
               onStateChange:function(event){
                 if(event.data===YT.PlayerState.PLAYING)report('playing');
                 else if(event.data===YT.PlayerState.PAUSED)report('paused');
@@ -104,6 +111,10 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
         context.coordinator.parent = self
+        if context.coordinator.wasActive != isActive {
+            context.coordinator.wasActive = isActive
+            uiView.evaluateJavaScript("window.playbackActive = \(isActive ? "true" : "false"); if(window.player && typeof window.player.playVideo === 'function') window.player.\(isActive ? "playVideo" : "pauseVideo")();", completionHandler: nil)
+        }
     }
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
@@ -117,6 +128,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var parent: YouTubeWebPlayer
         var timeout: DispatchWorkItem?
+        var wasActive = false
 
         init(parent: YouTubeWebPlayer) { self.parent = parent }
 
@@ -164,6 +176,12 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
             timeout?.cancel()
             parent.failed = true
             parent.status = "The video could not load. Check your connection and retry."
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            timeout?.cancel()
+            parent.failed = true
+            parent.status = "The video player stopped. Tap Retry video to reopen it."
         }
     }
 }

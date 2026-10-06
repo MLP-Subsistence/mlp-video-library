@@ -1,7 +1,11 @@
 import SwiftUI
 
 private enum LibraryStyle {
-    static let rust = Color(red: 0.66, green: 0.25, blue: 0.15)
+    static let rust = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.96, green: 0.59, blue: 0.43, alpha: 1)
+            : UIColor(red: 0.66, green: 0.25, blue: 0.15, alpha: 1)
+    })
     static let ink = Color.primary
     static let canvas = Color(.systemGroupedBackground)
 }
