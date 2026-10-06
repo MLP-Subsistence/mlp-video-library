@@ -14,13 +14,11 @@ struct RootView: View {
         TabView {
             NavigationStack {
                 LibraryHomeView(store: store)
-                    .navigationDestination(for: Lesson.self) { ResourcePlayerView(lesson: $0) }
             }
             .tabItem { Label("Library", systemImage: "books.vertical.fill") }
 
             NavigationStack {
                 ResourceSearchView(store: store)
-                    .navigationDestination(for: Lesson.self) { ResourcePlayerView(lesson: $0) }
             }
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
         }
@@ -74,7 +72,9 @@ private struct ResourceSearchView: View {
                                            description: Text("Pull down to refresh, or try another search."))
                 } else {
                     ForEach(visibleLessons) { lesson in
-                        NavigationLink(value: lesson) {
+                        NavigationLink {
+                            ResourcePlayerView(lesson: lesson)
+                        } label: {
                             Text(lesson.title).font(.headline).padding(.vertical, 8)
                         }
                         .accessibilityIdentifier("resource-\(lesson.id)")
@@ -89,7 +89,7 @@ private struct ResourceSearchView: View {
     }
 }
 
-private struct ResourcePlayerView: View {
+struct ResourcePlayerView: View {
     let lesson: Lesson
 
     var body: some View {

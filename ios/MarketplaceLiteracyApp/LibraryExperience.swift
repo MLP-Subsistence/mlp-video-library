@@ -311,7 +311,9 @@ private struct FormatResourcesView: View {
                                            description: Text("Try another search term."))
                 } else {
                     ForEach(visibleLessons) { lesson in
-                        NavigationLink(value: lesson) {
+                        NavigationLink {
+                            ResourcePlayerView(lesson: lesson)
+                        } label: {
                             Text(lesson.title)
                                 .font(.headline)
                                 .foregroundStyle(LibraryStyle.ink)
