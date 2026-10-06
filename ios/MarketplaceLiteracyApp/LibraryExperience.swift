@@ -2,8 +2,8 @@ import SwiftUI
 
 private enum LibraryStyle {
     static let rust = Color(red: 0.66, green: 0.25, blue: 0.15)
-    static let ink = Color(red: 0.14, green: 0.20, blue: 0.28)
-    static let canvas = Color(red: 0.96, green: 0.97, blue: 0.98)
+    static let ink = Color.primary
+    static let canvas = Color(.systemGroupedBackground)
 }
 
 private struct LibraryLanguage: Hashable, Identifiable {
@@ -71,44 +71,42 @@ private struct LibraryEyebrow: View {
 
 struct LibraryHomeView: View {
     @ObservedObject var store: LearningStore
+    @State private var showingStudio = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(spacing: 14) {
                     LibraryEyebrow(text: "MARKETPLACE LITERACY PROJECT")
-                    Text("MLP Video Library")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(LibraryStyle.ink)
                     Text("A facilitator resource library for organized Marketplace Literacy resources by language and resource format.")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(LibraryStyle.ink)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("library-caption")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 32)
 
-                NavigationLink {
-                    LearnView(store: store)
-                } label: {
+                Button { showingStudio = true } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "graduationcap.fill")
+                        Image(systemName: "film.stack.fill")
                             .font(.title3)
                             .foregroundStyle(LibraryStyle.rust)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Continue your learning path")
+                            Text("Educator Studio")
                                 .font(.headline)
                                 .foregroundStyle(LibraryStyle.ink)
-                            Text("\(store.learningPathCompletedCount) of \(store.learningPath.count) lessons · Watch, reflect, and try an action")
+                            Text("Create and translate Marketplace Literacy videos")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(LibraryStyle.ink)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.right")
                             .foregroundStyle(LibraryStyle.rust)
                     }
                     .padding()
-                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
                     .overlay(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(LibraryStyle.rust)
@@ -116,6 +114,7 @@ struct LibraryHomeView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("educator-studio")
                 .padding(.horizontal, 20)
                 .padding(.bottom, 28)
 
@@ -141,6 +140,7 @@ struct LibraryHomeView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("language-\(language.name)")
                     }
                 }
                 .padding(.horizontal, 20)
@@ -150,10 +150,14 @@ struct LibraryHomeView: View {
                 .background(LibraryStyle.canvas)
             }
         }
-        .background(.white)
+        .background(Color(.systemBackground))
         .refreshable { await store.refresh() }
         .toolbar { ToolbarItem(placement: .principal) { LibraryBrand() } }
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingStudio) {
+            StudioBrowser(url: URL(string: "https://marketplaceliteracyapp.org/studio")!)
+                .ignoresSafeArea()
+        }
     }
 }
 
@@ -168,7 +172,7 @@ private struct LibraryLanguageCard: View {
                 .scaledToFit()
                 .frame(maxWidth: .infinity)
                 .frame(height: 178)
-                .background(.white)
+                .background(Color(.systemBackground))
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(language.nativeName)
@@ -187,11 +191,11 @@ private struct LibraryLanguageCard: View {
                 }
                 Text(count > 0 ? "\(count) resources" : "Browse resources")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(LibraryStyle.ink)
             }
             .padding(16)
         }
-        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(.black.opacity(0.06)))
         .padding(.top, 8)
         .accessibilityElement(children: .combine)
@@ -211,18 +215,10 @@ private struct LanguageFormatsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Image(language.imageName)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 16))
-
-                LibraryEyebrow(text: "SELECT RESOURCE FORMAT")
                 Text("\(language.name) Resources")
                     .font(.largeTitle.bold())
                     .foregroundStyle(LibraryStyle.ink)
-                Text("Choose a resource format to view the matching Marketplace Literacy resources directly.")
-                    .foregroundStyle(.secondary)
+                LibraryEyebrow(text: "SELECT RESOURCE FORMAT")
 
                 if formatNames.isEmpty {
                     ContentUnavailableView("Resources unavailable", systemImage: "wifi.exclamationmark",
@@ -236,6 +232,7 @@ private struct LanguageFormatsView: View {
                                        count: store.lessons.filter { $0.language == language.name && $0.format == name }.count)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("format-\(name)")
                     }
                 }
             }
@@ -260,7 +257,6 @@ private struct FormatCard: View {
                 .frame(width: 46, height: 46)
             VStack(alignment: .leading, spacing: 4) {
                 Text(format.name).font(.headline).foregroundStyle(LibraryStyle.ink)
-                Text(format.description).font(.caption).foregroundStyle(.secondary)
                 Text("\(count) resources").font(.caption).foregroundStyle(LibraryStyle.rust)
             }
             Spacer(minLength: 0)
@@ -268,7 +264,7 @@ private struct FormatCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(.black.opacity(0.06)))
         .accessibilityElement(children: .combine)
     }
@@ -279,26 +275,14 @@ private struct FormatResourcesView: View {
     let language: LibraryLanguage
     let format: String
     @State private var searchText = ""
-    @State private var category = "All categories"
-    @State private var collection = "All collections"
 
     private var formatLessons: [Lesson] {
         store.lessons.filter { $0.language == language.name && $0.format == format }
     }
 
-    private var categories: [String] {
-        Array(Set(formatLessons.map(\.category).filter { !$0.isEmpty })).sorted()
-    }
-
-    private var collections: [String] {
-        Array(Set(formatLessons.compactMap(\.submenu).filter { !$0.isEmpty })).sorted()
-    }
-
     private var visibleLessons: [Lesson] {
         formatLessons.filter { lesson in
-            (category == "All categories" || lesson.category == category) &&
-            (collection == "All collections" || lesson.submenu == collection) &&
-            (searchText.isEmpty || [lesson.title, lesson.description ?? "", lesson.tags]
+            (searchText.isEmpty || [lesson.title, lesson.tags]
                 .contains { $0.localizedCaseInsensitiveContains(searchText) })
         }
     }
@@ -315,32 +299,19 @@ private struct FormatResourcesView: View {
                 .padding(.vertical, 8)
             }
 
-            if categories.count > 1 || !collections.isEmpty {
-                Section("Browse") {
-                    if categories.count > 1 {
-                        Picker("Category", selection: $category) {
-                            Text("All categories").tag("All categories")
-                            ForEach(categories, id: \.self) { Text($0).tag($0) }
-                        }
-                    }
-                    if !collections.isEmpty {
-                        Picker("Collection", selection: $collection) {
-                            Text("All collections").tag("All collections")
-                            ForEach(collections, id: \.self) { Text($0).tag($0) }
-                        }
-                    }
-                }
-            }
-
             Section("Resources (\(visibleLessons.count))") {
                 if visibleLessons.isEmpty {
                     ContentUnavailableView("No matching resources", systemImage: "books.vertical",
-                                           description: Text("Try another category or search term."))
+                                           description: Text("Try another search term."))
                 } else {
                     ForEach(visibleLessons) { lesson in
                         NavigationLink(value: lesson) {
-                            LibraryResourceCard(lesson: lesson, completed: store.isCompleted(lesson))
+                            Text(lesson.title)
+                                .font(.headline)
+                                .foregroundStyle(LibraryStyle.ink)
+                                .padding(.vertical, 8)
                         }
+                        .accessibilityIdentifier("resource-\(lesson.id)")
                     }
                 }
             }
@@ -351,86 +322,5 @@ private struct FormatResourcesView: View {
         .refreshable { await store.refresh() }
         .toolbar { ToolbarItem(placement: .principal) { LibraryBrand() } }
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-private struct LibraryResourceCard: View {
-    let lesson: Lesson
-    let completed: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            AsyncImage(url: lesson.thumbnailURL) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Image("Language\(lesson.language)")
-                    .resizable()
-                    .scaledToFit()
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 155)
-            .clipped()
-            .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-
-            Text("\(lesson.language) · \(lesson.format)")
-                .font(.caption.bold())
-                .foregroundStyle(LibraryStyle.rust)
-            Text(lesson.title)
-                .font(.headline)
-                .foregroundStyle(LibraryStyle.ink)
-            if let description = lesson.description, !description.isEmpty {
-                Text(description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            if completed {
-                Label("Completed", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            }
-        }
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-struct SavedResourcesView: View {
-    @ObservedObject var store: LearningStore
-
-    var body: some View {
-        List {
-            Section("Saved resources") {
-                if store.savedLessons.isEmpty {
-                    ContentUnavailableView("No saved resources", systemImage: "bookmark",
-                                           description: Text("Save a lesson while browsing to find it here."))
-                } else {
-                    ForEach(store.savedLessons) { lesson in
-                        NavigationLink(value: lesson) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(lesson.title).font(.headline)
-                                Text("\(lesson.language) · \(lesson.format)")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section("My learning") {
-                NavigationLink {
-                    LearningProgressView(store: store)
-                } label: {
-                    Label("Progress and completed lessons", systemImage: "chart.bar.fill")
-                }
-                NavigationLink {
-                    WorkbookView(store: store)
-                } label: {
-                    Label("Field Workbook", systemImage: "briefcase.fill")
-                }
-            }
-        }
-        .navigationTitle("Saved")
     }
 }

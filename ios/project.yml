@@ -6,8 +6,8 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "10"
+    MARKETING_VERSION: "1.1.1"
+    CURRENT_PROJECT_VERSION: "11"
     SWIFT_VERSION: "5.0"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     TARGETED_DEVICE_FAMILY: "1,2"
@@ -33,4 +33,17 @@ targets:
         DEVELOPMENT_ASSET_PATHS: ""
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     scheme:
-      testTargets: []
+      testTargets:
+        - MarketplaceLiteracyAppUITests
+  MarketplaceLiteracyAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MarketplaceLiteracyAppUITests
+    dependencies:
+      - target: MarketplaceLiteracyApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.marketplaceliteracy.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MarketplaceLiteracyApp
