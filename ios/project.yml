@@ -19,8 +19,6 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: MarketplaceLiteracyApp
-        excludes:
-          - LibraryTranslations.json
     resources:
       - path: MarketplaceLiteracyApp/Assets.xcassets
       - path: MarketplaceLiteracyApp/LibraryTranslations.json
