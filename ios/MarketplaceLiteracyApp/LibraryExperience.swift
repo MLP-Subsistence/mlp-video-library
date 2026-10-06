@@ -281,6 +281,7 @@ private struct FormatResourcesView: View {
     let language: LibraryLanguage
     let format: String
     @State private var searchText = ""
+    @State private var selectedID: String?
 
     private var formatLessons: [Lesson] {
         store.lessons.filter { $0.language == language.name && $0.format == format }
@@ -294,6 +295,7 @@ private struct FormatResourcesView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         List {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
@@ -310,17 +312,7 @@ private struct FormatResourcesView: View {
                     ContentUnavailableView("No matching resources", systemImage: "books.vertical",
                                            description: Text("Try another search term."))
                 } else {
-                    ForEach(visibleLessons) { lesson in
-                        NavigationLink {
-                            ResourcePlayerView(lesson: lesson)
-                        } label: {
-                            Text(lesson.title)
-                                .font(.headline)
-                                .foregroundStyle(LibraryStyle.ink)
-                                .padding(.vertical, 8)
-                        }
-                        .accessibilityIdentifier("resource-\(lesson.id)")
-                    }
+                    InlineResourceRows(lessons: visibleLessons, selectedID: $selectedID)
                 }
             }
         }
@@ -330,5 +322,12 @@ private struct FormatResourcesView: View {
         .refreshable { await store.refresh() }
         .toolbar { ToolbarItem(placement: .principal) { LibraryBrand() } }
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: selectedID) { _, id in
+            guard let id else { return }
+            DispatchQueue.main.async {
+                withAnimation { proxy.scrollTo(id, anchor: .top) }
+            }
+        }
+        }
     }
 }

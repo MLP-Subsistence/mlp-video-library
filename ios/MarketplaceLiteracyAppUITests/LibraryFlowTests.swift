@@ -27,7 +27,7 @@ final class LibraryFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["language-English"].exists)
     }
 
-    func testLanguageFormatAndVideoNavigation() {
+    func testAInlinePlaylistFlow() {
         let english = app.buttons["language-English"]
         XCTAssertTrue(english.waitForExistence(timeout: 30))
         english.tap()
@@ -43,10 +43,12 @@ final class LibraryFlowTests: XCTestCase {
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "imported from YouTube")).firstMatch.exists)
         capture("image-diaries-titles")
         resource.tap()
-        XCTAssertTrue(app.staticTexts["resource-title"].waitForExistence(timeout: 5), "The first title tap must immediately show the player, without navigating back.")
-        XCTAssertTrue(app.navigationBars["Video"].exists)
-        XCTAssertFalse(app.staticTexts["SELECT RESOURCE FORMAT"].isHittable)
+        XCTAssertTrue(app.buttons["next-clip"].waitForExistence(timeout: 5), "The first title tap must expand its player inside the list.")
+        XCTAssertFalse(app.navigationBars["Video"].exists)
+        XCTAssertTrue(app.staticTexts["playlist-position"].label.hasPrefix("Clip 1 of "))
         XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertEqual(app.webViews.count, 1)
+        XCTAssertTrue(resource.exists)
         XCTAssertFalse(app.buttons["Save lesson"].exists)
         XCTAssertFalse(app.staticTexts["Turn this lesson into action"].exists)
         XCTAssertFalse(app.staticTexts["Continue in Field Workbook"].exists)
@@ -58,14 +60,19 @@ final class LibraryFlowTests: XCTestCase {
         let result = XCTWaiter.wait(for: [expectation(for: finishedLoading, evaluatedWith: nil)], timeout: 35)
         let outcome = loading.exists ? loading.label : "No playback warning; player reported playing/paused/ended"
         print("MLP_PLAYBACK_OBSERVATION: \(result.rawValue) / \(outcome)")
-        capture("selected-video")
+        capture("inline-first-clip")
+        app.buttons["next-clip"].tap()
+        XCTAssertTrue(app.staticTexts["playlist-position"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["playlist-position"].label.hasPrefix("Clip 2 of "))
+        XCTAssertFalse(app.navigationBars["Video"].exists)
+        XCTAssertEqual(app.webViews.count, 1)
+        capture("inline-next-clip")
+        if !resource.isHittable { app.swipeDown() }
+        resource.tap()
+        XCTAssertTrue(app.staticTexts["playlist-position"].label.hasPrefix("Clip 1 of "))
+        XCTAssertEqual(app.webViews.count, 1)
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(resource.waitForExistence(timeout: 5))
-        XCTAssertTrue(resource.isHittable, "Back from a video must return to its resource list.")
-        let nextResource = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "resource-")).element(boundBy: 1)
-        nextResource.tap()
-        XCTAssertTrue(app.staticTexts["resource-title"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.navigationBars["Video"].exists)
+        XCTAssertTrue(app.staticTexts["English Resources"].waitForExistence(timeout: 10))
     }
 
     func testSearchOpensVideo() {
@@ -74,7 +81,9 @@ final class LibraryFlowTests: XCTestCase {
         let resource = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "resource-")).firstMatch
         XCTAssertTrue(resource.waitForExistence(timeout: 30))
         resource.tap()
-        XCTAssertTrue(app.staticTexts["resource-title"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["next-clip"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["Search Resources"].exists)
+        XCTAssertFalse(app.navigationBars["Video"].exists)
         XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15))
     }
 
@@ -90,9 +99,9 @@ final class LibraryFlowTests: XCTestCase {
             let resource = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "resource-")).firstMatch
             XCTAssertTrue(resource.waitForExistence(timeout: 10))
             resource.tap()
-            XCTAssertTrue(app.staticTexts["resource-title"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["next-clip"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.navigationBars["Video"].exists)
             XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15))
-            app.navigationBars.buttons.element(boundBy: 0).tap()
             app.navigationBars.buttons.element(boundBy: 0).tap()
             XCTAssertTrue(app.staticTexts["English Resources"].waitForExistence(timeout: 10))
         }

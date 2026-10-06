@@ -6,7 +6,7 @@ on:
       build_number:
         description: "App Store build number"
         required: true
-        default: "12"
+        default: "13"
       upload_to_app_store:
         description: "Upload archive to App Store Connect"
         required: true
@@ -96,8 +96,8 @@ jobs:
           sleep 2
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/ios-screenshots/iphone-library-dark.png"
           xcrun simctl ui "$DEVICE_ID" appearance light
-          xcrun simctl shutdown "$DEVICE_ID"
           if [ "${{ inputs.capture_ipad }}" = "true" ]; then
+          xcrun simctl shutdown "$DEVICE_ID"
           IPAD_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=[d for group in json.load(sys.stdin)["devices"].values() for d in group if "iPad" in d["name"] and d.get("isAvailable", True)]; chosen=next((d for d in devices if "13-inch" in d["name"]), devices[0] if devices else None); print(chosen["udid"] if chosen else "")')"
           test -n "$IPAD_ID"
           xcrun simctl boot "$IPAD_ID"

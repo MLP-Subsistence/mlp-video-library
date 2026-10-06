@@ -3,6 +3,7 @@ import WebKit
 
 struct YouTubeResourcePlayer: View {
     let videoID: String
+    var onEnded: () -> Void = {}
     @State private var status = "Loading video…"
     @State private var failed = false
     @State private var attempt = UUID()
@@ -12,7 +13,7 @@ struct YouTubeResourcePlayer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            YouTubeWebPlayer(videoID: videoID, isActive: visible && scenePhase == .active, status: $status, failed: $failed)
+            YouTubeWebPlayer(videoID: videoID, isActive: visible && scenePhase == .active, onEnded: onEnded, status: $status, failed: $failed)
                 .id(attempt)
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .frame(minHeight: 200)
@@ -50,6 +51,7 @@ struct YouTubeResourcePlayer: View {
 private struct YouTubeWebPlayer: UIViewRepresentable {
     let videoID: String
     let isActive: Bool
+    let onEnded: () -> Void
     @Binding var status: String
     @Binding var failed: Bool
 
@@ -130,6 +132,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
         var parent: YouTubeWebPlayer
         var timeout: DispatchWorkItem?
         var wasActive = false
+        var didHandleEnd = false
         weak var webView: WKWebView?
 
         init(parent: YouTubeWebPlayer) { self.parent = parent }
@@ -154,8 +157,15 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
                 if parent.isActive {
                     webView?.evaluateJavaScript("window.playbackActive=true; window.player.playVideo();", completionHandler: nil)
                 }
-            case "playing": parent.status = ""
-            case "paused", "ended": parent.status = ""
+            case "playing":
+                didHandleEnd = false
+                parent.status = ""
+            case "paused": parent.status = ""
+            case "ended":
+                parent.status = ""
+                guard parent.isActive, !didHandleEnd else { return }
+                didHandleEnd = true
+                parent.onEnded()
             case "blocked": parent.status = "Tap Play in the video to start."
             case "error":
                 parent.failed = true

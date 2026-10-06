@@ -1,4 +1,3 @@
-import AVKit
 import SwiftUI
 
 private let brandColor = Color(uiColor: UIColor { traits in
@@ -32,6 +31,7 @@ private struct ResourceSearchView: View {
     @State private var searchText = ""
     @State private var language = "All languages"
     @State private var format = "All formats"
+    @State private var selectedID: String?
 
     private var formats: [String] {
         Array(Set(store.lessons.filter { language == "All languages" || $0.language == language }.map(\.format))).sorted()
@@ -47,6 +47,7 @@ private struct ResourceSearchView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         List {
             if let message = store.errorMessage {
                 Label(message, systemImage: "wifi.exclamationmark")
@@ -71,14 +72,7 @@ private struct ResourceSearchView: View {
                                            systemImage: "books.vertical",
                                            description: Text("Pull down to refresh, or try another search."))
                 } else {
-                    ForEach(visibleLessons) { lesson in
-                        NavigationLink {
-                            ResourcePlayerView(lesson: lesson)
-                        } label: {
-                            Text(lesson.title).font(.headline).padding(.vertical, 8)
-                        }
-                        .accessibilityIdentifier("resource-\(lesson.id)")
-                    }
+                    InlineResourceRows(lessons: visibleLessons, selectedID: $selectedID)
                 }
             }
         }
@@ -86,53 +80,13 @@ private struct ResourceSearchView: View {
         .searchable(text: $searchText, prompt: "Search resources and topics")
         .refreshable { await store.refresh() }
         .onChange(of: language) { _, _ in format = "All formats" }
-    }
-}
-
-struct ResourcePlayerView: View {
-    let lesson: Lesson
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if let videoID = lesson.youtubeVideoID, !videoID.isEmpty {
-                    YouTubeResourcePlayer(videoID: videoID)
-                        .id(videoID)
-                } else if let videoURL = lesson.directVideoURL {
-                    DirectResourcePlayer(url: videoURL)
-                        .aspectRatio(16 / 9, contentMode: .fit)
-                        .frame(minHeight: 200)
-                } else {
-                    ContentUnavailableView("Video unavailable", systemImage: "video.slash",
-                                           description: Text("This resource does not currently have a video link."))
-                }
-
-                Text(lesson.title)
-                    .font(.title2.bold())
-                    .foregroundStyle(.primary)
-                    .accessibilityIdentifier("resource-title")
+        .onChange(of: selectedID) { _, id in
+            guard let id else { return }
+            DispatchQueue.main.async {
+                withAnimation { proxy.scrollTo(id, anchor: .top) }
             }
-            .padding()
         }
-        .navigationTitle("Video")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-private struct DirectResourcePlayer: View {
-    let url: URL
-    @State private var player = AVPlayer()
-
-    var body: some View {
-        VideoPlayer(player: player)
-            .onAppear {
-                player.replaceCurrentItem(with: AVPlayerItem(url: url))
-                player.play()
-            }
-            .onDisappear {
-                player.pause()
-                player.replaceCurrentItem(with: nil)
-            }
+        }
     }
 }
 
