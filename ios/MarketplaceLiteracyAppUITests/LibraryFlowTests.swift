@@ -11,7 +11,8 @@ final class LibraryFlowTests: XCTestCase {
 
     func testLibraryHeaderAndStudio() {
         XCTAssertTrue(app.staticTexts["library-caption"].waitForExistence(timeout: 15))
-        XCTAssertEqual(app.staticTexts["MLP Video Library"].count, 1)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "library-brand").count, 1)
+        XCTAssertLessThanOrEqual(app.staticTexts.matching(identifier: "MLP Video Library").count, 1)
         XCTAssertTrue(app.staticTexts["MARKETPLACE LITERACY PROJECT"].exists)
         XCTAssertFalse(app.staticTexts["Continue your learning path"].exists)
         XCTAssertTrue(app.tabBars.buttons["Library"].exists)

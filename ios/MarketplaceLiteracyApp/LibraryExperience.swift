@@ -59,6 +59,8 @@ private struct LibraryBrand: View {
                 .foregroundStyle(LibraryStyle.ink)
         }
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("MLP Video Library")
+        .accessibilityIdentifier("library-brand")
     }
 }
 

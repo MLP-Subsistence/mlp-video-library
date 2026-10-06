@@ -15,6 +15,11 @@ on:
         options:
           - "false"
           - "true"
+      capture_ipad:
+        description: "Capture iPad screen as well as iPhone"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   build-ios:
@@ -61,7 +66,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Launch on iPhone and iPad simulators and capture Library screens
+      - name: Compile navigation tests before simulator startup
+        if: ${{ inputs.upload_to_app_store != 'true' }}
+        run: |
+          xcodebuild \
+            -project "$APP_PROJECT" \
+            -scheme "$APP_SCHEME" \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/MLPDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Launch simulators and capture Library screens
         if: ${{ inputs.upload_to_app_store != 'true' }}
         run: |
           DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=[d for group in json.load(sys.stdin)["devices"].values() for d in group if "iPhone" in d["name"] and d.get("isAvailable", True)]; chosen=next((d for d in devices if d["name"] == "iPhone 17 Pro Max"), devices[0] if devices else None); print(chosen["udid"] if chosen else "")')"
@@ -80,6 +97,7 @@ jobs:
           xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/ios-screenshots/iphone-library-dark.png"
           xcrun simctl ui "$DEVICE_ID" appearance light
           xcrun simctl shutdown "$DEVICE_ID"
+          if [ "${{ inputs.capture_ipad }}" = "true" ]; then
           IPAD_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=[d for group in json.load(sys.stdin)["devices"].values() for d in group if "iPad" in d["name"] and d.get("isAvailable", True)]; chosen=next((d for d in devices if "13-inch" in d["name"]), devices[0] if devices else None); print(chosen["udid"] if chosen else "")')"
           test -n "$IPAD_ID"
           xcrun simctl boot "$IPAD_ID"
@@ -88,6 +106,7 @@ jobs:
           xcrun simctl launch "$IPAD_ID" org.marketplaceliteracy.app
           sleep 20
           xcrun simctl io "$IPAD_ID" screenshot "$RUNNER_TEMP/ios-screenshots/ipad-library.png"
+          fi
 
       - name: Test library navigation and capture resource player
         if: ${{ inputs.upload_to_app_store != 'true' }}
@@ -101,7 +120,14 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/LibraryFlow.xcresult" \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
-            test
+            test-without-building
+
+      - name: Export navigation test screenshots
+        if: ${{ always() && inputs.upload_to_app_store != 'true' }}
+        run: |
+          if [ -d "$RUNNER_TEMP/LibraryFlow.xcresult" ]; then
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/LibraryFlow.xcresult" --output-path "$RUNNER_TEMP/ios-screenshots/test-flow"
+          fi
 
       - name: Upload navigation test results
         if: ${{ always() && inputs.upload_to_app_store != 'true' }}
@@ -111,7 +137,7 @@ jobs:
           path: ${{ runner.temp }}/LibraryFlow.xcresult
 
       - name: Upload simulator screenshots
-        if: ${{ inputs.upload_to_app_store != 'true' }}
+        if: ${{ always() && inputs.upload_to_app_store != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: MarketplaceLiteracyApp-simulator-screenshots
