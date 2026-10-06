@@ -68,6 +68,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
         view.isOpaque = false
         view.backgroundColor = .black
         context.coordinator.wasActive = isActive
+        context.coordinator.webView = view
 
         let appID = (Bundle.main.bundleIdentifier ?? "org.marketplaceliteracy.app").lowercased()
         let origin = "https://\(appID)"
@@ -129,6 +130,7 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
         var parent: YouTubeWebPlayer
         var timeout: DispatchWorkItem?
         var wasActive = false
+        weak var webView: WKWebView?
 
         init(parent: YouTubeWebPlayer) { self.parent = parent }
 
@@ -147,7 +149,11 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
             timeout?.cancel()
             parent.failed = false
             switch state {
-            case "ready": parent.status = "Starting video…"
+            case "ready":
+                parent.status = "Starting video…"
+                if parent.isActive {
+                    webView?.evaluateJavaScript("window.playbackActive=true; window.player.playVideo();", completionHandler: nil)
+                }
             case "playing": parent.status = ""
             case "paused", "ended": parent.status = ""
             case "blocked": parent.status = "Tap Play in the video to start."
@@ -165,6 +171,11 @@ private struct YouTubeWebPlayer: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             loadingFailed(error)
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // SwiftUI may make the screen visible while the HTML is still loading.
+            webView.evaluateJavaScript("window.playbackActive=\(parent.isActive ? "true" : "false"); if(window.player && typeof window.player.playVideo==='function') window.player.\(parent.isActive ? "playVideo" : "pauseVideo")();", completionHandler: nil)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
